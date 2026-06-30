@@ -1,25 +1,73 @@
 # ElegantWhisper
 
-ElegantWhisper is a macOS 14+ Dock and menu-bar voice input app built with Swift Package Manager and AppKit.
+ElegantWhisper is a macOS 14+ Dock and menu-bar voice input app built with AppKit.
 
 It records with a single left/right Command or Option key tap, streams Apple Speech Recognition partial results, optionally applies conservative OpenAI-compatible correction, then inserts the final text into the focused editable field when it is safe to do so.
 
 ## Requirements
 
 - macOS 14 or newer
-- Swift toolchain / Xcode Command Line Tools
+- Xcode 26 or newer, or a Swift toolchain with Xcode Command Line Tools
 - Microphone permission
 - Speech Recognition permission
 - Accessibility permission
 - Input Monitoring permission
 
-## Build
+## Local Signing
+
+The Xcode project reads your Apple Development Team from a local `Signing.xcconfig` file. This file is gitignored and is never committed.
+
+After cloning the repository, create your local signing config once:
+
+```sh
+cp Signing.xcconfig.example Signing.xcconfig
+```
+
+Then edit `Signing.xcconfig` and replace `YOUR_TEAM_ID_HERE` with your Team ID from **Xcode → Settings → Accounts**.
+
+The committed `Signing.xcconfig.example` contains only a placeholder. Certificates and private keys stay in your macOS Keychain and are not stored in the repository.
+
+## Build With Xcode
+
+Open the project directly:
+
+```sh
+open ElegantWhisper.xcodeproj
+```
+
+Then select the `ElegantWhisper` scheme and run it from Xcode. The Xcode target uses the same bundle identifier, app name, Info.plist, icon, and entitlements as the command-line build:
+
+- Bundle identifier: `com.aetherallan.ElegantWhisper`
+- Entitlements: `Resources/ElegantWhisper.entitlements`
+- Info.plist: `Resources/Info.plist`
+
+You can also build the Xcode project from Terminal:
+
+```sh
+make xcode-build
+```
+
+The Xcode-built app is created at:
+
+```text
+build/XcodeDerivedData/Build/Products/Debug/ElegantWhisper.app
+```
+
+Run the Xcode-built app with:
+
+```sh
+make xcode-run
+```
+
+## Build With SwiftPM
+
+The Swift Package Manager path is still available for fast command-line builds:
 
 ```sh
 make build
 ```
 
-## Create the App Bundle
+## Create the SwiftPM App Bundle
 
 ```sh
 make install
@@ -31,15 +79,15 @@ The signed app bundle is created at:
 build/ElegantWhisper.app
 ```
 
-The Makefile uses ad-hoc signing:
+The Makefile signs with the first available Apple Development identity when possible, and falls back to ad-hoc signing if none is available:
 
 ```sh
-codesign --force --deep --sign - build/ElegantWhisper.app
+make sign-info
 ```
 
-For distribution outside your machine, replace ad-hoc signing with a Developer ID certificate.
+For distribution outside your machine, use a Developer ID certificate and a notarization flow.
 
-## Run
+## Run The SwiftPM Bundle
 
 ```sh
 make run

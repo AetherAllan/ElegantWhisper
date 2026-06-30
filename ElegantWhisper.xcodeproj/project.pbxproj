@@ -1,0 +1,383 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		010000000000000000000001 /* AppConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000001 /* AppConstants.swift */; };
+		010000000000000000000002 /* AppController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000002 /* AppController.swift */; };
+		010000000000000000000003 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000003 /* AppDelegate.swift */; };
+		010000000000000000000004 /* AppError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000004 /* AppError.swift */; };
+		010000000000000000000005 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000005 /* AppState.swift */; };
+		010000000000000000000006 /* AudioRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000006 /* AudioRecorder.swift */; };
+		010000000000000000000007 /* DebugLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000007 /* DebugLog.swift */; };
+		010000000000000000000008 /* FloatingPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000008 /* FloatingPanel.swift */; };
+		010000000000000000000009 /* FocusDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000009 /* FocusDetector.swift */; };
+		01000000000000000000000A /* HistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02000000000000000000000A /* HistoryStore.swift */; };
+		01000000000000000000000B /* InputSourceManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02000000000000000000000B /* InputSourceManager.swift */; };
+		01000000000000000000000C /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02000000000000000000000C /* KeychainStore.swift */; };
+		01000000000000000000000D /* LLMRefiner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02000000000000000000000D /* LLMRefiner.swift */; };
+		01000000000000000000000E /* OptionKeyMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02000000000000000000000E /* OptionKeyMonitor.swift */; };
+		01000000000000000000000F /* PermissionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02000000000000000000000F /* PermissionManager.swift */; };
+		010000000000000000000010 /* PermissionOnboardingWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000010 /* PermissionOnboardingWindow.swift */; };
+		010000000000000000000011 /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000011 /* SettingsStore.swift */; };
+		010000000000000000000012 /* SettingsWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000012 /* SettingsWindow.swift */; };
+		010000000000000000000013 /* SpeechTranscriber.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000013 /* SpeechTranscriber.swift */; };
+		010000000000000000000014 /* TextInjector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000014 /* TextInjector.swift */; };
+		010000000000000000000015 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000015 /* main.swift */; };
+		010000000000000000000101 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000101 /* AppIcon.icns */; };
+		010000000000000000000102 /* ElegantWhisperLogo.png in Resources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000102 /* ElegantWhisperLogo.png */; };
+		010000000000000000000201 /* AppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 020000000000000000000201 /* AppKit.framework */; };
+		010000000000000000000202 /* ApplicationServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 020000000000000000000202 /* ApplicationServices.framework */; };
+		010000000000000000000203 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 020000000000000000000203 /* AVFoundation.framework */; };
+		010000000000000000000204 /* Carbon.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 020000000000000000000204 /* Carbon.framework */; };
+		010000000000000000000205 /* CoreAudio.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 020000000000000000000205 /* CoreAudio.framework */; };
+		010000000000000000000206 /* IOKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 020000000000000000000206 /* IOKit.framework */; };
+		010000000000000000000207 /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 020000000000000000000207 /* Security.framework */; };
+		010000000000000000000208 /* Speech.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 020000000000000000000208 /* Speech.framework */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		020000000000000000000001 /* AppConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConstants.swift; sourceTree = "<group>"; };
+		020000000000000000000002 /* AppController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppController.swift; sourceTree = "<group>"; };
+		020000000000000000000003 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		020000000000000000000004 /* AppError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppError.swift; sourceTree = "<group>"; };
+		020000000000000000000005 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
+		020000000000000000000006 /* AudioRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorder.swift; sourceTree = "<group>"; };
+		020000000000000000000007 /* DebugLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLog.swift; sourceTree = "<group>"; };
+		020000000000000000000008 /* FloatingPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingPanel.swift; sourceTree = "<group>"; };
+		020000000000000000000009 /* FocusDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusDetector.swift; sourceTree = "<group>"; };
+		02000000000000000000000A /* HistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryStore.swift; sourceTree = "<group>"; };
+		02000000000000000000000B /* InputSourceManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputSourceManager.swift; sourceTree = "<group>"; };
+		02000000000000000000000C /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
+		02000000000000000000000D /* LLMRefiner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMRefiner.swift; sourceTree = "<group>"; };
+		02000000000000000000000E /* OptionKeyMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OptionKeyMonitor.swift; sourceTree = "<group>"; };
+		02000000000000000000000F /* PermissionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionManager.swift; sourceTree = "<group>"; };
+		020000000000000000000010 /* PermissionOnboardingWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionOnboardingWindow.swift; sourceTree = "<group>"; };
+		020000000000000000000011 /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
+		020000000000000000000012 /* SettingsWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsWindow.swift; sourceTree = "<group>"; };
+		020000000000000000000013 /* SpeechTranscriber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechTranscriber.swift; sourceTree = "<group>"; };
+		020000000000000000000014 /* TextInjector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextInjector.swift; sourceTree = "<group>"; };
+		020000000000000000000015 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		020000000000000000000101 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
+		020000000000000000000102 /* ElegantWhisperLogo.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ElegantWhisperLogo.png; sourceTree = "<group>"; };
+		020000000000000000000103 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		020000000000000000000104 /* ElegantWhisper.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ElegantWhisper.entitlements; sourceTree = "<group>"; };
+		020000000000000000000105 /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.xcconfig; sourceTree = "<group>"; };
+		020000000000000000000201 /* AppKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppKit.framework; path = System/Library/Frameworks/AppKit.framework; sourceTree = SDKROOT; };
+		020000000000000000000202 /* ApplicationServices.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ApplicationServices.framework; path = System/Library/Frameworks/ApplicationServices.framework; sourceTree = SDKROOT; };
+		020000000000000000000203 /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
+		020000000000000000000204 /* Carbon.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Carbon.framework; path = System/Library/Frameworks/Carbon.framework; sourceTree = SDKROOT; };
+		020000000000000000000205 /* CoreAudio.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreAudio.framework; path = System/Library/Frameworks/CoreAudio.framework; sourceTree = SDKROOT; };
+		020000000000000000000206 /* IOKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = IOKit.framework; path = System/Library/Frameworks/IOKit.framework; sourceTree = SDKROOT; };
+		020000000000000000000207 /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = System/Library/Frameworks/Security.framework; sourceTree = SDKROOT; };
+		020000000000000000000208 /* Speech.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Speech.framework; path = System/Library/Frameworks/Speech.framework; sourceTree = SDKROOT; };
+		020000000000000000000301 /* ElegantWhisper.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ElegantWhisper.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		030000000000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				010000000000000000000201 /* AppKit.framework in Frameworks */,
+				010000000000000000000202 /* ApplicationServices.framework in Frameworks */,
+				010000000000000000000203 /* AVFoundation.framework in Frameworks */,
+				010000000000000000000204 /* Carbon.framework in Frameworks */,
+				010000000000000000000205 /* CoreAudio.framework in Frameworks */,
+				010000000000000000000206 /* IOKit.framework in Frameworks */,
+				010000000000000000000207 /* Security.framework in Frameworks */,
+				010000000000000000000208 /* Speech.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		040000000000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				020000000000000000000105 /* Signing.xcconfig */,
+				040000000000000000000002 /* Sources */,
+				040000000000000000000003 /* Resources */,
+				040000000000000000000004 /* Frameworks */,
+				040000000000000000000005 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		040000000000000000000002 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				020000000000000000000001 /* AppConstants.swift */,
+				020000000000000000000002 /* AppController.swift */,
+				020000000000000000000003 /* AppDelegate.swift */,
+				020000000000000000000004 /* AppError.swift */,
+				020000000000000000000005 /* AppState.swift */,
+				020000000000000000000006 /* AudioRecorder.swift */,
+				020000000000000000000007 /* DebugLog.swift */,
+				020000000000000000000008 /* FloatingPanel.swift */,
+				020000000000000000000009 /* FocusDetector.swift */,
+				02000000000000000000000A /* HistoryStore.swift */,
+				02000000000000000000000B /* InputSourceManager.swift */,
+				02000000000000000000000C /* KeychainStore.swift */,
+				02000000000000000000000D /* LLMRefiner.swift */,
+				02000000000000000000000E /* OptionKeyMonitor.swift */,
+				02000000000000000000000F /* PermissionManager.swift */,
+				020000000000000000000010 /* PermissionOnboardingWindow.swift */,
+				020000000000000000000011 /* SettingsStore.swift */,
+				020000000000000000000012 /* SettingsWindow.swift */,
+				020000000000000000000013 /* SpeechTranscriber.swift */,
+				020000000000000000000014 /* TextInjector.swift */,
+				020000000000000000000015 /* main.swift */,
+			);
+			path = Sources/ElegantWhisper;
+			sourceTree = "<group>";
+		};
+		040000000000000000000003 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				020000000000000000000101 /* AppIcon.icns */,
+				020000000000000000000102 /* ElegantWhisperLogo.png */,
+				020000000000000000000103 /* Info.plist */,
+				020000000000000000000104 /* ElegantWhisper.entitlements */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		040000000000000000000004 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				020000000000000000000201 /* AppKit.framework */,
+				020000000000000000000202 /* ApplicationServices.framework */,
+				020000000000000000000203 /* AVFoundation.framework */,
+				020000000000000000000204 /* Carbon.framework */,
+				020000000000000000000205 /* CoreAudio.framework */,
+				020000000000000000000206 /* IOKit.framework */,
+				020000000000000000000207 /* Security.framework */,
+				020000000000000000000208 /* Speech.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		040000000000000000000005 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				020000000000000000000301 /* ElegantWhisper.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		050000000000000000000001 /* ElegantWhisper */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 090000000000000000000002 /* Build configuration list for PBXNativeTarget "ElegantWhisper" */;
+			buildPhases = (
+				070000000000000000000001 /* Sources */,
+				030000000000000000000001 /* Frameworks */,
+				080000000000000000000001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ElegantWhisper;
+			productName = ElegantWhisper;
+			productReference = 020000000000000000000301 /* ElegantWhisper.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		060000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2660;
+				LastUpgradeCheck = 2660;
+				TargetAttributes = {
+					050000000000000000000001 = {
+						CreatedOnToolsVersion = 26.6;
+					};
+				};
+			};
+			buildConfigurationList = 090000000000000000000001 /* Build configuration list for PBXProject "ElegantWhisper" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 040000000000000000000001;
+			productRefGroup = 040000000000000000000005 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				050000000000000000000001 /* ElegantWhisper */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		080000000000000000000001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				010000000000000000000101 /* AppIcon.icns in Resources */,
+				010000000000000000000102 /* ElegantWhisperLogo.png in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		070000000000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				010000000000000000000001 /* AppConstants.swift in Sources */,
+				010000000000000000000002 /* AppController.swift in Sources */,
+				010000000000000000000003 /* AppDelegate.swift in Sources */,
+				010000000000000000000004 /* AppError.swift in Sources */,
+				010000000000000000000005 /* AppState.swift in Sources */,
+				010000000000000000000006 /* AudioRecorder.swift in Sources */,
+				010000000000000000000007 /* DebugLog.swift in Sources */,
+				010000000000000000000008 /* FloatingPanel.swift in Sources */,
+				010000000000000000000009 /* FocusDetector.swift in Sources */,
+				01000000000000000000000A /* HistoryStore.swift in Sources */,
+				01000000000000000000000B /* InputSourceManager.swift in Sources */,
+				01000000000000000000000C /* KeychainStore.swift in Sources */,
+				01000000000000000000000D /* LLMRefiner.swift in Sources */,
+				01000000000000000000000E /* OptionKeyMonitor.swift in Sources */,
+				01000000000000000000000F /* PermissionManager.swift in Sources */,
+				010000000000000000000010 /* PermissionOnboardingWindow.swift in Sources */,
+				010000000000000000000011 /* SettingsStore.swift in Sources */,
+				010000000000000000000012 /* SettingsWindow.swift in Sources */,
+				010000000000000000000013 /* SpeechTranscriber.swift in Sources */,
+				010000000000000000000014 /* TextInjector.swift in Sources */,
+				010000000000000000000015 /* main.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		0A0000000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 020000000000000000000105 /* Signing.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		0A0000000000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 020000000000000000000105 /* Signing.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		0A0000000000000000000003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 020000000000000000000105 /* Signing.xcconfig */;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Resources/ElegantWhisper.entitlements;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Resources/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.aetherallan.ElegantWhisper;
+				PRODUCT_NAME = ElegantWhisper;
+				SWIFT_VERSION = 5.0;
+				WRAPPER_EXTENSION = app;
+			};
+			name = Debug;
+		};
+		0A0000000000000000000004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 020000000000000000000105 /* Signing.xcconfig */;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Resources/ElegantWhisper.entitlements;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Resources/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.aetherallan.ElegantWhisper;
+				PRODUCT_NAME = ElegantWhisper;
+				SWIFT_VERSION = 5.0;
+				WRAPPER_EXTENSION = app;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		090000000000000000000001 /* Build configuration list for PBXProject "ElegantWhisper" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0A0000000000000000000001 /* Debug */,
+				0A0000000000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		090000000000000000000002 /* Build configuration list for PBXNativeTarget "ElegantWhisper" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0A0000000000000000000003 /* Debug */,
+				0A0000000000000000000004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 060000000000000000000001 /* Project object */;
+}

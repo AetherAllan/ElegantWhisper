@@ -100,6 +100,8 @@ api-key.txt
 *.provisionprofile
 *.key
 *.pem
+Signing.xcconfig
+Config/Signing.xcconfig
 
 # IDEs
 .idea/

@@ -1,16 +1,20 @@
 APP_NAME := ElegantWhisper
 BUILD_ROOT := build
 BUNDLE := $(BUILD_ROOT)/$(APP_NAME).app
+XCODE_DERIVED_DATA := $(BUILD_ROOT)/XcodeDerivedData
+XCODE_APP := $(XCODE_DERIVED_DATA)/Build/Products/Debug/$(APP_NAME).app
 CONTENTS := $(BUNDLE)/Contents
 MACOS := $(CONTENTS)/MacOS
 RESOURCES := $(CONTENTS)/Resources
 ENTITLEMENTS := Resources/ElegantWhisper.entitlements
+XCODE_PROJECT := $(APP_NAME).xcodeproj
+XCODE_SCHEME := $(APP_NAME)
 
 # Prefer a stable Apple Development identity so macOS privacy permissions survive rebuilds.
 # Override manually: make install SIGN_IDENTITY='Apple Development: Your Name (TEAMID)'
 SIGN_IDENTITY ?= $(shell security find-identity -v -p codesigning 2>/dev/null | awk -F'"' '/Apple Development/ { print $$2; exit }')
 
-.PHONY: build run install clean sign-info
+.PHONY: build run install clean sign-info xcode-build xcode-run xcode-clean
 
 build:
 	swift build -c release --product $(APP_NAME)
@@ -47,6 +51,16 @@ install: build
 
 run: install
 	open "$(BUNDLE)"
+
+xcode-build:
+	@test -f Signing.xcconfig || (echo "Missing Signing.xcconfig. Run: cp Signing.xcconfig.example Signing.xcconfig" && exit 1)
+	xcodebuild -project "$(XCODE_PROJECT)" -scheme "$(XCODE_SCHEME)" -configuration Debug -derivedDataPath "$(XCODE_DERIVED_DATA)" build
+
+xcode-run: xcode-build
+	open "$(XCODE_APP)"
+
+xcode-clean:
+	xcodebuild -project "$(XCODE_PROJECT)" -scheme "$(XCODE_SCHEME)" -configuration Debug -derivedDataPath "$(XCODE_DERIVED_DATA)" clean
 
 clean:
 	rm -rf .build "$(BUILD_ROOT)"
