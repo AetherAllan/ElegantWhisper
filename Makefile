@@ -5,10 +5,25 @@ CONTENTS := $(BUNDLE)/Contents
 MACOS := $(CONTENTS)/MacOS
 RESOURCES := $(CONTENTS)/Resources
 
-.PHONY: build run install clean
+# Prefer a stable Apple Development identity so macOS privacy permissions survive rebuilds.
+# Override manually: make install SIGN_IDENTITY='Apple Development: Your Name (TEAMID)'
+SIGN_IDENTITY ?= $(shell security find-identity -v -p codesigning 2>/dev/null | awk -F'"' '/Apple Development/ { print $$2; exit }')
+
+.PHONY: build run install clean sign-info
 
 build:
 	swift build -c release --product $(APP_NAME)
+
+sign-info:
+	@echo "Available signing identities:"
+	@security find-identity -v -p codesigning || true
+	@echo ""
+	@if [ -n "$(SIGN_IDENTITY)" ]; then \
+		echo "Will sign with: $(SIGN_IDENTITY)"; \
+	else \
+		echo "No Apple Development identity found. Will use ad-hoc signing (permissions reset each rebuild)."; \
+		echo "Open Xcode → Settings → Accounts → your Apple ID → Manage Certificates → + → Apple Development"; \
+	fi
 
 install: build
 	rm -rf "$(BUNDLE)"
@@ -18,9 +33,15 @@ install: build
 	cp Resources/ElegantWhisperLogo.png "$(RESOURCES)/ElegantWhisperLogo.png"
 	cp "$$(swift build -c release --show-bin-path)/$(APP_NAME)" "$(MACOS)/$(APP_NAME)"
 	chmod +x "$(MACOS)/$(APP_NAME)"
-	# Ad-hoc signing changes the binary hash on every rebuild, so macOS treats each
-	# install as a new app and privacy permissions must be re-granted in System Settings.
-	codesign --force --deep --sign - "$(BUNDLE)"
+	@if [ -n "$(SIGN_IDENTITY)" ]; then \
+		echo "Signing with: $(SIGN_IDENTITY)"; \
+		codesign --force --deep --sign "$(SIGN_IDENTITY)" --options runtime "$(BUNDLE)"; \
+	else \
+		echo "Signing ad-hoc (permissions will reset after each rebuild)"; \
+		codesign --force --deep --sign - "$(BUNDLE)"; \
+	fi
+	@codesign --verify --deep --strict "$(BUNDLE)"
+	@codesign -dv "$(BUNDLE)" 2>&1 | grep -E 'Identifier|Authority|TeamIdentifier|Signature'
 
 run: install
 	open "$(BUNDLE)"
