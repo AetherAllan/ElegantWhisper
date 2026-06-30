@@ -1,0 +1,124 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.pins
+
+# Xcode / Derived Data
+DerivedData/
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcuserstate
+*.xccheckout
+*.xcscmblueprint
+
+# Build products
+dist/
+build/
+Build/
+release/
+debug/
+*.app
+*.dmg
+*.pkg
+*.zip
+
+# Object files / native libraries
+*.o
+*.a
+*.dylib
+*.so
+*.dSYM/
+*.dSYM.zip
+
+# CMake / whisper.cpp build artifacts
+cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile.cmake
+compile_commands.json
+
+# Local speech models
+Models/
+models/*.bin
+models/*.gguf
+models/*.ggml
+models/*.onnx
+models/*.mlmodel
+models/*.mlmodelc/
+models/*.coreml
+*.tflite
+
+# Downloaded model caches
+model-cache/
+.cache/
+downloads/
+
+# Local audio and transcription test data
+recordings/
+audio/
+samples/private/
+*.wav
+*.m4a
+*.mp3
+*.aac
+*.caf
+*.pcm
+*.raw
+
+# Runtime logs and temporary files
+logs/
+*.log
+tmp/
+temp/
+*.tmp
+*.swp
+*.swo
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+*.local.json
+*.local.plist
+Config.local.swift
+Secrets.swift
+secrets.json
+credentials.json
+api-key.txt
+
+# Signing material
+*.p12
+*.cer
+*.mobileprovision
+*.provisionprofile
+*.key
+*.pem
+
+# IDEs
+.idea/
+.vscode/
+*.code-workspace
+
+# Local AI-agent state
+.codex/
+.claude/
+.cursor/
+.cursorignore.local
+
+# Testing / coverage
+.coverage/
+coverage/
+*.profraw
+*.profdata
+
+# Local installation or packaging staging directories
+.app-bundle/
+bundle/
+staging/
