@@ -3,6 +3,7 @@ import AppKit
 final class SettingsWindowController: NSWindowController {
     private let settings: SettingsStore
     private let refiner: LLMRefiner
+    private let permissions = PermissionManager()
 
     private let baseURLField = NSTextField()
     private let apiKeyField = NSSecureTextField()
@@ -15,12 +16,12 @@ final class SettingsWindowController: NSWindowController {
         self.settings = settings
         self.refiner = refiner
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 520, height: 280),
+            contentRect: NSRect(x: 0, y: 0, width: 860, height: 520),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
         )
-        window.title = "\(AppConstants.productName) Settings"
+        window.title = AppConstants.productName
         super.init(window: window)
         buildUI()
         loadValues()
@@ -41,6 +42,8 @@ final class SettingsWindowController: NSWindowController {
         guard let content = window?.contentView else {
             return
         }
+        content.wantsLayer = true
+        content.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
 
         let grid = NSGridView(views: [
             [label("API Base URL"), baseURLField],
@@ -67,19 +70,39 @@ final class SettingsWindowController: NSWindowController {
         statusLabel.textColor = .secondaryLabelColor
         statusLabel.translatesAutoresizingMaskIntoConstraints = false
 
-        content.addSubview(grid)
-        content.addSubview(buttons)
-        content.addSubview(statusLabel)
+        let sidebar = makeSidebar()
+        let hero = NSTextField(labelWithString: "Natural speech, elegant text - anywhere")
+        hero.font = .systemFont(ofSize: 26, weight: .bold)
+        hero.textColor = .labelColor
+
+        let shortcut = NSTextField(labelWithString: "Tap Command or Option to start and stop dictation. Press Esc to cancel.")
+        shortcut.font = .systemFont(ofSize: 14)
+        shortcut.textColor = .secondaryLabelColor
+
+        let permissionCards = makePermissionCards()
+        let settingsTitle = NSTextField(labelWithString: "Settings")
+        settingsTitle.font = .systemFont(ofSize: 17, weight: .semibold)
+
+        let main = NSStackView(views: [hero, shortcut, permissionCards, settingsTitle, grid, buttons, statusLabel])
+        main.orientation = .vertical
+        main.alignment = .leading
+        main.spacing = 14
+        main.translatesAutoresizingMaskIntoConstraints = false
+
+        content.addSubview(sidebar)
+        content.addSubview(main)
 
         NSLayoutConstraint.activate([
-            grid.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 24),
-            grid.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -24),
-            grid.topAnchor.constraint(equalTo: content.topAnchor, constant: 24),
+            sidebar.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+            sidebar.topAnchor.constraint(equalTo: content.topAnchor),
+            sidebar.bottomAnchor.constraint(equalTo: content.bottomAnchor),
+            sidebar.widthAnchor.constraint(equalToConstant: 176),
+            main.leadingAnchor.constraint(equalTo: sidebar.trailingAnchor, constant: 34),
+            main.trailingAnchor.constraint(lessThanOrEqualTo: content.trailingAnchor, constant: -34),
+            main.topAnchor.constraint(equalTo: content.topAnchor, constant: 38),
+            grid.widthAnchor.constraint(equalToConstant: 560),
             buttons.trailingAnchor.constraint(equalTo: grid.trailingAnchor),
-            buttons.topAnchor.constraint(equalTo: grid.bottomAnchor, constant: 18),
-            statusLabel.leadingAnchor.constraint(equalTo: grid.leadingAnchor),
-            statusLabel.trailingAnchor.constraint(equalTo: buttons.leadingAnchor, constant: -12),
-            statusLabel.centerYAnchor.constraint(equalTo: buttons.centerYAnchor)
+            statusLabel.widthAnchor.constraint(equalToConstant: 400)
         ])
     }
 
@@ -113,5 +136,80 @@ final class SettingsWindowController: NSWindowController {
         let label = NSTextField(labelWithString: text)
         label.alignment = .right
         return label
+    }
+
+    private func makeSidebar() -> NSView {
+        let sidebar = NSView()
+        sidebar.translatesAutoresizingMaskIntoConstraints = false
+        sidebar.wantsLayer = true
+        sidebar.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+
+        let title = NSTextField(labelWithString: AppConstants.productName)
+        title.font = .systemFont(ofSize: 17, weight: .bold)
+
+        let plan = NSTextField(labelWithString: "Local")
+        plan.font = .systemFont(ofSize: 11, weight: .semibold)
+        plan.textColor = .secondaryLabelColor
+
+        let home = sideLabel("Home")
+        let settings = sideLabel("Settings")
+        let permissions = sideLabel("Permissions")
+
+        let stack = NSStackView(views: [title, plan, home, settings, permissions])
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 16
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        sidebar.addSubview(stack)
+
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: sidebar.leadingAnchor, constant: 22),
+            stack.topAnchor.constraint(equalTo: sidebar.topAnchor, constant: 32)
+        ])
+        return sidebar
+    }
+
+    private func sideLabel(_ text: String) -> NSTextField {
+        let label = NSTextField(labelWithString: text)
+        label.font = .systemFont(ofSize: 14, weight: .medium)
+        label.textColor = .secondaryLabelColor
+        return label
+    }
+
+    private func makePermissionCards() -> NSView {
+        let status = permissions.status()
+        let cards = NSStackView(views: [
+            card("Microphone", status.microphoneGranted),
+            card("Speech", status.speechGranted),
+            card("Accessibility", status.accessibilityGranted)
+        ])
+        cards.orientation = .horizontal
+        cards.spacing = 12
+        cards.translatesAutoresizingMaskIntoConstraints = false
+        return cards
+    }
+
+    private func card(_ title: String, _ ok: Bool) -> NSView {
+        let label = NSTextField(labelWithString: "\(ok ? "OK" : "Missing")  \(title)")
+        label.font = .systemFont(ofSize: 13, weight: .semibold)
+        label.textColor = ok ? .systemGreen : .systemOrange
+        label.alignment = .center
+
+        let box = NSBox()
+        box.boxType = .custom
+        box.cornerRadius = 8
+        box.fillColor = .textBackgroundColor
+        box.borderColor = .separatorColor
+        box.translatesAutoresizingMaskIntoConstraints = false
+        label.translatesAutoresizingMaskIntoConstraints = false
+        box.addSubview(label)
+
+        NSLayoutConstraint.activate([
+            box.widthAnchor.constraint(equalToConstant: 150),
+            box.heightAnchor.constraint(equalToConstant: 54),
+            label.centerXAnchor.constraint(equalTo: box.centerXAnchor),
+            label.centerYAnchor.constraint(equalTo: box.centerYAnchor)
+        ])
+        return box
     }
 }

@@ -18,6 +18,8 @@ install: build
 	cp Resources/ElegantWhisperLogo.png "$(RESOURCES)/ElegantWhisperLogo.png"
 	cp "$$(swift build -c release --show-bin-path)/$(APP_NAME)" "$(MACOS)/$(APP_NAME)"
 	chmod +x "$(MACOS)/$(APP_NAME)"
+	# Ad-hoc signing changes the binary hash on every rebuild, so macOS treats each
+	# install as a new app and privacy permissions must be re-granted in System Settings.
 	codesign --force --deep --sign - "$(BUNDLE)"
 
 run: install

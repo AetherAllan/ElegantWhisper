@@ -34,9 +34,13 @@ final class AppController {
         monitor.onCancel = { [weak self] in
             self?.cancelCurrentOperation()
         }
+        permissions.requestMissingPermissions()
         if !monitor.start() {
             permissions.requestAccessibilityPrompt()
-            onUserMessage?("Accessibility permission required for modifier key monitor")
+            let status = permissions.status()
+            if !status.accessibilityGranted {
+                onUserMessage?("Accessibility required. Enable in System Settings, then quit and reopen.")
+            }
         }
 
         transcriber.onPartial = { [weak self] text in
@@ -57,7 +61,9 @@ final class AppController {
             startRecording()
         case .recording:
             stopAndTranscribe()
-        default:
+        case .transcribing, .refining:
+            cancelCurrentOperation()
+        case .injecting:
             onUserMessage?("Busy: \(state.mode.title)")
         }
     }

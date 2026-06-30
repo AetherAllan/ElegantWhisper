@@ -12,7 +12,7 @@ final class FloatingPanel {
 
     init() {
         panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 260, height: 56),
+            contentRect: NSRect(x: 0, y: 0, width: 176, height: 36),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: true
@@ -31,26 +31,26 @@ final class FloatingPanel {
         rootView.wantsLayer = true
         rootView.layer?.backgroundColor = NSColor.clear.cgColor
 
-        container.material = .hudWindow
-        container.blendingMode = .behindWindow
+        container.material = .popover
+        container.blendingMode = .withinWindow
         container.state = .active
         container.wantsLayer = true
-        container.layer?.backgroundColor = NSColor.clear.cgColor
-        container.layer?.cornerRadius = 28
+        container.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.88).cgColor
+        container.layer?.cornerRadius = 18
         container.layer?.cornerCurve = .continuous
         container.layer?.masksToBounds = true
         container.translatesAutoresizingMaskIntoConstraints = false
 
         waveform.translatesAutoresizingMaskIntoConstraints = false
         label.lineBreakMode = .byTruncatingMiddle
-        label.textColor = .white
-        label.font = .systemFont(ofSize: 15, weight: .medium)
+        label.textColor = NSColor.white.withAlphaComponent(0.82)
+        label.font = .systemFont(ofSize: 12, weight: .medium)
         label.translatesAutoresizingMaskIntoConstraints = false
 
         stack.orientation = .horizontal
         stack.alignment = .centerY
-        stack.spacing = 14
-        stack.edgeInsets = NSEdgeInsets(top: 0, left: 18, bottom: 0, right: 20)
+        stack.spacing = 8
+        stack.edgeInsets = NSEdgeInsets(top: 0, left: 12, bottom: 0, right: 14)
         stack.translatesAutoresizingMaskIntoConstraints = false
         stack.addArrangedSubview(waveform)
         stack.addArrangedSubview(label)
@@ -59,21 +59,21 @@ final class FloatingPanel {
         rootView.addSubview(container)
         panel.contentView = rootView
 
-        widthConstraint = panel.contentView?.widthAnchor.constraint(equalToConstant: 260)
+        widthConstraint = panel.contentView?.widthAnchor.constraint(equalToConstant: 176)
         NSLayoutConstraint.activate([
             container.leadingAnchor.constraint(equalTo: rootView.leadingAnchor),
             container.trailingAnchor.constraint(equalTo: rootView.trailingAnchor),
             container.topAnchor.constraint(equalTo: rootView.topAnchor),
             container.bottomAnchor.constraint(equalTo: rootView.bottomAnchor),
-            container.heightAnchor.constraint(equalToConstant: 56),
+            container.heightAnchor.constraint(equalToConstant: 36),
             stack.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             stack.trailingAnchor.constraint(equalTo: container.trailingAnchor),
             stack.topAnchor.constraint(equalTo: container.topAnchor),
             stack.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-            waveform.widthAnchor.constraint(equalToConstant: 44),
-            waveform.heightAnchor.constraint(equalToConstant: 32),
-            label.widthAnchor.constraint(greaterThanOrEqualToConstant: 160),
-            label.widthAnchor.constraint(lessThanOrEqualToConstant: 560),
+            waveform.widthAnchor.constraint(equalToConstant: 28),
+            waveform.heightAnchor.constraint(equalToConstant: 18),
+            label.widthAnchor.constraint(greaterThanOrEqualToConstant: 72),
+            label.widthAnchor.constraint(lessThanOrEqualToConstant: 260),
             widthConstraint!
         ])
     }
@@ -81,6 +81,7 @@ final class FloatingPanel {
     func showRecording(text: String) {
         waveform.isHidden = false
         waveform.level = 0
+        waveform.needsDisplay = true
         setText(text.isEmpty ? "Listening..." : text)
         show()
     }
@@ -143,8 +144,8 @@ final class FloatingPanel {
 
     private func setText(_ text: String) {
         label.stringValue = text
-        let textWidth = min(560, max(160, ceil(label.intrinsicContentSize.width)))
-        let totalWidth = textWidth + (waveform.isHidden ? 48 : 96)
+        let textWidth = min(260, max(72, ceil(label.intrinsicContentSize.width)))
+        let totalWidth = textWidth + (waveform.isHidden ? 32 : 64)
         widthConstraint?.constant = totalWidth
 
         NSAnimationContext.runAnimationGroup { context in
@@ -161,7 +162,7 @@ final class FloatingPanel {
         let frame = panel.frame
         let visible = screen.visibleFrame
         let x = visible.midX - frame.width / 2
-        let y = visible.minY + 36
+        let y = visible.minY + 48
         panel.setFrameOrigin(NSPoint(x: x, y: y))
     }
 
@@ -187,17 +188,29 @@ private final class WaveformView: NSView {
 
     private let weights: [CGFloat] = [0.5, 0.8, 1.0, 0.75, 0.55]
 
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layerContentsRedrawPolicy = .onSetNeedsDisplay
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        wantsLayer = true
+        layerContentsRedrawPolicy = .onSetNeedsDisplay
+    }
+
     override func draw(_ dirtyRect: NSRect) {
         NSColor.white.withAlphaComponent(0.92).setFill()
-        let barWidth: CGFloat = 5
-        let gap: CGFloat = 4
+        let barWidth: CGFloat = 3
+        let gap: CGFloat = 3
         let totalWidth = CGFloat(weights.count) * barWidth + CGFloat(weights.count - 1) * gap
         let startX = bounds.midX - totalWidth / 2
 
         for (index, weight) in weights.enumerated() {
             let jitter = CGFloat.random(in: -0.04...0.04)
             let normalized = max(0.08, min(1, level * weight + jitter))
-            let height = 6 + normalized * 26
+            let height = 4 + normalized * 14
             let x = startX + CGFloat(index) * (barWidth + gap)
             let rect = NSRect(x: x, y: bounds.midY - height / 2, width: barWidth, height: height)
             NSBezierPath(roundedRect: rect, xRadius: barWidth / 2, yRadius: barWidth / 2).fill()

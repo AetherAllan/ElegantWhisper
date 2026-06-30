@@ -7,6 +7,11 @@ struct PermissionStatus {
     let microphoneGranted: Bool
     let speechGranted: Bool
     let accessibilityGranted: Bool
+    let microphoneDetail: String
+    let speechDetail: String
+    let accessibilityDetail: String
+    let runningAsAppBundle: Bool
+    let bundlePath: String
 
     var missingTitles: [String] {
         var values: [String] = []
@@ -15,30 +20,88 @@ struct PermissionStatus {
         if !accessibilityGranted { values.append("Accessibility") }
         return values
     }
+
+    var rebuildHint: String? {
+        guard !missingTitles.isEmpty else { return nil }
+        if !runningAsAppBundle {
+            return "Run via `make run` (not swift build). Permissions only apply to the .app bundle."
+        }
+        return "After `make install`, macOS treats each rebuild as a new app. Remove ElegantWhisper from System Settings privacy lists, then re-enable."
+    }
 }
 
 final class PermissionManager {
     func status() -> PermissionStatus {
-        PermissionStatus(
-            microphoneGranted: AVCaptureDevice.authorizationStatus(for: .audio) == .authorized,
-            speechGranted: SFSpeechRecognizer.authorizationStatus() == .authorized,
-            accessibilityGranted: AXIsProcessTrusted()
+        let microphone = AVCaptureDevice.authorizationStatus(for: .audio)
+        let speech = SFSpeechRecognizer.authorizationStatus()
+        let accessibility = AXIsProcessTrusted()
+        let bundlePath = Bundle.main.bundlePath
+        let runningAsAppBundle = bundlePath.hasSuffix(".app")
+
+        return PermissionStatus(
+            microphoneGranted: microphone == .authorized,
+            speechGranted: speech == .authorized,
+            accessibilityGranted: accessibility,
+            microphoneDetail: detail(for: microphone),
+            speechDetail: detail(for: speech),
+            accessibilityDetail: accessibility ? "OK" : "Missing",
+            runningAsAppBundle: runningAsAppBundle,
+            bundlePath: bundlePath
         )
     }
 
+    func requestMissingPermissions() {
+        let current = status()
+        if AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined {
+            requestMicrophone { _ in }
+        }
+        if SFSpeechRecognizer.authorizationStatus() == .notDetermined {
+            requestSpeech { _ in }
+        }
+        if !current.accessibilityGranted {
+            requestAccessibilityPrompt()
+        }
+    }
+
     func requestMicrophone(_ completion: @escaping (Bool) -> Void) {
-        AVCaptureDevice.requestAccess(for: .audio, completionHandler: completion)
+        AVCaptureDevice.requestAccess(for: .audio) { granted in
+            DispatchQueue.main.async {
+                completion(granted)
+            }
+        }
     }
 
     func requestSpeech(_ completion: @escaping (Bool) -> Void) {
         SFSpeechRecognizer.requestAuthorization { status in
-            completion(status == .authorized)
+            DispatchQueue.main.async {
+                completion(status == .authorized)
+            }
         }
     }
 
     func requestAccessibilityPrompt() {
         let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
         _ = AXIsProcessTrustedWithOptions(options)
+    }
+
+    private func detail(for status: AVAuthorizationStatus) -> String {
+        switch status {
+        case .authorized: "OK"
+        case .denied: "Denied"
+        case .restricted: "Restricted"
+        case .notDetermined: "Not requested"
+        @unknown default: "Unknown"
+        }
+    }
+
+    private func detail(for status: SFSpeechRecognizerAuthorizationStatus) -> String {
+        switch status {
+        case .authorized: "OK"
+        case .denied: "Denied"
+        case .restricted: "Restricted"
+        case .notDetermined: "Not requested"
+        @unknown default: "Unknown"
+        }
     }
 
     func openMicrophoneSettings() {

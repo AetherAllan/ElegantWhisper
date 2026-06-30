@@ -3,12 +3,15 @@ import Foundation
 import Speech
 
 final class SpeechTranscriber {
+    private let lock = NSLock()
     private var recognizer: SFSpeechRecognizer?
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var task: SFSpeechRecognitionTask?
     private var finalCompletion: ((String) -> Void)?
     private var lastText = ""
-    private var didFinish = false
+    private var completedEarly = false
+    private var delivered = false
+    private var sessionID = 0
 
     var onPartial: ((String) -> Void)?
 
@@ -29,52 +32,98 @@ final class SpeechTranscriber {
         self.recognizer = recognizer
         self.request = request
         lastText = ""
-        didFinish = false
+        completedEarly = false
+        delivered = false
+        sessionID += 1
+        let currentSessionID = sessionID
 
         task = recognizer.recognitionTask(with: request) { [weak self] result, error in
             guard let self else { return }
+            self.lock.lock()
+            let isCurrentSession = currentSessionID == self.sessionID
+            self.lock.unlock()
+            guard isCurrentSession else { return }
+
             if let text = result?.bestTranscription.formattedString, !text.isEmpty {
+                self.lock.lock()
                 self.lastText = text
+                self.lock.unlock()
                 DispatchQueue.main.async { [onPartial] in
                     onPartial?(text)
                 }
             }
 
             if result?.isFinal == true || error != nil {
-                self.completeOnce(self.lastText)
+                self.lock.lock()
+                let shouldComplete = self.finalCompletion != nil
+                self.completedEarly = true
+                let text = self.lastText
+                self.lock.unlock()
+
+                if shouldComplete {
+                    self.completeOnce(text)
+                } else {
+                    self.stopTask()
+                }
             }
         }
     }
 
     func append(_ buffer: AVAudioPCMBuffer) {
+        lock.lock()
+        let request = request
+        lock.unlock()
         request?.append(buffer)
     }
 
     func finish(_ completion: @escaping (String) -> Void) {
+        lock.lock()
         finalCompletion = completion
+        let request = request
+        let shouldCompleteNow = completedEarly || request == nil
+        let text = lastText
+        lock.unlock()
+
+        if shouldCompleteNow {
+            completeOnce(text)
+            return
+        }
+
         request?.endAudio()
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 8) { [weak self] in
-            guard let self, !self.didFinish else { return }
-            self.completeOnce(self.lastText)
+            guard let self else { return }
+            self.lock.lock()
+            let shouldComplete = !self.delivered
+            let text = self.lastText
+            self.lock.unlock()
+            if shouldComplete {
+                self.completeOnce(text)
+            }
         }
     }
 
     func cancel() {
+        lock.lock()
         task?.cancel()
         task = nil
         request = nil
         recognizer = nil
         finalCompletion = nil
         lastText = ""
-        didFinish = false
+        completedEarly = false
+        delivered = false
+        sessionID += 1
+        lock.unlock()
     }
 
     private func completeOnce(_ text: String) {
-        guard !didFinish else {
+        lock.lock()
+        guard !delivered else {
+            lock.unlock()
             return
         }
-        didFinish = true
+        delivered = true
         task?.cancel()
         task = nil
         request = nil
@@ -82,8 +131,19 @@ final class SpeechTranscriber {
 
         let completion = finalCompletion
         finalCompletion = nil
+        lock.unlock()
+
         DispatchQueue.main.async {
             completion?(text)
         }
+    }
+
+    private func stopTask() {
+        lock.lock()
+        task?.cancel()
+        task = nil
+        request = nil
+        recognizer = nil
+        lock.unlock()
     }
 }

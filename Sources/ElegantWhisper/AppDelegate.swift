@@ -52,7 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         llm.state = SettingsStore.shared.llmEnabled ? .on : .off
         menu.addItem(llm)
 
-        menu.addItem(NSMenuItem(title: "Settings", action: #selector(showSettings), keyEquivalent: ","))
+        menu.addItem(NSMenuItem(title: "Open \(AppConstants.productName)", action: #selector(showSettings), keyEquivalent: ","))
         menu.addItem(permissionMenu())
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q"))
@@ -79,17 +79,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let submenu = NSMenu()
         let status = controller.permissionStatus()
 
-        submenu.addItem(disabledItem("Microphone: \(status.microphoneGranted ? "OK" : "Missing")"))
+        submenu.addItem(disabledItem("Microphone: \(status.microphoneDetail)"))
         submenu.addItem(NSMenuItem(title: "Open Microphone Settings", action: #selector(openMicrophoneSettings), keyEquivalent: ""))
         submenu.addItem(.separator())
-        submenu.addItem(disabledItem("Speech Recognition: \(status.speechGranted ? "OK" : "Missing")"))
+        submenu.addItem(disabledItem("Speech Recognition: \(status.speechDetail)"))
         submenu.addItem(NSMenuItem(title: "Open Speech Settings", action: #selector(openSpeechSettings), keyEquivalent: ""))
         submenu.addItem(.separator())
-        submenu.addItem(disabledItem("Accessibility: \(status.accessibilityGranted ? "OK" : "Missing")"))
+        submenu.addItem(disabledItem("Accessibility: \(status.accessibilityDetail)"))
         submenu.addItem(NSMenuItem(title: "Open Accessibility Settings", action: #selector(openAccessibilitySettings), keyEquivalent: ""))
 
         if !status.missingTitles.isEmpty {
             item.title = "Permissions Status: Missing \(status.missingTitles.joined(separator: ", "))"
+            if let hint = status.rebuildHint {
+                submenu.addItem(.separator())
+                submenu.addItem(disabledItem(hint))
+            }
+            submenu.addItem(disabledItem("Running from: \(status.bundlePath)"))
         }
         item.submenu = submenu
         return item
