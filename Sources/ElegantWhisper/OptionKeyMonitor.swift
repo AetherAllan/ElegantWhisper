@@ -9,9 +9,15 @@ final class OptionKeyMonitor {
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var globalMonitors: [Any] = []
-    private var activeKeyCode: Int64?
+    private var armedModifier: ModifierKind?
     private var invalidated = false
+    private var lastFlags: CGEventFlags = []
     private var lastToggleTime: TimeInterval = 0
+
+    private enum ModifierKind {
+        case command
+        case option
+    }
 
     private let optionKeyCodes: Set<Int64> = [58, 61]
     private let commandKeyCodes: Set<Int64> = [54, 55]
@@ -66,7 +72,7 @@ final class OptionKeyMonitor {
 
     private func startGlobalFallback() {
         let flagsMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.flagsChanged]) { [weak self] event in
-            self?.handleModifierKey(keyCode: Int64(event.keyCode))
+            self?.handleFlagsChanged(flags: CGEventFlags(rawValue: UInt64(event.modifierFlags.rawValue)))
         }
         let keyMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.keyDown]) { [weak self] event in
             let keyCode = Int64(event.keyCode)
@@ -75,7 +81,7 @@ final class OptionKeyMonitor {
                 DispatchQueue.main.async {
                     self?.onCancel?()
                 }
-            } else if self?.activeKeyCode != nil {
+            } else if self?.armedModifier != nil, self?.isTriggerKey(keyCode) == false {
                 self?.invalidated = true
             }
         }
@@ -102,7 +108,7 @@ final class OptionKeyMonitor {
                 DispatchQueue.main.async { [weak self] in
                     self?.onCancel?()
                 }
-            } else if activeKeyCode != nil {
+            } else if armedModifier != nil, !isTriggerKey(keyCode) {
                 invalidated = true
             }
         default:
@@ -111,29 +117,52 @@ final class OptionKeyMonitor {
     }
 
     private func handleFlagsChanged(_ event: CGEvent) {
-        let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
-        handleModifierKey(keyCode: keyCode)
+        handleFlagsChanged(flags: event.flags)
     }
 
-    private func handleModifierKey(keyCode: Int64) {
-        guard isTriggerKey(keyCode) else {
-            if activeKeyCode != nil {
-                invalidated = true
+    private func handleFlagsChanged(flags: CGEventFlags) {
+        let wasCommand = lastFlags.contains(.maskCommand)
+        let wasOption = lastFlags.contains(.maskAlternate)
+        let isCommand = flags.contains(.maskCommand)
+        let isOption = flags.contains(.maskAlternate)
+        let hasOtherModifiers = flags.contains(.maskShift)
+            || flags.contains(.maskControl)
+            || flags.contains(.maskSecondaryFn)
+            || flags.contains(.maskHelp)
+
+        if !wasCommand && isCommand {
+            if armedModifier == nil {
+                armedModifier = .command
+                invalidated = hasOtherModifiers || isOption
             }
-            return
+        } else if wasCommand && !isCommand {
+            if armedModifier == .command, !invalidated {
+                fireToggle()
+            }
+            if armedModifier == .command {
+                reset()
+            }
         }
 
-        if activeKeyCode == nil {
-            activeKeyCode = keyCode
-            invalidated = false
-            return
+        if !wasOption && isOption {
+            if armedModifier == nil {
+                armedModifier = .option
+                invalidated = hasOtherModifiers || isCommand
+            }
+        } else if wasOption && !isOption {
+            if armedModifier == .option, !invalidated {
+                fireToggle()
+            }
+            if armedModifier == .option {
+                reset()
+            }
         }
 
-        let shouldToggle = activeKeyCode == keyCode && !invalidated
-        reset()
-        if shouldToggle {
-            fireToggle()
+        if isCommand || isOption, hasOtherModifiers, armedModifier != nil {
+            invalidated = true
         }
+
+        lastFlags = flags
     }
 
     private func fireToggle() {
@@ -148,7 +177,7 @@ final class OptionKeyMonitor {
     }
 
     private func reset() {
-        activeKeyCode = nil
+        armedModifier = nil
         invalidated = false
     }
 
