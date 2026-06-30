@@ -5,6 +5,9 @@ final class InputSourceManager {
     typealias InputSource = TISInputSource
 
     func switchToASCIIIfNeeded() -> InputSource? {
+        // CJK input methods can treat simulated Cmd+V differently while a composition buffer is
+        // active. Temporarily switching to ABC/US keeps paste as a plain command, then we restore
+        // the user's original input source after the target app has consumed the clipboard.
         guard let current = currentInputSource(), isCJK(current), let ascii = asciiInputSource() else {
             return nil
         }
@@ -27,6 +30,7 @@ final class InputSourceManager {
     }
 
     private func asciiInputSource() -> InputSource? {
+        // ABC is the modern macOS default; US is kept as a fallback for older or customized setups.
         for id in ["com.apple.keylayout.ABC", "com.apple.keylayout.US"] {
             let filter = [kTISPropertyInputSourceID as String: id] as CFDictionary
             guard let list = TISCreateInputSourceList(filter, false)?.takeRetainedValue() as? [InputSource],
@@ -40,6 +44,8 @@ final class InputSourceManager {
     }
 
     private func isCJK(_ source: InputSource) -> Bool {
+        // TIS does not expose one stable "is CJK input method" flag. Check both source ids and
+        // language metadata so common Apple and third-party Chinese/Japanese/Korean IMEs match.
         let id = property(source, kTISPropertyInputSourceID)
         let languages = property(source, kTISPropertyInputSourceLanguages)
         let haystack = "\(id) \(languages)".lowercased()

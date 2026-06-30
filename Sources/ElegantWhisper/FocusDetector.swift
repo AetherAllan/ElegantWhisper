@@ -5,6 +5,7 @@ import Foundation
 struct FocusTarget {
     let app: NSRunningApplication
     let element: AXUIElement
+    let bundleIdentifier: String?
 
     var processIdentifier: pid_t {
         app.processIdentifier
@@ -22,16 +23,26 @@ final class FocusDetector {
 
     func currentEditableTarget() -> FocusTarget? {
         guard AXIsProcessTrusted(),
-              let app = NSWorkspace.shared.frontmostApplication,
-              let element = editableElement(from: focusedElement())
+              let focused = focusedElement(),
+              let app = app(for: focused),
+              let element = editableElement(from: focused)
         else {
             return nil
         }
-        return FocusTarget(app: app, element: element)
+        return FocusTarget(app: app, element: element, bundleIdentifier: app.bundleIdentifier)
+    }
+
+    func currentEditableTarget(processIdentifier: pid_t) -> FocusTarget? {
+        guard let target = currentEditableTarget(),
+              target.processIdentifier == processIdentifier
+        else {
+            return nil
+        }
+        return target
     }
 
     func isValid(_ target: FocusTarget) -> Bool {
-        guard AXIsProcessTrusted() else {
+        guard AXIsProcessTrusted(), !target.app.isTerminated else {
             return false
         }
 
@@ -40,18 +51,42 @@ final class FocusDetector {
         guard pid == target.processIdentifier else {
             return false
         }
+        if let expected = target.bundleIdentifier,
+           let current = target.app.bundleIdentifier,
+           expected != current
+        {
+            return false
+        }
 
         return isEditable(target.element)
     }
 
     private func focusedElement() -> AXUIElement? {
         let systemWide = AXUIElementCreateSystemWide()
+        // Prefer the focused application first. Browser text areas and Electron editors often
+        // expose a better focused element through AXFocusedApplication than through the
+        // system-wide fallback alone.
+        if let focusedApp = elementAttribute(systemWide, kAXFocusedApplicationAttribute),
+           let focused = elementAttribute(focusedApp, kAXFocusedUIElementAttribute)
+        {
+            return focused
+        }
+
         var value: CFTypeRef?
         let result = AXUIElementCopyAttributeValue(systemWide, kAXFocusedUIElementAttribute as CFString, &value)
         guard result == .success, let element = value else {
             return nil
         }
         return (element as! AXUIElement)
+    }
+
+    private func app(for element: AXUIElement) -> NSRunningApplication? {
+        var pid: pid_t = 0
+        AXUIElementGetPid(element, &pid)
+        if pid > 0, let app = NSRunningApplication(processIdentifier: pid) {
+            return app
+        }
+        return NSWorkspace.shared.frontmostApplication
     }
 
     private func editableElement(from element: AXUIElement?, depth: Int = 0) -> AXUIElement? {
@@ -64,6 +99,9 @@ final class FocusDetector {
         guard depth < 2 else {
             return nil
         }
+        // Web apps frequently focus a wrapper node while the editable text node is exposed as
+        // an AX ancestor/active element. Keep the search shallow so we do not accidentally pick
+        // an unrelated text field elsewhere in the page.
         for attribute in ["AXEditableAncestor", "AXHighestEditableAncestor", "AXActiveElement"] {
             if let child = elementAttribute(element, attribute),
                let editable = editableElement(from: child, depth: depth + 1)
@@ -82,6 +120,9 @@ final class FocusDetector {
             return true
         }
 
+        // Some browser and custom editor controls do not report a classic text role. A settable
+        // value or selected-text attribute is the safest native signal that Cmd+V should land in
+        // an editable insertion point.
         var settable = DarwinBoolean(false)
         if AXUIElementIsAttributeSettable(element, kAXValueAttribute as CFString, &settable) == .success, settable.boolValue {
             return true

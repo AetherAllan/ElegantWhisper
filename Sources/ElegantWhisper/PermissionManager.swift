@@ -7,9 +7,11 @@ struct PermissionStatus {
     let microphoneGranted: Bool
     let speechGranted: Bool
     let accessibilityGranted: Bool
+    let inputMonitoringGranted: Bool
     let microphoneDetail: String
     let speechDetail: String
     let accessibilityDetail: String
+    let inputMonitoringDetail: String
     let runningAsAppBundle: Bool
     let bundlePath: String
 
@@ -18,6 +20,7 @@ struct PermissionStatus {
         if !microphoneGranted { values.append("Microphone") }
         if !speechGranted { values.append("Speech Recognition") }
         if !accessibilityGranted { values.append("Accessibility") }
+        if !inputMonitoringGranted { values.append("Input Monitoring") }
         return values
     }
 
@@ -26,6 +29,9 @@ struct PermissionStatus {
         if !runningAsAppBundle {
             return "Run via `make run` (not swift build). Permissions only apply to the .app bundle."
         }
+        // TCC permissions are tied to the signed app identity. Rebuilding with a different
+        // signature or path can leave System Settings showing an old entry while this binary
+        // still reads as denied.
         return "After `make install`, macOS treats each rebuild as a new app. Remove ElegantWhisper from System Settings privacy lists, then re-enable."
     }
 }
@@ -35,6 +41,9 @@ final class PermissionManager {
         let microphone = AVCaptureDevice.authorizationStatus(for: .audio)
         let speech = SFSpeechRecognizer.authorizationStatus()
         let accessibility = AXIsProcessTrusted()
+        // Accessibility lets us inspect the focused element. Input Monitoring is a separate
+        // TCC gate for listening to global keyboard input while another app is focused.
+        let inputMonitoring = CGPreflightListenEventAccess()
         let bundlePath = Bundle.main.bundlePath
         let runningAsAppBundle = bundlePath.hasSuffix(".app")
 
@@ -42,9 +51,11 @@ final class PermissionManager {
             microphoneGranted: microphone == .authorized,
             speechGranted: speech == .authorized,
             accessibilityGranted: accessibility,
+            inputMonitoringGranted: inputMonitoring,
             microphoneDetail: detail(for: microphone),
             speechDetail: detail(for: speech),
             accessibilityDetail: accessibility ? "OK" : "Missing",
+            inputMonitoringDetail: inputMonitoring ? "OK" : "Missing",
             runningAsAppBundle: runningAsAppBundle,
             bundlePath: bundlePath
         )
@@ -69,6 +80,10 @@ final class PermissionManager {
     func requestAccessibilityPrompt() {
         let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
         _ = AXIsProcessTrustedWithOptions(options)
+    }
+
+    func requestInputMonitoring() {
+        _ = CGRequestListenEventAccess()
     }
 
     private func detail(for status: AVAuthorizationStatus) -> String {
@@ -101,6 +116,10 @@ final class PermissionManager {
 
     func openAccessibilitySettings() {
         openSettings("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+    }
+
+    func openInputMonitoringSettings() {
+        openSettings("x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")
     }
 
     private func openSettings(_ value: String) {

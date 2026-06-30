@@ -29,6 +29,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        // ElegantWhisper is a background utility with a Dock settings window. Closing that window
+        // must not kill the process, because the global keyboard monitor lives in AppController.
+        false
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        controller.stopHotkeyMonitor()
+    }
+
     private func setupStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         item.button?.title = AppConstants.productName
@@ -96,6 +106,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         submenu.addItem(.separator())
         submenu.addItem(disabledItem("Accessibility: \(status.accessibilityDetail)"))
         submenu.addItem(NSMenuItem(title: "Open Accessibility Settings", action: #selector(openAccessibilitySettings), keyEquivalent: ""))
+        submenu.addItem(.separator())
+        submenu.addItem(disabledItem("Input Monitoring: \(status.inputMonitoringDetail)"))
+        submenu.addItem(NSMenuItem(title: "Open Input Monitoring Settings", action: #selector(openInputMonitoringSettings), keyEquivalent: ""))
 
         if !status.missingTitles.isEmpty {
             item.title = "Permissions Status: Missing \(status.missingTitles.joined(separator: ", "))"
@@ -150,6 +163,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func openAccessibilitySettings() {
         controller.openAccessibilitySettings()
+    }
+
+    @objc private func openInputMonitoringSettings() {
+        controller.openInputMonitoringSettings()
     }
 
     @objc private func quit() {

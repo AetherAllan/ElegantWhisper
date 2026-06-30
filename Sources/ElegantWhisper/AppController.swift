@@ -58,18 +58,30 @@ final class AppController {
         guard !monitorStarted else {
             return
         }
-        guard permissions.status().accessibilityGranted else {
-            onUserMessage?("Accessibility required before hotkeys can start")
+        let status = permissions.status()
+        // Accessibility and Input Monitoring are separate macOS privacy gates. Accessibility
+        // lets us inspect/paste into the focused UI element; Input Monitoring lets the event tap
+        // keep seeing Command/Option while another app is frontmost.
+        guard status.accessibilityGranted, status.inputMonitoringGranted else {
+            onUserMessage?("Accessibility and Input Monitoring required before hotkeys can start")
             return
         }
         if monitor.start() {
             monitorStarted = true
+            DebugLog.event("hotkeyMonitorStarted")
         } else {
             onUserMessage?("Unable to start global key monitor")
         }
     }
 
+    func stopHotkeyMonitor() {
+        monitor.stop()
+        monitorStarted = false
+    }
+
     func toggleRecording() {
+        // The state machine is the single entry point for hotkeys and menu actions. This prevents
+        // a stale key event from starting a second recorder or submitting the same audio twice.
         switch state.mode {
         case .idle:
             startRecording()
@@ -107,6 +119,8 @@ final class AppController {
 
         initialTarget = focusDetector.currentEditableTarget()
         latestPartial = ""
+        // Every recording gets a fresh run id. Async Speech/LLM callbacks must present the same
+        // id before they can mutate state, so old callbacks cannot revive a canceled recording.
         runID += 1
         loggedFirstAudioLevel = false
 
@@ -161,6 +175,8 @@ final class AppController {
         case .transcribing, .refining:
             recorder.stop()
             transcriber.cancel()
+            // Invalidate any in-flight final Speech callback. Without this, a late callback could
+            // paste text after the user pressed Esc or started a new recording.
             runID += 1
             initialTarget = nil
             latestPartial = ""
@@ -200,6 +216,10 @@ final class AppController {
         permissions.openAccessibilitySettings()
     }
 
+    func openInputMonitoringSettings() {
+        permissions.openInputMonitoringSettings()
+    }
+
     func settingsWindowController() -> SettingsWindowController {
         SettingsWindowController(settings: settings, refiner: refiner)
     }
@@ -215,6 +235,8 @@ final class AppController {
         }
 
         if settings.llmEnabled {
+            // Refinement is allowed to improve obvious recognition mistakes, but it is not allowed
+            // to block insertion forever. LLMRefiner owns the timeout/fallback to raw text.
             _ = state.transition(to: .refining)
             panel.showStatus("Refining...")
             onChange?()
@@ -239,6 +261,9 @@ final class AppController {
         panel.showStatus("Inserting...")
         onChange?()
 
+        // Prefer the field focused when transcription finishes. If the user switches from one
+        // editor to another while Speech is finalizing, the current field is the least surprising
+        // insertion target. The start-time target is only a fallback.
         let target = focusDetector.currentEditableTarget() ?? initialTarget.flatMap {
             focusDetector.isValid($0) ? $0 : nil
         }
@@ -274,6 +299,8 @@ final class AppController {
     private func showError(_ message: String) {
         recorder.stop()
         transcriber.cancel()
+        // Error cleanup also invalidates callbacks. Speech and network callbacks may arrive after
+        // UI error handling, and they must not reopen the panel or paste stale text.
         runID += 1
         initialTarget = nil
         latestPartial = ""

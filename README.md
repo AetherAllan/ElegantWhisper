@@ -11,6 +11,7 @@ It records with a single left/right Command or Option key tap, streams Apple Spe
 - Microphone permission
 - Speech Recognition permission
 - Accessibility permission
+- Input Monitoring permission
 
 ## Build
 
@@ -60,7 +61,7 @@ The app runs as a regular Dock app and also keeps a menu-bar status item for qui
 
 ## Permissions
 
-On first launch, ElegantWhisper shows a permissions window. Grant each permission from that window. Global hotkeys do not start until Accessibility is granted.
+On first launch, ElegantWhisper shows a permissions window. Grant each permission from that window. Global hotkeys do not start until Accessibility and Input Monitoring are granted.
 
 ### Microphone
 
@@ -76,7 +77,13 @@ System Settings -> Privacy & Security -> Speech Recognition -> enable ElegantWhi
 
 System Settings -> Privacy & Security -> Accessibility -> enable ElegantWhisper.
 
-Accessibility is required for the global Command/Option key event tap and simulated Cmd+V insertion.
+Accessibility is required to find the focused editable field and perform simulated Cmd+V insertion.
+
+### Input Monitoring
+
+System Settings -> Privacy & Security -> Input Monitoring -> enable ElegantWhisper.
+
+Input Monitoring is required for Command/Option detection while ElegantWhisper is in the background or while another app is focused.
 
 The menu bar includes `Permissions Status` with shortcuts to the relevant System Settings panes.
 

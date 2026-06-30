@@ -206,7 +206,8 @@ final class SettingsWindowController: NSWindowController {
         let cards = NSStackView(views: [
             card("Microphone", status.microphoneGranted),
             card("Speech", status.speechGranted),
-            card("Accessibility", status.accessibilityGranted)
+            card("Accessibility", status.accessibilityGranted),
+            card("Input Monitoring", status.inputMonitoringGranted)
         ])
         cards.orientation = .horizontal
         cards.spacing = 12

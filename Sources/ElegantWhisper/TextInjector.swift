@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import Carbon
 import Foundation
 
 enum InjectionResult {
@@ -18,6 +19,8 @@ final class TextInjector {
 
     func inject(_ text: String, target: FocusTarget?, completion: @escaping (InjectionResult) -> Void) {
         let pasteboard = NSPasteboard.general
+        // Preserve every pasteboard flavor, not just plain text. Users often keep rich text,
+        // images, or files on the clipboard, and dictation should not permanently destroy that.
         let snapshot = PasteboardSnapshot.capture(from: pasteboard)
         copy(text, to: pasteboard)
 
@@ -32,17 +35,24 @@ final class TextInjector {
 
         let previousInputSource = inputSourceManager.switchToASCIIIfNeeded()
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
-            guard self?.focusDetector.isValid(target) == true else {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+            // Re-read focus after activation. The original AX element may be stale, and pasting
+            // into a stale or different app is worse than falling back to "copied".
+            guard let self,
+                  let focused = self.focusDetector.currentEditableTarget(processIdentifier: target.processIdentifier),
+                  self.focusDetector.isValid(focused)
+            else {
                 self?.inputSourceManager.restore(previousInputSource)
                 completion(.copied)
                 return
             }
 
-            self?.paste()
+            self.paste()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+                // Many apps read the pasteboard asynchronously after Cmd+V. Restoring too early
+                // makes the target paste the user's old clipboard instead of the transcript.
                 snapshot.restore(to: pasteboard)
-                self?.inputSourceManager.restore(previousInputSource)
+                self.inputSourceManager.restore(previousInputSource)
                 completion(.pasted)
             }
         }
@@ -55,12 +65,58 @@ final class TextInjector {
 
     private func paste() {
         let source = CGEventSource(stateID: .hidSystemState)
-        let down = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: true)
-        let up = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: false)
+        let keyCode = pasteKeyCode()
+        let down = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: true)
+        let up = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: false)
         down?.flags = .maskCommand
         up?.flags = .maskCommand
         down?.post(tap: .cghidEventTap)
         up?.post(tap: .cghidEventTap)
+    }
+
+    private func pasteKeyCode() -> CGKeyCode {
+        keyCode(for: "v") ?? 9
+    }
+
+    private func keyCode(for character: String) -> CGKeyCode? {
+        // Non-US keyboard layouts can move the physical V key. Resolve the current layout first
+        // so simulated Cmd+V remains a paste command instead of producing a different shortcut.
+        guard let source = TISCopyCurrentKeyboardLayoutInputSource()?.takeRetainedValue(),
+              let pointer = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData)
+        else {
+            return nil
+        }
+
+        let data = unsafeBitCast(pointer, to: CFData.self)
+        guard let bytes = CFDataGetBytePtr(data) else {
+            return nil
+        }
+        return bytes.withMemoryRebound(to: UCKeyboardLayout.self, capacity: 1) { layout in
+            for keyCode in UInt16(0)..<UInt16(128) {
+                var deadKeyState: UInt32 = 0
+                var chars = [UniChar](repeating: 0, count: 4)
+                var actualLength = 0
+                let status = UCKeyTranslate(
+                    layout,
+                    keyCode,
+                    UInt16(kUCKeyActionDown),
+                    0,
+                    UInt32(LMGetKbdType()),
+                    OptionBits(kUCKeyTranslateNoDeadKeysBit),
+                    &deadKeyState,
+                    chars.count,
+                    &actualLength,
+                    &chars
+                )
+                if status == noErr,
+                   actualLength > 0,
+                   String(utf16CodeUnits: chars, count: actualLength).lowercased() == character
+                {
+                    return CGKeyCode(keyCode)
+                }
+            }
+            return nil
+        }
     }
 }
 
