@@ -61,7 +61,7 @@ The app runs as a regular Dock app and also keeps a menu-bar status item for qui
 
 ## Permissions
 
-On first launch, ElegantWhisper shows a permissions window. Grant each permission from that window. Global hotkeys do not start until Accessibility and Input Monitoring are granted.
+On first launch, ElegantWhisper shows a permissions window. Grant each required permission from that window. Global hotkeys do not start until Accessibility and Input Monitoring are granted.
 
 ### Microphone
 
@@ -83,7 +83,7 @@ Accessibility is required to find the focused editable field and perform simulat
 
 System Settings -> Privacy & Security -> Input Monitoring -> enable ElegantWhisper.
 
-Input Monitoring is required for Command/Option detection while ElegantWhisper is in the background or while another app is focused.
+Input Monitoring is required for Command/Option detection while ElegantWhisper is in the background or while another app is focused. ElegantWhisper treats successful creation of its listen-only keyboard event tap as the operational permission check, and also shows `CGPreflightListenEventAccess()` / `IOHIDCheckAccess(kIOHIDRequestTypeListenEvent)` diagnostics when that probe fails.
 
 The menu bar includes `Permissions Status` with shortcuts to the relevant System Settings panes.
 

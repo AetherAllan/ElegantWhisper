@@ -1,6 +1,7 @@
 import AppKit
 import AVFoundation
 import ApplicationServices
+import IOKit.hidsystem
 import Speech
 
 struct PermissionStatus {
@@ -12,6 +13,7 @@ struct PermissionStatus {
     let speechDetail: String
     let accessibilityDetail: String
     let inputMonitoringDetail: String
+    let inputMonitoringDiagnostics: String
     let runningAsAppBundle: Bool
     let bundlePath: String
 
@@ -41,9 +43,7 @@ final class PermissionManager {
         let microphone = AVCaptureDevice.authorizationStatus(for: .audio)
         let speech = SFSpeechRecognizer.authorizationStatus()
         let accessibility = AXIsProcessTrusted()
-        // Accessibility lets us inspect the focused element. Input Monitoring is a separate
-        // TCC gate for listening to global keyboard input while another app is focused.
-        let inputMonitoring = CGPreflightListenEventAccess()
+        let inputMonitoring = inputMonitoringStatus()
         let bundlePath = Bundle.main.bundlePath
         let runningAsAppBundle = bundlePath.hasSuffix(".app")
 
@@ -51,11 +51,12 @@ final class PermissionManager {
             microphoneGranted: microphone == .authorized,
             speechGranted: speech == .authorized,
             accessibilityGranted: accessibility,
-            inputMonitoringGranted: inputMonitoring,
+            inputMonitoringGranted: inputMonitoring.granted,
             microphoneDetail: detail(for: microphone),
             speechDetail: detail(for: speech),
             accessibilityDetail: accessibility ? "OK" : "Missing",
-            inputMonitoringDetail: inputMonitoring ? "OK" : "Missing",
+            inputMonitoringDetail: inputMonitoring.granted ? "OK" : "Missing",
+            inputMonitoringDiagnostics: inputMonitoring.detail,
             runningAsAppBundle: runningAsAppBundle,
             bundlePath: bundlePath
         )
@@ -83,7 +84,35 @@ final class PermissionManager {
     }
 
     func requestInputMonitoring() {
+        // Ask through both APIs. On different macOS releases one API may only open Settings while
+        // the other updates the ListenEvent TCC row, and calling both is harmless.
         _ = CGRequestListenEventAccess()
+        _ = IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)
+    }
+
+    private func inputMonitoringStatus() -> (granted: Bool, detail: String) {
+        let preflight = CGPreflightListenEventAccess()
+        let hidAccess = IOHIDCheckAccess(kIOHIDRequestTypeListenEvent)
+        let tapGranted = OptionKeyMonitor.canCreateListenOnlyKeyboardTap()
+
+        let hidDetail: String
+        switch hidAccess {
+        case kIOHIDAccessTypeGranted:
+            hidDetail = "hid=granted"
+        case kIOHIDAccessTypeDenied:
+            hidDetail = "hid=denied"
+        case kIOHIDAccessTypeUnknown:
+            hidDetail = "hid=unknown"
+        default:
+            hidDetail = "hid=\(hidAccess.rawValue)"
+        }
+
+        // The event tap probe is the operational truth: if this tap cannot be created, background
+        // hotkeys cannot work. Preflight/HID are kept as diagnostics because macOS versions differ
+        // on which API updates first after the user changes System Settings.
+        let granted = tapGranted
+        let detail = "tap=\(tapGranted ? "ok" : "blocked"), cg=\(preflight ? "granted" : "blocked"), \(hidDetail)"
+        return (granted, detail)
     }
 
     private func detail(for status: AVAuthorizationStatus) -> String {

@@ -48,7 +48,7 @@ final class PermissionOnboardingWindowController: NSWindowController {
         update(microphoneStatus, granted: status.microphoneGranted, detail: status.microphoneDetail)
         update(speechStatus, granted: status.speechGranted, detail: status.speechDetail)
         update(accessibilityStatus, granted: status.accessibilityGranted, detail: status.accessibilityDetail)
-        update(inputMonitoringStatus, granted: status.inputMonitoringGranted, detail: status.inputMonitoringDetail)
+        update(inputMonitoringStatus, granted: status.inputMonitoringGranted, detail: status.inputMonitoringGranted ? "OK" : status.inputMonitoringDiagnostics)
         continueButton.isEnabled = status.missingTitles.isEmpty
         if window?.isVisible == true, status.missingTitles.isEmpty {
             complete()
@@ -63,7 +63,7 @@ final class PermissionOnboardingWindowController: NSWindowController {
         let title = NSTextField(labelWithString: "Set up \(AppConstants.productName)")
         title.font = .systemFont(ofSize: 26, weight: .bold)
 
-        let subtitle = NSTextField(labelWithString: "Grant these permissions one by one. Hotkeys start only after keyboard monitoring is enabled.")
+        let subtitle = NSTextField(labelWithString: "Grant these permissions one by one. Background Command/Option hotkeys require Input Monitoring.")
         subtitle.font = .systemFont(ofSize: 13)
         subtitle.textColor = .secondaryLabelColor
 

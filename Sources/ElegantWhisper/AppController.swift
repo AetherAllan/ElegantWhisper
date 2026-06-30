@@ -59,9 +59,9 @@ final class AppController {
             return
         }
         let status = permissions.status()
-        // Accessibility and Input Monitoring are separate macOS privacy gates. Accessibility
-        // lets us inspect/paste into the focused UI element; Input Monitoring lets the event tap
-        // keep seeing Command/Option while another app is frontmost.
+        // Accessibility gives us AX focus and paste safety; Input Monitoring is required for
+        // background Command/Option detection. Without both, the app appears to work only while
+        // its own Dock window is focused.
         guard status.accessibilityGranted, status.inputMonitoringGranted else {
             onUserMessage?("Accessibility and Input Monitoring required before hotkeys can start")
             return

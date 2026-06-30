@@ -204,10 +204,10 @@ final class SettingsWindowController: NSWindowController {
     private func makePermissionCards() -> NSView {
         let status = permissions.status()
         let cards = NSStackView(views: [
-            card("Microphone", status.microphoneGranted),
-            card("Speech", status.speechGranted),
-            card("Accessibility", status.accessibilityGranted),
-            card("Input Monitoring", status.inputMonitoringGranted)
+            card("Microphone", status.microphoneDetail, status.microphoneGranted ? .systemGreen : .systemOrange),
+            card("Speech", status.speechDetail, status.speechGranted ? .systemGreen : .systemOrange),
+            card("Accessibility", status.accessibilityDetail, status.accessibilityGranted ? .systemGreen : .systemOrange),
+            card("Input Monitoring", status.inputMonitoringGranted ? "OK" : status.inputMonitoringDiagnostics, status.inputMonitoringGranted ? .systemGreen : .systemOrange)
         ])
         cards.orientation = .horizontal
         cards.spacing = 12
@@ -215,10 +215,10 @@ final class SettingsWindowController: NSWindowController {
         return cards
     }
 
-    private func card(_ title: String, _ ok: Bool) -> NSView {
-        let label = NSTextField(labelWithString: "\(ok ? "OK" : "Missing")  \(title)")
+    private func card(_ title: String, _ detail: String, _ color: NSColor) -> NSView {
+        let label = NSTextField(labelWithString: "\(detail)  \(title)")
         label.font = .systemFont(ofSize: 13, weight: .semibold)
-        label.textColor = ok ? .systemGreen : .systemOrange
+        label.textColor = color
         label.alignment = .center
 
         let box = NSBox()

@@ -108,6 +108,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         submenu.addItem(NSMenuItem(title: "Open Accessibility Settings", action: #selector(openAccessibilitySettings), keyEquivalent: ""))
         submenu.addItem(.separator())
         submenu.addItem(disabledItem("Input Monitoring: \(status.inputMonitoringDetail)"))
+        submenu.addItem(disabledItem(status.inputMonitoringDiagnostics))
         submenu.addItem(NSMenuItem(title: "Open Input Monitoring Settings", action: #selector(openInputMonitoringSettings), keyEquivalent: ""))
 
         if !status.missingTitles.isEmpty {

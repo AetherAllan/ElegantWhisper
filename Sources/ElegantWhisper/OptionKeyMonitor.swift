@@ -31,6 +31,27 @@ final class OptionKeyMonitor {
     private let commandKeyCodes: Set<Int64> = [54, 55]
     private let escapeKeyCode: Int64 = 53
 
+    static func canCreateListenOnlyKeyboardTap() -> Bool {
+        let refcon = Unmanaged.passRetained(EventTapProbe()).toOpaque()
+        guard let tap = CGEvent.tapCreate(
+            tap: .cgSessionEventTap,
+            place: .headInsertEventTap,
+            // This mirrors the production tap. Permission UI should reflect whether the app can
+            // create the actual background keyboard listener, not only whether a preflight helper
+            // reports a matching TCC row.
+            options: .listenOnly,
+            eventsOfInterest: keyboardEventMask,
+            callback: OptionKeyMonitor.probeCallback,
+            userInfo: refcon
+        ) else {
+            Unmanaged<EventTapProbe>.fromOpaque(refcon).release()
+            return false
+        }
+        CFMachPortInvalidate(tap)
+        Unmanaged<EventTapProbe>.fromOpaque(refcon).release()
+        return true
+    }
+
     func start() -> Bool {
         if eventTap != nil || !eventMonitors.isEmpty || monitorThread != nil {
             return true
@@ -112,10 +133,6 @@ final class OptionKeyMonitor {
     }
 
     private func createEventTap() -> Bool {
-        let mask = (1 << CGEventType.flagsChanged.rawValue)
-            | (1 << CGEventType.keyDown.rawValue)
-            | (1 << CGEventType.keyUp.rawValue)
-
         let refcon = Unmanaged.passUnretained(self).toOpaque()
         guard let tap = CGEvent.tapCreate(
             tap: .cgSessionEventTap,
@@ -123,7 +140,7 @@ final class OptionKeyMonitor {
             // Keep this listen-only. ElegantWhisper only observes modifier taps; Command/Option
             // combinations must still reach macOS and the frontmost app as real shortcuts.
             options: .listenOnly,
-            eventsOfInterest: CGEventMask(mask),
+            eventsOfInterest: Self.keyboardEventMask,
             callback: OptionKeyMonitor.callback,
             userInfo: refcon
         ) else {
@@ -328,4 +345,16 @@ final class OptionKeyMonitor {
         monitor.handle(type: type, event: event)
         return Unmanaged.passUnretained(event)
     }
+
+    private static let probeCallback: CGEventTapCallBack = { _, _, event, _ in
+        Unmanaged.passUnretained(event)
+    }
+
+    private static let keyboardEventMask = CGEventMask(
+        (1 << CGEventType.flagsChanged.rawValue)
+            | (1 << CGEventType.keyDown.rawValue)
+            | (1 << CGEventType.keyUp.rawValue)
+    )
 }
+
+private final class EventTapProbe {}
