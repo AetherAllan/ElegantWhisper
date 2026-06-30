@@ -50,19 +50,6 @@ final class PermissionManager {
         )
     }
 
-    func requestMissingPermissions() {
-        let current = status()
-        if AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined {
-            requestMicrophone { _ in }
-        }
-        if SFSpeechRecognizer.authorizationStatus() == .notDetermined {
-            requestSpeech { _ in }
-        }
-        if !current.accessibilityGranted {
-            requestAccessibilityPrompt()
-        }
-    }
-
     func requestMicrophone(_ completion: @escaping (Bool) -> Void) {
         AVCaptureDevice.requestAccess(for: .audio) { granted in
             DispatchQueue.main.async {

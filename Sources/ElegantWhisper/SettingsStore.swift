@@ -31,6 +31,7 @@ final class SettingsStore {
         static let model = "model"
         static let requestTimeout = "requestTimeout"
         static let keepClipboardWithoutTarget = "keepClipboardWithoutTarget"
+        static let saveHistory = "saveHistory"
     }
 
     var language: RecognitionLanguage {
@@ -94,6 +95,15 @@ final class SettingsStore {
         }
         set {
             defaults.set(newValue, forKey: Key.keepClipboardWithoutTarget)
+        }
+    }
+
+    var saveHistory: Bool {
+        get {
+            defaults.object(forKey: Key.saveHistory) as? Bool ?? true
+        }
+        set {
+            defaults.set(newValue, forKey: Key.saveHistory)
         }
     }
 }

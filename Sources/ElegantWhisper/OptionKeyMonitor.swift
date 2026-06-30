@@ -9,7 +9,7 @@ final class OptionKeyMonitor {
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var globalMonitors: [Any] = []
-    private var armedModifier: ModifierKind?
+    private var armedModifier: ModifierPress?
     private var invalidated = false
     private var lastFlags: CGEventFlags = []
     private var lastToggleTime: TimeInterval = 0
@@ -17,6 +17,11 @@ final class OptionKeyMonitor {
     private enum ModifierKind {
         case command
         case option
+    }
+
+    private struct ModifierPress {
+        let keyCode: Int64
+        let kind: ModifierKind
     }
 
     private let optionKeyCodes: Set<Int64> = [58, 61]
@@ -72,7 +77,10 @@ final class OptionKeyMonitor {
 
     private func startGlobalFallback() {
         let flagsMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.flagsChanged]) { [weak self] event in
-            self?.handleFlagsChanged(flags: CGEventFlags(rawValue: UInt64(event.modifierFlags.rawValue)))
+            self?.handleFlagsChanged(
+                keyCode: Int64(event.keyCode),
+                flags: CGEventFlags(rawValue: UInt64(event.modifierFlags.rawValue))
+            )
         }
         let keyMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.keyDown]) { [weak self] event in
             let keyCode = Int64(event.keyCode)
@@ -117,48 +125,35 @@ final class OptionKeyMonitor {
     }
 
     private func handleFlagsChanged(_ event: CGEvent) {
-        handleFlagsChanged(flags: event.flags)
+        handleFlagsChanged(
+            keyCode: event.getIntegerValueField(.keyboardEventKeycode),
+            flags: event.flags
+        )
     }
 
-    private func handleFlagsChanged(flags: CGEventFlags) {
-        let wasCommand = lastFlags.contains(.maskCommand)
-        let wasOption = lastFlags.contains(.maskAlternate)
-        let isCommand = flags.contains(.maskCommand)
-        let isOption = flags.contains(.maskAlternate)
-        let hasOtherModifiers = flags.contains(.maskShift)
-            || flags.contains(.maskControl)
-            || flags.contains(.maskSecondaryFn)
-            || flags.contains(.maskHelp)
-
-        if !wasCommand && isCommand {
-            if armedModifier == nil {
-                armedModifier = .command
-                invalidated = hasOtherModifiers || isOption
+    private func handleFlagsChanged(keyCode: Int64, flags: CGEventFlags) {
+        guard let kind = modifierKind(for: keyCode) else {
+            if armedModifier != nil {
+                invalidated = true
             }
-        } else if wasCommand && !isCommand {
-            if armedModifier == .command, !invalidated {
-                fireToggle()
-            }
-            if armedModifier == .command {
-                reset()
-            }
+            lastFlags = flags
+            return
         }
 
-        if !wasOption && isOption {
+        let isDown = flags.contains(flag(for: kind))
+        if isDown {
             if armedModifier == nil {
-                armedModifier = .option
-                invalidated = hasOtherModifiers || isCommand
+                armedModifier = ModifierPress(keyCode: keyCode, kind: kind)
+                invalidated = hasOtherModifiers(flags, excluding: kind)
+            } else if armedModifier?.keyCode != keyCode {
+                invalidated = true
             }
-        } else if wasOption && !isOption {
-            if armedModifier == .option, !invalidated {
+        } else if armedModifier?.keyCode == keyCode {
+            if !invalidated {
                 fireToggle()
             }
-            if armedModifier == .option {
-                reset()
-            }
-        }
-
-        if isCommand || isOption, hasOtherModifiers, armedModifier != nil {
+            reset()
+        } else if armedModifier != nil {
             invalidated = true
         }
 
@@ -179,6 +174,34 @@ final class OptionKeyMonitor {
     private func reset() {
         armedModifier = nil
         invalidated = false
+    }
+
+    private func modifierKind(for keyCode: Int64) -> ModifierKind? {
+        if commandKeyCodes.contains(keyCode) {
+            return .command
+        }
+        if optionKeyCodes.contains(keyCode) {
+            return .option
+        }
+        return nil
+    }
+
+    private func flag(for kind: ModifierKind) -> CGEventFlags {
+        switch kind {
+        case .command: .maskCommand
+        case .option: .maskAlternate
+        }
+    }
+
+    private func hasOtherModifiers(_ flags: CGEventFlags, excluding kind: ModifierKind) -> Bool {
+        var blocked: [CGEventFlags] = [.maskShift, .maskControl]
+        if kind != .command {
+            blocked.append(.maskCommand)
+        }
+        if kind != .option {
+            blocked.append(.maskAlternate)
+        }
+        return blocked.contains { flags.contains($0) }
     }
 
     private func isTriggerKey(_ keyCode: Int64) -> Bool {

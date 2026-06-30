@@ -1,8 +1,8 @@
 # ElegantWhisper
 
-ElegantWhisper is a macOS 14+ menu-bar voice input app built with Swift Package Manager and AppKit.
+ElegantWhisper is a macOS 14+ Dock and menu-bar voice input app built with Swift Package Manager and AppKit.
 
-It records with a single Option key tap, streams Apple Speech Recognition partial results, optionally applies conservative OpenAI-compatible correction, then inserts the final text into the focused editable field when it is safe to do so.
+It records with a single left/right Command or Option key tap, streams Apple Speech Recognition partial results, optionally applies conservative OpenAI-compatible correction, then inserts the final text into the focused editable field when it is safe to do so.
 
 ## Requirements
 
@@ -44,7 +44,7 @@ For distribution outside your machine, replace ad-hoc signing with a Developer I
 make run
 ```
 
-The app runs as `LSUIElement`, so it only appears in the menu bar and does not show a Dock icon.
+The app runs as a regular Dock app and also keeps a menu-bar status item for quick controls.
 
 ## Stable Identifiers
 
@@ -54,16 +54,19 @@ The app runs as `LSUIElement`, so it only appears in the menu bar and does not s
 - Bundle identifier: `com.aetherallan.ElegantWhisper`
 - Application Support: `~/Library/Application Support/ElegantWhisper/`
 - Models: `~/Library/Application Support/ElegantWhisper/Models/`
+- History: `~/Library/Application Support/ElegantWhisper/history.json`
 - UserDefaults suite: `com.aetherallan.ElegantWhisper`
 - Keychain service: `com.aetherallan.ElegantWhisper`
 
 ## Permissions
 
-Open the app once, then grant these permissions when prompted or from System Settings.
+On first launch, ElegantWhisper shows a permissions window. Grant each permission from that window. Global hotkeys do not start until Accessibility is granted.
 
 ### Microphone
 
 System Settings -> Privacy & Security -> Microphone -> enable ElegantWhisper.
+
+`make install` signs the app with `Resources/ElegantWhisper.entitlements`, including `com.apple.security.device.audio-input`. If you manually re-sign the app, include that entitlements file; otherwise hardened runtime can block microphone access.
 
 ### Speech Recognition
 
@@ -73,7 +76,7 @@ System Settings -> Privacy & Security -> Speech Recognition -> enable ElegantWhi
 
 System Settings -> Privacy & Security -> Accessibility -> enable ElegantWhisper.
 
-Accessibility is required for the global Option key event tap and simulated Cmd+V insertion.
+Accessibility is required for the global Command/Option key event tap and simulated Cmd+V insertion.
 
 The menu bar includes `Permissions Status` with shortcuts to the relevant System Settings panes.
 
@@ -88,13 +91,16 @@ The menu bar includes `Permissions Status` with shortcuts to the relevant System
 
 ## Settings
 
-Open `Settings` from the menu bar to configure:
+Open `Open ElegantWhisper` from the menu bar to configure:
 
 - API Base URL
 - API Key
 - Model
 - Request timeout
 - Whether to keep text on the clipboard when no editable field is available
+- Whether to save local transcription history
+
+The History section stores completed dictations locally. Canceled recordings are not saved.
 
 `LLM Refinement` is disabled by default. When enabled, it sends only the final recognized text to an OpenAI-compatible `/chat/completions` endpoint and asks the model to fix obvious speech recognition errors without rewriting the text.
 
@@ -120,4 +126,5 @@ After building, manually verify:
 - Text inserts into TextEdit, browser address fields, web inputs, and chat inputs.
 - Switching to another editable field during transcription inserts into the current field.
 - With no editable field, the result stays on the clipboard.
+- Completed dictations appear in History; canceled dictations do not.
 - LLM failures fall back to the raw Apple Speech result.

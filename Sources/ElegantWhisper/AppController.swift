@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 final class AppController {
@@ -17,6 +18,8 @@ final class AppController {
     private var initialTarget: FocusTarget?
     private var latestPartial = ""
     private var runID = 0
+    private var monitorStarted = false
+    private var loggedFirstAudioLevel = false
 
     var onChange: (() -> Void)?
     var onUserMessage: ((String) -> Void)?
@@ -34,24 +37,35 @@ final class AppController {
         monitor.onCancel = { [weak self] in
             self?.cancelCurrentOperation()
         }
-        permissions.requestMissingPermissions()
-        if !monitor.start() {
-            permissions.requestAccessibilityPrompt()
-            let status = permissions.status()
-            if !status.accessibilityGranted {
-                onUserMessage?("Accessibility required. Enable in System Settings, then quit and reopen.")
-            }
-        }
 
         transcriber.onPartial = { [weak self] text in
             self?.latestPartial = text
             self?.panel.updatePartial(text)
         }
         recorder.onLevel = { [weak self] level in
+            if level > 0.02, self?.loggedFirstAudioLevel == false {
+                self?.loggedFirstAudioLevel = true
+                DebugLog.event("firstAudioLevel")
+            }
             self?.panel.updateLevel(level)
         }
         recorder.onBuffer = { [weak self] buffer in
             self?.transcriber.append(buffer)
+        }
+    }
+
+    func startHotkeyMonitorIfPermitted() {
+        guard !monitorStarted else {
+            return
+        }
+        guard permissions.status().accessibilityGranted else {
+            onUserMessage?("Accessibility required before hotkeys can start")
+            return
+        }
+        if monitor.start() {
+            monitorStarted = true
+        } else {
+            onUserMessage?("Unable to start global key monitor")
         }
     }
 
@@ -94,12 +108,15 @@ final class AppController {
         initialTarget = focusDetector.currentEditableTarget()
         latestPartial = ""
         runID += 1
+        loggedFirstAudioLevel = false
 
         do {
             try transcriber.start(language: settings.language)
             try recorder.start()
+            DebugLog.event("recordingStart")
             _ = state.transition(to: .recording)
             panel.showRecording(text: "")
+            DebugLog.event("panelShow")
             onChange?()
         } catch {
             showError(error.localizedDescription)
@@ -111,6 +128,7 @@ final class AppController {
             return
         }
         recorder.stop()
+        DebugLog.event("recordingStop")
         panel.showStatus("Transcribing...")
         onChange?()
 
@@ -125,12 +143,14 @@ final class AppController {
             return
         }
         recorder.stop()
+        DebugLog.event("recordingStop")
         transcriber.cancel()
         runID += 1
         initialTarget = nil
         latestPartial = ""
         _ = state.transition(to: .idle)
         panel.hide()
+        DebugLog.event("panelHide")
         onChange?()
     }
 
@@ -146,6 +166,7 @@ final class AppController {
             latestPartial = ""
             _ = state.transition(to: .idle)
             panel.hide()
+            DebugLog.event("panelHide")
             onUserMessage?("Cancelled")
             onChange?()
         case .idle, .injecting:
@@ -223,10 +244,12 @@ final class AppController {
         }
 
         guard target != nil || settings.keepClipboardWithoutTarget else {
+            saveHistory(text, result: HistoryResult.failed, app: initialTarget?.app)
             showError("No editable field")
             return
         }
 
+        let historyApp = target?.app ?? initialTarget?.app
         injector.inject(text, target: target) { [weak self] result in
             guard let self, runID == self.runID else {
                 return
@@ -235,9 +258,11 @@ final class AppController {
             case .pasted:
                 self.panel.showSuccess("Inserted")
                 self.onUserMessage?("Inserted")
+                self.saveHistory(text, result: HistoryResult.pasted, app: historyApp)
             case .copied:
-                self.panel.showSuccess("Copied")
-                self.onUserMessage?("Text copied to clipboard")
+                self.panel.showSuccess("复制")
+                self.onUserMessage?("已复制到剪贴板")
+                self.saveHistory(text, result: HistoryResult.copied, app: historyApp)
             }
             self.initialTarget = nil
             self.latestPartial = ""
@@ -254,7 +279,15 @@ final class AppController {
         latestPartial = ""
         _ = state.transition(to: .idle)
         panel.showError(message)
+        DebugLog.event("panelHide")
         onUserMessage?(message)
         onChange?()
+    }
+
+    private func saveHistory(_ text: String, result: HistoryResult, app: NSRunningApplication?) {
+        guard settings.saveHistory else {
+            return
+        }
+        HistoryStore.shared.append(text: text, result: result, app: app)
     }
 }

@@ -4,12 +4,15 @@ final class SettingsWindowController: NSWindowController {
     private let settings: SettingsStore
     private let refiner: LLMRefiner
     private let permissions = PermissionManager()
+    private let history = HistoryStore.shared
 
     private let baseURLField = NSTextField()
     private let apiKeyField = NSSecureTextField()
     private let modelField = NSTextField()
     private let timeoutField = NSTextField()
     private let clipboardCheckbox = NSButton(checkboxWithTitle: "Keep text on clipboard when no editable field is available", target: nil, action: nil)
+    private let historyCheckbox = NSButton(checkboxWithTitle: "Save transcription history", target: nil, action: nil)
+    private let historyList = NSStackView()
     private let statusLabel = NSTextField(labelWithString: "")
 
     init(settings: SettingsStore, refiner: LLMRefiner) {
@@ -33,6 +36,7 @@ final class SettingsWindowController: NSWindowController {
 
     override func showWindow(_ sender: Any?) {
         loadValues()
+        reloadHistory()
         super.showWindow(sender)
         window?.center()
         NSApp.activate(ignoringOtherApps: true)
@@ -50,7 +54,8 @@ final class SettingsWindowController: NSWindowController {
             [label("API Key"), apiKeyField],
             [label("Model"), modelField],
             [label("Timeout Seconds"), timeoutField],
-            [NSView(), clipboardCheckbox]
+            [NSView(), clipboardCheckbox],
+            [NSView(), historyCheckbox]
         ])
         grid.translatesAutoresizingMaskIntoConstraints = false
         grid.rowSpacing = 12
@@ -82,8 +87,23 @@ final class SettingsWindowController: NSWindowController {
         let permissionCards = makePermissionCards()
         let settingsTitle = NSTextField(labelWithString: "Settings")
         settingsTitle.font = .systemFont(ofSize: 17, weight: .semibold)
+        let historyTitle = NSTextField(labelWithString: "History")
+        historyTitle.font = .systemFont(ofSize: 17, weight: .semibold)
 
-        let main = NSStackView(views: [hero, shortcut, permissionCards, settingsTitle, grid, buttons, statusLabel])
+        historyList.orientation = .vertical
+        historyList.alignment = .leading
+        historyList.spacing = 8
+        historyList.translatesAutoresizingMaskIntoConstraints = false
+
+        let historyScroll = NSScrollView()
+        historyScroll.documentView = historyList
+        historyScroll.hasVerticalScroller = true
+        historyScroll.borderType = .lineBorder
+        historyScroll.translatesAutoresizingMaskIntoConstraints = false
+
+        let clearButton = NSButton(title: "Clear History", target: self, action: #selector(clearHistory))
+
+        let main = NSStackView(views: [hero, shortcut, permissionCards, settingsTitle, grid, buttons, statusLabel, historyTitle, historyScroll, clearButton])
         main.orientation = .vertical
         main.alignment = .leading
         main.spacing = 14
@@ -102,7 +122,9 @@ final class SettingsWindowController: NSWindowController {
             main.topAnchor.constraint(equalTo: content.topAnchor, constant: 38),
             grid.widthAnchor.constraint(equalToConstant: 560),
             buttons.trailingAnchor.constraint(equalTo: grid.trailingAnchor),
-            statusLabel.widthAnchor.constraint(equalToConstant: 400)
+            statusLabel.widthAnchor.constraint(equalToConstant: 400),
+            historyScroll.widthAnchor.constraint(equalToConstant: 620),
+            historyScroll.heightAnchor.constraint(equalToConstant: 150)
         ])
     }
 
@@ -112,6 +134,7 @@ final class SettingsWindowController: NSWindowController {
         modelField.stringValue = settings.model
         timeoutField.stringValue = String(Int(settings.requestTimeout))
         clipboardCheckbox.state = settings.keepClipboardWithoutTarget ? .on : .off
+        historyCheckbox.state = settings.saveHistory ? .on : .off
         statusLabel.stringValue = ""
     }
 
@@ -121,6 +144,7 @@ final class SettingsWindowController: NSWindowController {
         settings.model = modelField.stringValue
         settings.requestTimeout = TimeInterval(timeoutField.doubleValue)
         settings.keepClipboardWithoutTarget = clipboardCheckbox.state == .on
+        settings.saveHistory = historyCheckbox.state == .on
         statusLabel.stringValue = "Saved"
     }
 
@@ -154,8 +178,9 @@ final class SettingsWindowController: NSWindowController {
         let home = sideLabel("Home")
         let settings = sideLabel("Settings")
         let permissions = sideLabel("Permissions")
+        let history = sideLabel("History")
 
-        let stack = NSStackView(views: [title, plan, home, settings, permissions])
+        let stack = NSStackView(views: [title, plan, home, settings, permissions, history])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 16
@@ -212,4 +237,59 @@ final class SettingsWindowController: NSWindowController {
         ])
         return box
     }
+
+    private func reloadHistory() {
+        historyList.arrangedSubviews.forEach { view in
+            historyList.removeArrangedSubview(view)
+            view.removeFromSuperview()
+        }
+
+        let items = history.items()
+        if items.isEmpty {
+            let empty = NSTextField(labelWithString: "No completed dictations yet.")
+            empty.textColor = .secondaryLabelColor
+            historyList.addArrangedSubview(empty)
+            return
+        }
+
+        for item in items.prefix(20) {
+            historyList.addArrangedSubview(historyRow(item))
+        }
+    }
+
+    private func historyRow(_ item: HistoryItem) -> NSView {
+        let date = item.createdAt.formatted(date: .abbreviated, time: .shortened)
+        let app = item.appName ?? "Unknown app"
+        let text = item.text.replacingOccurrences(of: "\n", with: " ")
+        let label = NSTextField(labelWithString: "\(date)  \(app)  \(item.result.rawValue): \(text)")
+        label.lineBreakMode = .byTruncatingTail
+        label.maximumNumberOfLines = 1
+        label.widthAnchor.constraint(equalToConstant: 500).isActive = true
+
+        let copy = HistoryCopyButton(title: "Copy", target: self, action: #selector(copyHistory(_:)))
+        copy.historyText = item.text
+
+        let row = NSStackView(views: [label, copy])
+        row.orientation = .horizontal
+        row.spacing = 8
+        return row
+    }
+
+    @objc private func copyHistory(_ sender: HistoryCopyButton) {
+        let text = sender.historyText
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        statusLabel.stringValue = "Copied history item"
+    }
+
+    @objc private func clearHistory() {
+        history.clear()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            self?.reloadHistory()
+        }
+    }
+}
+
+private final class HistoryCopyButton: NSButton {
+    var historyText = ""
 }

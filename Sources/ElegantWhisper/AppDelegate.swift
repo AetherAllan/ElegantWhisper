@@ -4,10 +4,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let controller = AppController()
     private var statusItem: NSStatusItem?
     private var settingsWindow: SettingsWindowController?
+    private var onboardingWindow: PermissionOnboardingWindowController?
     private var lastMessage = ""
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.setActivationPolicy(.accessory)
+        NSApp.setActivationPolicy(.regular)
         setupStatusItem()
         controller.onChange = { [weak self] in
             self?.rebuildMenu()
@@ -18,6 +19,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         controller.start()
         rebuildMenu()
+        showInitialWindow()
+    }
+
+    func applicationDidBecomeActive(_ notification: Notification) {
+        onboardingWindow?.refresh()
+        if controller.permissionStatus().missingTitles.isEmpty {
+            controller.startHotkeyMonitorIfPermitted()
+        }
     }
 
     private func setupStatusItem() {
@@ -128,8 +137,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func showSettings() {
-        settingsWindow = controller.settingsWindowController()
-        settingsWindow?.showWindow(nil)
+        showMainWindow()
     }
 
     @objc private func openMicrophoneSettings() {
@@ -146,5 +154,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func quit() {
         NSApp.terminate(nil)
+    }
+
+    private func showInitialWindow() {
+        if controller.permissionStatus().missingTitles.isEmpty {
+            controller.startHotkeyMonitorIfPermitted()
+            showMainWindow()
+        } else {
+            showOnboarding()
+        }
+    }
+
+    private func showOnboarding() {
+        let onboarding = PermissionOnboardingWindowController()
+        onboarding.onComplete = { [weak self] in
+            self?.controller.startHotkeyMonitorIfPermitted()
+            self?.showMainWindow()
+            self?.rebuildMenu()
+        }
+        onboardingWindow = onboarding
+        onboarding.showWindow(nil)
+    }
+
+    private func showMainWindow() {
+        if settingsWindow == nil {
+            settingsWindow = controller.settingsWindowController()
+        }
+        settingsWindow?.showWindow(nil)
     }
 }
