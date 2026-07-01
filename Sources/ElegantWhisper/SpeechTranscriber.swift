@@ -12,6 +12,7 @@ final class SpeechTranscriber {
     private var completedEarly = false
     private var delivered = false
     private var sessionID = 0
+    private var timeoutWorkItem: DispatchWorkItem?
 
     var onPartial: ((String) -> Void)?
 
@@ -34,13 +35,15 @@ final class SpeechTranscriber {
         lastText = ""
         completedEarly = false
         delivered = false
+        timeoutWorkItem?.cancel()
+        timeoutWorkItem = nil
         sessionID += 1
         let currentSessionID = sessionID
 
         task = recognizer.recognitionTask(with: request) { [weak self] result, error in
             guard let self else { return }
             self.lock.lock()
-            let isCurrentSession = currentSessionID == self.sessionID
+            let isCurrentSession = currentSessionID == self.sessionID && !self.delivered
             self.lock.unlock()
             guard isCurrentSession else { return }
 
@@ -48,8 +51,11 @@ final class SpeechTranscriber {
                 self.lock.lock()
                 self.lastText = text
                 self.lock.unlock()
-                DispatchQueue.main.async { [onPartial] in
-                    onPartial?(text)
+                DispatchQueue.main.async { [weak self] in
+                    guard self?.isCurrentSession(currentSessionID) == true else {
+                        return
+                    }
+                    self?.onPartial?(text)
                 }
             }
 
@@ -61,7 +67,7 @@ final class SpeechTranscriber {
                 self.lock.unlock()
 
                 if shouldComplete {
-                    self.completeOnce(text)
+                    self.completeOnce(text, sessionID: currentSessionID)
                 } else {
                     self.stopTask()
                 }
@@ -79,32 +85,41 @@ final class SpeechTranscriber {
     func finish(_ completion: @escaping (String) -> Void) {
         lock.lock()
         finalCompletion = completion
+        timeoutWorkItem?.cancel()
+        timeoutWorkItem = nil
+        let expectedSessionID = sessionID
         let request = request
         let shouldCompleteNow = completedEarly || request == nil
         let text = lastText
         lock.unlock()
 
         if shouldCompleteNow {
-            completeOnce(text)
+            completeOnce(text, sessionID: expectedSessionID)
             return
         }
 
         request?.endAudio()
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 8) { [weak self] in
+        let workItem = DispatchWorkItem { [weak self] in
             guard let self else { return }
             self.lock.lock()
-            let shouldComplete = !self.delivered
+            let shouldComplete = self.sessionID == expectedSessionID && !self.delivered
             let text = self.lastText
             self.lock.unlock()
             if shouldComplete {
-                self.completeOnce(text)
+                self.completeOnce(text, sessionID: expectedSessionID)
             }
         }
+        lock.lock()
+        timeoutWorkItem = workItem
+        lock.unlock()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 8, execute: workItem)
     }
 
     func cancel() {
         lock.lock()
+        timeoutWorkItem?.cancel()
+        timeoutWorkItem = nil
         task?.cancel()
         task = nil
         request = nil
@@ -117,13 +132,16 @@ final class SpeechTranscriber {
         lock.unlock()
     }
 
-    private func completeOnce(_ text: String) {
+    private func completeOnce(_ text: String, sessionID expectedSessionID: Int) {
         lock.lock()
-        guard !delivered else {
+        guard self.sessionID == expectedSessionID, !delivered else {
             lock.unlock()
             return
         }
+        timeoutWorkItem?.cancel()
+        timeoutWorkItem = nil
         delivered = true
+        sessionID += 1
         task?.cancel()
         task = nil
         request = nil
@@ -145,5 +163,12 @@ final class SpeechTranscriber {
         request = nil
         recognizer = nil
         lock.unlock()
+    }
+
+    private func isCurrentSession(_ expectedSessionID: Int) -> Bool {
+        lock.lock()
+        let result = sessionID == expectedSessionID && !delivered
+        lock.unlock()
+        return result
     }
 }

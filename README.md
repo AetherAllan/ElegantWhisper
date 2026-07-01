@@ -131,7 +131,9 @@ Accessibility is required to find the focused editable field and perform simulat
 
 System Settings -> Privacy & Security -> Input Monitoring -> enable ElegantWhisper.
 
-Input Monitoring is required for Command/Option detection while ElegantWhisper is in the background or while another app is focused. ElegantWhisper treats successful creation of its listen-only keyboard event tap as the operational permission check, and also shows `CGPreflightListenEventAccess()` / `IOHIDCheckAccess(kIOHIDRequestTypeListenEvent)` diagnostics when that probe fails.
+Input Monitoring is required for Command/Option detection while ElegantWhisper is in the background or while another app is focused. ElegantWhisper checks Apple's ListenEvent permission with `CGPreflightListenEventAccess()` and `IOHIDCheckAccess(kIOHIDRequestTypeListenEvent)`, then starts a listen-only `CGEventTap`. If that tap cannot be created on a developer build, it falls back to an `IOHIDManager` keyboard listener that uses the same Input Monitoring permission.
+
+After enabling Input Monitoring, quit and reopen ElegantWhisper. macOS often requires a relaunch before a newly granted ListenEvent permission is visible to the running process.
 
 The menu bar includes `Permissions Status` with shortcuts to the relevant System Settings panes.
 

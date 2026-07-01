@@ -16,9 +16,14 @@ let package = Package(
                 .linkedFramework("AVFoundation"),
                 .linkedFramework("Carbon"),
                 .linkedFramework("CoreAudio"),
+                .linkedFramework("IOKit"),
                 .linkedFramework("Security"),
                 .linkedFramework("Speech")
             ]
+        ),
+        .testTarget(
+            name: "ElegantWhisperTests",
+            dependencies: ["ElegantWhisper"]
         )
     ]
 )

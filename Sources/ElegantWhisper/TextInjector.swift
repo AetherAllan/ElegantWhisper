@@ -4,13 +4,14 @@ import Carbon
 import Foundation
 
 enum InjectionResult {
-    case pasted
+    case pasteAttempted
     case copied
 }
 
 final class TextInjector {
     private let focusDetector: FocusDetector
     private let inputSourceManager: InputSourceManager
+    private let sessionPasteboardType = NSPasteboard.PasteboardType("\(AppConstants.bundleIdentifier).session")
 
     init(focusDetector: FocusDetector, inputSourceManager: InputSourceManager) {
         self.focusDetector = focusDetector
@@ -22,7 +23,9 @@ final class TextInjector {
         // Preserve every pasteboard flavor, not just plain text. Users often keep rich text,
         // images, or files on the clipboard, and dictation should not permanently destroy that.
         let snapshot = PasteboardSnapshot.capture(from: pasteboard)
-        copy(text, to: pasteboard)
+        let sessionToken = UUID().uuidString
+        copy(text, sessionToken: sessionToken, to: pasteboard)
+        let ownedChangeCount = pasteboard.changeCount
 
         guard let target, focusDetector.isValid(target) else {
             completion(.copied)
@@ -40,38 +43,53 @@ final class TextInjector {
             // into a stale or different app is worse than falling back to "copied".
             guard let self,
                   let focused = self.focusDetector.currentEditableTarget(processIdentifier: target.processIdentifier),
-                  self.focusDetector.isValid(focused)
+                  self.focusDetector.isValid(focused),
+                  self.focusDetector.isSameElement(focused.element, target.element)
             else {
                 self?.inputSourceManager.restore(previousInputSource)
                 completion(.copied)
                 return
             }
 
-            self.paste()
+            guard self.paste() else {
+                self.inputSourceManager.restore(previousInputSource)
+                completion(.copied)
+                return
+            }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
                 // Many apps read the pasteboard asynchronously after Cmd+V. Restoring too early
                 // makes the target paste the user's old clipboard instead of the transcript.
-                snapshot.restore(to: pasteboard)
+                if pasteboard.changeCount == ownedChangeCount,
+                   pasteboard.string(forType: .string) == text,
+                   pasteboard.string(forType: self.sessionPasteboardType) == sessionToken
+                {
+                    snapshot.restore(to: pasteboard)
+                }
                 self.inputSourceManager.restore(previousInputSource)
-                completion(.pasted)
+                completion(.pasteAttempted)
             }
         }
     }
 
-    private func copy(_ text: String, to pasteboard: NSPasteboard) {
+    private func copy(_ text: String, sessionToken: String, to pasteboard: NSPasteboard) {
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
+        pasteboard.setString(sessionToken, forType: sessionPasteboardType)
     }
 
-    private func paste() {
+    private func paste() -> Bool {
         let source = CGEventSource(stateID: .hidSystemState)
         let keyCode = pasteKeyCode()
-        let down = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: true)
-        let up = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: false)
-        down?.flags = .maskCommand
-        up?.flags = .maskCommand
-        down?.post(tap: .cghidEventTap)
-        up?.post(tap: .cghidEventTap)
+        guard let down = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: true),
+              let up = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: false)
+        else {
+            return false
+        }
+        down.flags = .maskCommand
+        up.flags = .maskCommand
+        down.post(tap: .cghidEventTap)
+        up.post(tap: .cghidEventTap)
+        return true
     }
 
     private func pasteKeyCode() -> CGKeyCode {

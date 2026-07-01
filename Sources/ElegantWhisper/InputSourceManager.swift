@@ -3,20 +3,27 @@ import Foundation
 
 final class InputSourceManager {
     typealias InputSource = TISInputSource
+    private var temporaryASCIIInputSourceID: String?
 
     func switchToASCIIIfNeeded() -> InputSource? {
         // CJK input methods can treat simulated Cmd+V differently while a composition buffer is
         // active. Temporarily switching to ABC/US keeps paste as a plain command, then we restore
         // the user's original input source after the target app has consumed the clipboard.
         guard let current = currentInputSource(), isCJK(current), let ascii = asciiInputSource() else {
+            temporaryASCIIInputSourceID = nil
             return nil
         }
         TISSelectInputSource(ascii)
+        temporaryASCIIInputSourceID = sourceID(ascii)
         return current
     }
 
     func restore(_ source: InputSource?) {
-        guard let source else {
+        guard let source, let temporaryASCIIInputSourceID else {
+            return
+        }
+        defer { self.temporaryASCIIInputSourceID = nil }
+        guard currentInputSource().map(sourceID) == temporaryASCIIInputSourceID else {
             return
         }
         TISSelectInputSource(source)
@@ -63,5 +70,9 @@ final class InputSourceManager {
             return ""
         }
         return String(describing: Unmanaged<CFTypeRef>.fromOpaque(value).takeUnretainedValue())
+    }
+
+    private func sourceID(_ source: InputSource) -> String {
+        property(source, kTISPropertyInputSourceID)
     }
 }

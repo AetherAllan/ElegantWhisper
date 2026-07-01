@@ -25,16 +25,36 @@ final class KeychainStore {
 
     func setString(_ value: String, for account: String) {
         let query = baseQuery(account: account)
-        SecItemDelete(query as CFDictionary)
+        guard !value.isEmpty else {
+            SecItemDelete(query as CFDictionary)
+            return
+        }
+        guard let data = value.data(using: .utf8) else {
+            DebugLog.event("keychainEncodeFailed")
+            return
+        }
 
-        guard !value.isEmpty, let data = value.data(using: .utf8) else {
+        let attributes: [String: Any] = [
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        ]
+
+        let updateStatus = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+        if updateStatus == errSecSuccess {
+            return
+        }
+        guard updateStatus == errSecItemNotFound else {
+            DebugLog.event("keychainUpdateFailed")
             return
         }
 
         var item = query
         item[kSecValueData as String] = data
-        item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
-        SecItemAdd(item as CFDictionary, nil)
+        item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        let addStatus = SecItemAdd(item as CFDictionary, nil)
+        if addStatus != errSecSuccess {
+            DebugLog.event("keychainAddFailed")
+        }
     }
 
     private func baseQuery(account: String) -> [String: Any] {

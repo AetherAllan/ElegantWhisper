@@ -5,6 +5,7 @@ final class AudioRecorder {
     private let engine = AVAudioEngine()
     private var smoothedLevel: Float = 0
     private var isRunning = false
+    private var tapInstalled = false
 
     var onBuffer: ((AVAudioPCMBuffer) -> Void)?
     var onLevel: ((Float) -> Void)?
@@ -16,25 +17,44 @@ final class AudioRecorder {
 
         let input = engine.inputNode
         let format = input.outputFormat(forBus: 0)
-        input.removeTap(onBus: 0)
-        input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
-            guard let self else { return }
-            self.updateLevel(buffer)
-            self.onBuffer?(buffer)
+        guard format.sampleRate > 0, format.channelCount > 0 else {
+            throw AppError.message("No valid audio input device")
         }
+        input.removeTap(onBus: 0)
+        tapInstalled = false
 
-        engine.prepare()
-        try engine.start()
-        isRunning = true
+        do {
+            input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
+                guard let self else { return }
+                self.updateLevel(buffer)
+                self.onBuffer?(buffer)
+            }
+            tapInstalled = true
+
+            engine.prepare()
+            try engine.start()
+            isRunning = true
+        } catch {
+            if tapInstalled {
+                input.removeTap(onBus: 0)
+            }
+            tapInstalled = false
+            isRunning = false
+            engine.stop()
+            throw error
+        }
     }
 
     func stop() {
-        guard isRunning else {
+        guard isRunning || tapInstalled else {
             return
         }
-        engine.inputNode.removeTap(onBus: 0)
+        if tapInstalled {
+            engine.inputNode.removeTap(onBus: 0)
+        }
         engine.stop()
         isRunning = false
+        tapInstalled = false
         smoothedLevel = 0
         DispatchQueue.main.async { [onLevel] in
             onLevel?(0)

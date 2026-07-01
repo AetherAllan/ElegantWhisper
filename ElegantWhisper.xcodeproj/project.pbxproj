@@ -28,6 +28,8 @@
 		010000000000000000000013 /* SpeechTranscriber.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000013 /* SpeechTranscriber.swift */; };
 		010000000000000000000014 /* TextInjector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000014 /* TextInjector.swift */; };
 		010000000000000000000015 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000015 /* main.swift */; };
+		010000000000000000000016 /* ShortcutDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000016 /* ShortcutDetector.swift */; };
+		010000000000000000000017 /* DictationSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000017 /* DictationSession.swift */; };
 		010000000000000000000101 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000101 /* AppIcon.icns */; };
 		010000000000000000000102 /* ElegantWhisperLogo.png in Resources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000102 /* ElegantWhisperLogo.png */; };
 		010000000000000000000201 /* AppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 020000000000000000000201 /* AppKit.framework */; };
@@ -62,6 +64,8 @@
 		020000000000000000000013 /* SpeechTranscriber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechTranscriber.swift; sourceTree = "<group>"; };
 		020000000000000000000014 /* TextInjector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextInjector.swift; sourceTree = "<group>"; };
 		020000000000000000000015 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		020000000000000000000016 /* ShortcutDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutDetector.swift; sourceTree = "<group>"; };
+		020000000000000000000017 /* DictationSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationSession.swift; sourceTree = "<group>"; };
 		020000000000000000000101 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
 		020000000000000000000102 /* ElegantWhisperLogo.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ElegantWhisperLogo.png; sourceTree = "<group>"; };
 		020000000000000000000103 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -118,6 +122,7 @@
 				020000000000000000000005 /* AppState.swift */,
 				020000000000000000000006 /* AudioRecorder.swift */,
 				020000000000000000000007 /* DebugLog.swift */,
+				020000000000000000000017 /* DictationSession.swift */,
 				020000000000000000000008 /* FloatingPanel.swift */,
 				020000000000000000000009 /* FocusDetector.swift */,
 				02000000000000000000000A /* HistoryStore.swift */,
@@ -129,6 +134,7 @@
 				020000000000000000000010 /* PermissionOnboardingWindow.swift */,
 				020000000000000000000011 /* SettingsStore.swift */,
 				020000000000000000000012 /* SettingsWindow.swift */,
+				020000000000000000000016 /* ShortcutDetector.swift */,
 				020000000000000000000013 /* SpeechTranscriber.swift */,
 				020000000000000000000014 /* TextInjector.swift */,
 				020000000000000000000015 /* main.swift */,
@@ -247,6 +253,7 @@
 				010000000000000000000005 /* AppState.swift in Sources */,
 				010000000000000000000006 /* AudioRecorder.swift in Sources */,
 				010000000000000000000007 /* DebugLog.swift in Sources */,
+				010000000000000000000017 /* DictationSession.swift in Sources */,
 				010000000000000000000008 /* FloatingPanel.swift in Sources */,
 				010000000000000000000009 /* FocusDetector.swift in Sources */,
 				01000000000000000000000A /* HistoryStore.swift in Sources */,
@@ -258,6 +265,7 @@
 				010000000000000000000010 /* PermissionOnboardingWindow.swift in Sources */,
 				010000000000000000000011 /* SettingsStore.swift in Sources */,
 				010000000000000000000012 /* SettingsWindow.swift in Sources */,
+				010000000000000000000016 /* ShortcutDetector.swift in Sources */,
 				010000000000000000000013 /* SpeechTranscriber.swift in Sources */,
 				010000000000000000000014 /* TextInjector.swift in Sources */,
 				010000000000000000000015 /* main.swift in Sources */,

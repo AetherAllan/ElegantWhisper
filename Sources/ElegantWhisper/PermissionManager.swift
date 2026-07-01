@@ -84,8 +84,10 @@ final class PermissionManager {
     }
 
     func requestInputMonitoring() {
-        // Ask through both APIs. On different macOS releases one API may only open Settings while
-        // the other updates the ListenEvent TCC row, and calling both is harmless.
+        // ListenEvent is the TCC permission behind Input Monitoring. CoreGraphics owns the
+        // documented preflight/request pair; IOHID uses the same permission for raw keyboard state.
+        // Calling both keeps the onboarding usable across macOS releases where one prompt path is
+        // better at surfacing the app in System Settings than the other.
         _ = CGRequestListenEventAccess()
         _ = IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)
     }
@@ -107,10 +109,12 @@ final class PermissionManager {
             hidDetail = "hid=\(hidAccess.rawValue)"
         }
 
-        // The event tap probe is the operational truth: if this tap cannot be created, background
-        // hotkeys cannot work. Preflight/HID are kept as diagnostics because macOS versions differ
-        // on which API updates first after the user changes System Settings.
-        let granted = tapGranted
+        // Do not make the temporary event-tap probe the permission source of truth. On developer
+        // builds, re-signing can leave TCC in a state where preflight/HID correctly report
+        // ListenEvent access while a just-created probe tap fails. The real monitor now has both a
+        // CGEventTap path and an IOHIDManager path, so either official permission check is enough
+        // to leave onboarding and attempt the background listener.
+        let granted = preflight || hidAccess == kIOHIDAccessTypeGranted || tapGranted
         let detail = "tap=\(tapGranted ? "ok" : "blocked"), cg=\(preflight ? "granted" : "blocked"), \(hidDetail)"
         return (granted, detail)
     }

@@ -100,7 +100,7 @@ final class SettingsStore {
 
     var saveHistory: Bool {
         get {
-            defaults.object(forKey: Key.saveHistory) as? Bool ?? true
+            defaults.object(forKey: Key.saveHistory) as? Bool ?? false
         }
         set {
             defaults.set(newValue, forKey: Key.saveHistory)

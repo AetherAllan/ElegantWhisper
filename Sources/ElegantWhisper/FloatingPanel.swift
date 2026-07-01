@@ -9,6 +9,8 @@ final class FloatingPanel {
     private let waveform = WaveformView()
     private let label = NSTextField(labelWithString: "Listening...")
     private var widthConstraint: NSLayoutConstraint?
+    private var presentationID = UUID()
+    private var pendingHide: DispatchWorkItem?
 
     init() {
         panel = NSPanel(
@@ -79,6 +81,7 @@ final class FloatingPanel {
     }
 
     func showRecording(text: String) {
+        beginPresentation()
         waveform.isHidden = false
         waveform.level = 0
         waveform.needsDisplay = true
@@ -95,35 +98,57 @@ final class FloatingPanel {
     }
 
     func showStatus(_ text: String) {
+        beginPresentation()
         waveform.isHidden = true
         setText(text)
         show()
     }
 
     func showSuccess(_ text: String = "Inserted") {
+        beginPresentation()
         waveform.isHidden = true
         setText(text)
         show()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) { [weak self] in
-            self?.hide()
-        }
+        scheduleHide(after: 0.55, presentationID: presentationID)
     }
 
     func showError(_ text: String) {
+        beginPresentation()
         waveform.isHidden = true
         setText(text)
         show()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
-            self?.hide()
-        }
+        scheduleHide(after: 1.2, presentationID: presentationID)
     }
 
     func hide() {
+        pendingHide?.cancel()
+        pendingHide = nil
+        hide(presentationID: presentationID)
+    }
+
+    private func beginPresentation() {
+        pendingHide?.cancel()
+        pendingHide = nil
+        presentationID = UUID()
+    }
+
+    private func scheduleHide(after delay: TimeInterval, presentationID: UUID) {
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.hide(presentationID: presentationID)
+        }
+        pendingHide = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
+    }
+
+    private func hide(presentationID expectedID: UUID) {
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.22
             panel.animator().alphaValue = 0
             panel.animator().setFrame(scaledFrame(0.96), display: true)
-        } completionHandler: { [panel] in
+        } completionHandler: { [weak self, panel] in
+            guard self?.presentationID == expectedID else {
+                return
+            }
             panel.orderOut(nil)
             panel.alphaValue = 1
         }

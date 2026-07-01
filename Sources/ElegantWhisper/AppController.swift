@@ -15,11 +15,11 @@ final class AppController {
     private lazy var refiner = LLMRefiner(settings: settings)
     private lazy var injector = TextInjector(focusDetector: focusDetector, inputSourceManager: inputSourceManager)
 
-    private var initialTarget: FocusTarget?
+    private var currentSession: DictationSession?
     private var latestPartial = ""
-    private var runID = 0
     private var monitorStarted = false
     private var loggedFirstAudioLevel = false
+    private var refinementTask: URLSessionDataTask?
 
     var onChange: (() -> Void)?
     var onUserMessage: ((String) -> Void)?
@@ -117,11 +117,10 @@ final class AppController {
             return
         }
 
-        initialTarget = focusDetector.currentEditableTarget()
+        currentSession = DictationSession(originalTarget: focusDetector.currentEditableTarget())
         latestPartial = ""
-        // Every recording gets a fresh run id. Async Speech/LLM callbacks must present the same
-        // id before they can mutate state, so old callbacks cannot revive a canceled recording.
-        runID += 1
+        refinementTask?.cancel()
+        refinementTask = nil
         loggedFirstAudioLevel = false
 
         do {
@@ -146,9 +145,12 @@ final class AppController {
         panel.showStatus("Transcribing...")
         onChange?()
 
-        let currentRunID = runID
+        guard let sessionID = currentSession?.id else {
+            showError("No active session")
+            return
+        }
         transcriber.finish { [weak self] text in
-            self?.handleFinalTranscript(text, runID: currentRunID)
+            self?.handleFinalTranscript(text, sessionID: sessionID)
         }
     }
 
@@ -159,8 +161,9 @@ final class AppController {
         recorder.stop()
         DebugLog.event("recordingStop")
         transcriber.cancel()
-        runID += 1
-        initialTarget = nil
+        refinementTask?.cancel()
+        refinementTask = nil
+        currentSession = nil
         latestPartial = ""
         _ = state.transition(to: .idle)
         panel.hide()
@@ -175,10 +178,9 @@ final class AppController {
         case .transcribing, .refining:
             recorder.stop()
             transcriber.cancel()
-            // Invalidate any in-flight final Speech callback. Without this, a late callback could
-            // paste text after the user pressed Esc or started a new recording.
-            runID += 1
-            initialTarget = nil
+            refinementTask?.cancel()
+            refinementTask = nil
+            currentSession = nil
             latestPartial = ""
             _ = state.transition(to: .idle)
             panel.hide()
@@ -224,8 +226,8 @@ final class AppController {
         SettingsWindowController(settings: settings, refiner: refiner)
     }
 
-    private func handleFinalTranscript(_ text: String, runID: Int) {
-        guard runID == self.runID else {
+    private func handleFinalTranscript(_ text: String, sessionID: UUID) {
+        guard isCurrentSession(sessionID) else {
             return
         }
         let raw = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -240,19 +242,20 @@ final class AppController {
             _ = state.transition(to: .refining)
             panel.showStatus("Refining...")
             onChange?()
-            refiner.refine(raw) { [weak self] refined in
-                guard let self, runID == self.runID else {
+            refinementTask = refiner.refine(raw) { [weak self] refined in
+                guard let self, self.isCurrentSession(sessionID) else {
                     return
                 }
-                self.inject(refined.isEmpty ? raw : refined, runID: runID)
+                self.refinementTask = nil
+                self.inject(refined.isEmpty ? raw : refined, sessionID: sessionID)
             }
         } else {
-            inject(raw, runID: runID)
+            inject(raw, sessionID: sessionID)
         }
     }
 
-    private func inject(_ text: String, runID: Int) {
-        guard runID == self.runID else {
+    private func inject(_ text: String, sessionID: UUID) {
+        guard isCurrentSession(sessionID) else {
             return
         }
         guard state.transition(to: .injecting) else {
@@ -264,32 +267,34 @@ final class AppController {
         // Prefer the field focused when transcription finishes. If the user switches from one
         // editor to another while Speech is finalizing, the current field is the least surprising
         // insertion target. The start-time target is only a fallback.
-        let target = focusDetector.currentEditableTarget() ?? initialTarget.flatMap {
+        let originalTarget = currentSession?.originalTarget
+        let target = focusDetector.currentEditableTarget() ?? originalTarget.flatMap {
             focusDetector.isValid($0) ? $0 : nil
         }
 
         guard target != nil || settings.keepClipboardWithoutTarget else {
-            saveHistory(text, result: HistoryResult.failed, app: initialTarget?.app)
+            saveHistory(text, result: HistoryResult.failed, app: originalTarget?.app)
             showError("No editable field")
             return
         }
 
-        let historyApp = target?.app ?? initialTarget?.app
+        let historyApp = target?.app ?? originalTarget?.app
         injector.inject(text, target: target) { [weak self] result in
-            guard let self, runID == self.runID else {
+            guard let self, self.isCurrentSession(sessionID) else {
                 return
             }
             switch result {
-            case .pasted:
-                self.panel.showSuccess("Inserted")
-                self.onUserMessage?("Inserted")
-                self.saveHistory(text, result: HistoryResult.pasted, app: historyApp)
+            case .pasteAttempted:
+                self.panel.showSuccess("Paste Sent")
+                self.onUserMessage?("Paste sent")
+                self.saveHistory(text, result: HistoryResult.pasteAttempted, app: historyApp)
             case .copied:
                 self.panel.showSuccess("复制")
                 self.onUserMessage?("已复制到剪贴板")
                 self.saveHistory(text, result: HistoryResult.copied, app: historyApp)
             }
-            self.initialTarget = nil
+            self.refinementTask = nil
+            self.currentSession = nil
             self.latestPartial = ""
             _ = self.state.transition(to: .idle)
             self.onChange?()
@@ -299,10 +304,9 @@ final class AppController {
     private func showError(_ message: String) {
         recorder.stop()
         transcriber.cancel()
-        // Error cleanup also invalidates callbacks. Speech and network callbacks may arrive after
-        // UI error handling, and they must not reopen the panel or paste stale text.
-        runID += 1
-        initialTarget = nil
+        refinementTask?.cancel()
+        refinementTask = nil
+        currentSession = nil
         latestPartial = ""
         _ = state.transition(to: .idle)
         panel.showError(message)
@@ -316,5 +320,9 @@ final class AppController {
             return
         }
         HistoryStore.shared.append(text: text, result: result, app: app)
+    }
+
+    private func isCurrentSession(_ id: UUID) -> Bool {
+        currentSession?.id == id
     }
 }

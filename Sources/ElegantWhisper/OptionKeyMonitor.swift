@@ -1,6 +1,6 @@
-import AppKit
 import ApplicationServices
 import Foundation
+import IOKit.hid
 
 final class OptionKeyMonitor {
     var onToggle: (() -> Void)?
@@ -8,52 +8,34 @@ final class OptionKeyMonitor {
 
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
+    private var hidManager: IOHIDManager?
     private var runLoop: CFRunLoop?
     private var monitorThread: Thread?
     private var watchdog: Timer?
-    private var eventMonitors: [Any] = []
-    private var armedModifier: ModifierPress?
-    private var invalidated = false
+    private let detector = ShortcutDetector()
+    private let detectorLock = NSLock()
     private var lastToggleTime: TimeInterval = 0
     private var shouldStop = false
 
-    private enum ModifierKind {
-        case command
-        case option
-    }
-
-    private struct ModifierPress {
-        let keyCode: Int64
-        let kind: ModifierKind
-    }
-
-    private let optionKeyCodes: Set<Int64> = [58, 61]
-    private let commandKeyCodes: Set<Int64> = [54, 55]
-    private let escapeKeyCode: Int64 = 53
-
     static func canCreateListenOnlyKeyboardTap() -> Bool {
-        let refcon = Unmanaged.passRetained(EventTapProbe()).toOpaque()
         guard let tap = CGEvent.tapCreate(
             tap: .cgSessionEventTap,
             place: .headInsertEventTap,
-            // This mirrors the production tap. Permission UI should reflect whether the app can
-            // create the actual background keyboard listener, not only whether a preflight helper
-            // reports a matching TCC row.
+            // This probes only the CGEventTap path. PermissionManager also checks the official
+            // ListenEvent preflight/HID APIs because the production listener has an IOHID fallback.
             options: .listenOnly,
             eventsOfInterest: keyboardEventMask,
             callback: OptionKeyMonitor.probeCallback,
-            userInfo: refcon
+            userInfo: nil
         ) else {
-            Unmanaged<EventTapProbe>.fromOpaque(refcon).release()
             return false
         }
         CFMachPortInvalidate(tap)
-        Unmanaged<EventTapProbe>.fromOpaque(refcon).release()
         return true
     }
 
     func start() -> Bool {
-        if eventTap != nil || !eventMonitors.isEmpty || monitorThread != nil {
+        if eventTap != nil || hidManager != nil || monitorThread != nil {
             return true
         }
 
@@ -72,25 +54,32 @@ final class OptionKeyMonitor {
                 semaphore.signal()
                 return
             }
-            result.ok = self.startEventTapOnCurrentThread()
+            result.ok = self.startKeyboardMonitorOnCurrentThread()
             semaphore.signal()
             if result.ok {
                 CFRunLoopRun()
             }
-            self.cleanupEventTapState()
+            self.cleanupKeyboardMonitorState()
         }
         thread.name = "\(AppConstants.productName).KeyboardMonitor"
         monitorThread = thread
         thread.start()
 
-        _ = semaphore.wait(timeout: .now() + 1)
+        let waitResult = semaphore.wait(timeout: .now() + 3)
+        guard waitResult == .success else {
+            shouldStop = true
+            if let runLoop {
+                CFRunLoopStop(runLoop)
+            }
+            monitorThread = nil
+            return false
+        }
         if result.ok {
             return true
         }
 
         monitorThread = nil
-        startFallbackMonitors()
-        return !eventMonitors.isEmpty
+        return false
     }
 
     func stop() {
@@ -104,32 +93,32 @@ final class OptionKeyMonitor {
         if let runLoop {
             CFRunLoopStop(runLoop)
         }
-        for monitor in eventMonitors {
-            NSEvent.removeMonitor(monitor)
-        }
-        eventMonitors.removeAll()
         watchdog?.invalidate()
         eventTap = nil
         runLoopSource = nil
         runLoop = nil
         monitorThread = nil
-        reset()
+        resetDetector()
     }
 
-    private func startEventTapOnCurrentThread() -> Bool {
+    private func startKeyboardMonitorOnCurrentThread() -> Bool {
         runLoop = CFRunLoopGetCurrent()
-        guard createEventTap() else {
-            return false
+        if createEventTap() {
+            // macOS can disable an event tap after timeout or user-input pressure. The watchdog
+            // keeps the app from silently losing global hotkeys until the user restarts it.
+            watchdog = Timer(timeInterval: 2, repeats: true) { [weak self] _ in
+                self?.watchEventTap()
+            }
+            if let watchdog {
+                RunLoop.current.add(watchdog, forMode: .common)
+            }
+            return true
         }
-        // macOS can disable an event tap after timeout or user-input pressure. The watchdog
-        // keeps the app from silently losing global hotkeys until the user restarts it.
-        watchdog = Timer(timeInterval: 2, repeats: true) { [weak self] _ in
-            self?.watchEventTap()
-        }
-        if let watchdog {
-            RunLoop.current.add(watchdog, forMode: .common)
-        }
-        return true
+
+        // CGEventTap is the normal path, but real machines sometimes keep a stale ListenEvent TCC
+        // row after re-signing/rebuilding. IOHIDManager uses the same Input Monitoring permission
+        // and still observes raw keyboard state while ElegantWhisper is in the background.
+        return createHIDMonitor()
     }
 
     private func createEventTap() -> Bool {
@@ -166,6 +155,7 @@ final class OptionKeyMonitor {
         }
         guard let tap = eventTap else {
             DebugLog.event("eventTapRecreated")
+            resetDetector()
             _ = createEventTap()
             return
         }
@@ -173,6 +163,7 @@ final class OptionKeyMonitor {
             CGEvent.tapEnable(tap: tap, enable: true)
         } else {
             DebugLog.event("eventTapRecreated")
+            resetDetector()
             removeCurrentEventTap()
             _ = createEventTap()
         }
@@ -193,41 +184,52 @@ final class OptionKeyMonitor {
         watchdog?.invalidate()
         watchdog = nil
         removeCurrentEventTap()
+    }
+
+    private func createHIDMonitor() -> Bool {
+        let manager = IOHIDManagerCreate(kCFAllocatorDefault, IOOptionBits(kIOHIDOptionsTypeNone))
+        let keyboardMatch: [String: Any] = [
+            kIOHIDDeviceUsagePageKey: kHIDPage_GenericDesktop,
+            kIOHIDDeviceUsageKey: kHIDUsage_GD_Keyboard
+        ]
+        IOHIDManagerSetDeviceMatching(manager, keyboardMatch as CFDictionary)
+
+        let refcon = Unmanaged.passUnretained(self).toOpaque()
+        IOHIDManagerRegisterInputValueCallback(manager, OptionKeyMonitor.hidValueCallback, refcon)
+        IOHIDManagerScheduleWithRunLoop(manager, CFRunLoopGetCurrent(), CFRunLoopMode.defaultMode.rawValue)
+
+        let result = IOHIDManagerOpen(manager, IOOptionBits(kIOHIDOptionsTypeNone))
+        guard result == kIOReturnSuccess else {
+            IOHIDManagerUnscheduleFromRunLoop(manager, CFRunLoopGetCurrent(), CFRunLoopMode.defaultMode.rawValue)
+            DebugLog.event("hidMonitorFailed:\(result)")
+            return false
+        }
+
+        hidManager = manager
+        DebugLog.event("hidMonitorCreated")
+        return true
+    }
+
+    private func removeCurrentHIDMonitor() {
+        guard let hidManager else {
+            return
+        }
+        IOHIDManagerUnscheduleFromRunLoop(hidManager, CFRunLoopGetCurrent(), CFRunLoopMode.defaultMode.rawValue)
+        IOHIDManagerClose(hidManager, IOOptionBits(kIOHIDOptionsTypeNone))
+        self.hidManager = nil
+    }
+
+    private func cleanupKeyboardMonitorState() {
+        cleanupEventTapState()
+        removeCurrentHIDMonitor()
         runLoop = nil
         monitorThread = nil
-    }
-
-    private func startFallbackMonitors() {
-        // Fallback monitors are deliberately passive as well. The local monitor returns the
-        // original event so the app never steals shortcuts when the CGEventTap path fails.
-        let options: NSEvent.EventTypeMask = [.flagsChanged, .keyDown]
-        if let local = NSEvent.addLocalMonitorForEvents(matching: options, handler: { [weak self] event in
-            self?.handle(event)
-            return event
-        }) {
-            eventMonitors.append(local)
-        }
-        if let global = NSEvent.addGlobalMonitorForEvents(matching: options, handler: { [weak self] event in
-            self?.handle(event)
-        }) {
-            eventMonitors.append(global)
-        }
-    }
-
-    private func handle(_ event: NSEvent) {
-        switch event.type {
-        case .flagsChanged:
-            handleFlagsChanged(keyCode: Int64(event.keyCode), flags: CGEventFlags(rawValue: UInt64(event.modifierFlags.rawValue)))
-        case .keyDown:
-            handleKeyDown(Int64(event.keyCode))
-        default:
-            break
-        }
     }
 
     private func handle(type: CGEventType, event: CGEvent) {
         switch type {
         case .tapDisabledByTimeout, .tapDisabledByUserInput:
+            resetDetector()
             if let eventTap {
                 CGEvent.tapEnable(tap: eventTap, enable: true)
                 DebugLog.event("eventTapReenabled")
@@ -245,45 +247,69 @@ final class OptionKeyMonitor {
     }
 
     private func handleKeyDown(_ keyCode: Int64) {
-        if keyCode == escapeKeyCode {
-            reset()
-            DispatchQueue.main.async { [weak self] in
-                self?.onCancel?()
-            }
-        } else if armedModifier != nil, !isTriggerKey(keyCode) {
-            invalidated = true
-        }
+        handleAction(detectorAction { $0.handleKeyDown(keyCode: keyCode) })
     }
 
     private func handleFlagsChanged(keyCode: Int64, flags: CGEventFlags) {
-        guard let kind = modifierKind(for: keyCode) else {
-            if armedModifier != nil {
-                invalidated = true
+        handleAction(detectorAction { $0.handleFlagsChanged(keyCode: keyCode, flags: flags) })
+    }
+
+    private func handleHIDValue(_ value: IOHIDValue) {
+        let element = IOHIDValueGetElement(value)
+        guard IOHIDElementGetUsagePage(element) == UInt32(kHIDPage_KeyboardOrKeypad) else {
+            return
+        }
+
+        let usage = Int64(IOHIDElementGetUsage(element))
+        let isPressed = IOHIDValueGetIntegerValue(value) != 0
+
+        if usage == Self.hidEscapeUsage, isPressed {
+            handleKeyDown(53)
+            return
+        }
+
+        guard let keyCode = Self.hidUsageToKeyCode[usage] else {
+            if isPressed {
+                // Non-trigger key presses invalidate the current modifier-only cycle. That is what
+                // preserves normal Command/Option shortcuts: Command+C, Option+Arrow, etc. remain
+                // the foreground app's shortcuts and never become dictation toggles.
+                handleKeyDown(0)
             }
             return
         }
 
-        let isDown = flags.contains(flag(for: kind))
-        if isDown {
-            if armedModifier == nil {
-                armedModifier = ModifierPress(keyCode: keyCode, kind: kind)
-                // A trigger key is valid only when pressed alone. If another modifier is already
-                // down, the user is almost certainly invoking a system/app shortcut, so this
-                // press cycle is ignored.
-                invalidated = hasOtherModifiers(flags, excluding: kind)
-            } else if armedModifier?.keyCode != keyCode {
-                // Pressing another trigger key before releasing the first one is a chord, not a
-                // single-key tap. Preserve that chord for the system instead of toggling recording.
-                invalidated = true
-            }
-        } else if armedModifier?.keyCode == keyCode {
-            if !invalidated {
-                fireToggle()
-            }
-            reset()
-        } else if armedModifier != nil {
-            invalidated = true
+        handleFlagsChanged(keyCode: keyCode, flags: currentHIDFlags(usage: usage, isPressed: isPressed))
+    }
+
+    private func currentHIDFlags(usage: Int64, isPressed: Bool) -> CGEventFlags {
+        var flags = CGEventFlags()
+        if (usage == Self.hidLeftCommandUsage || usage == Self.hidRightCommandUsage) && isPressed {
+            flags.insert(.maskCommand)
         }
+        if (usage == Self.hidLeftOptionUsage || usage == Self.hidRightOptionUsage) && isPressed {
+            flags.insert(.maskAlternate)
+        }
+        return flags
+    }
+
+    private func handleAction(_ action: ShortcutAction?) {
+        switch action {
+        case .toggle:
+            fireToggle()
+        case .cancel:
+            DispatchQueue.main.async { [weak self] in
+                self?.onCancel?()
+            }
+        case nil:
+            break
+        }
+    }
+
+    private func detectorAction(_ body: (ShortcutDetector) -> ShortcutAction?) -> ShortcutAction? {
+        detectorLock.lock()
+        let action = body(detector)
+        detectorLock.unlock()
+        return action
     }
 
     private func fireToggle() {
@@ -298,43 +324,10 @@ final class OptionKeyMonitor {
         }
     }
 
-    private func reset() {
-        armedModifier = nil
-        invalidated = false
-    }
-
-    private func modifierKind(for keyCode: Int64) -> ModifierKind? {
-        if commandKeyCodes.contains(keyCode) {
-            return .command
-        }
-        if optionKeyCodes.contains(keyCode) {
-            return .option
-        }
-        return nil
-    }
-
-    private func flag(for kind: ModifierKind) -> CGEventFlags {
-        switch kind {
-        case .command: .maskCommand
-        case .option: .maskAlternate
-        }
-    }
-
-    private func hasOtherModifiers(_ flags: CGEventFlags, excluding kind: ModifierKind) -> Bool {
-        // Only the currently tracked Command or Option key may be down. Shift, Control, and the
-        // opposite Command/Option flag all mean "shortcut chord", so ElegantWhisper must stand down.
-        var blocked: [CGEventFlags] = [.maskShift, .maskControl]
-        if kind != .command {
-            blocked.append(.maskCommand)
-        }
-        if kind != .option {
-            blocked.append(.maskAlternate)
-        }
-        return blocked.contains { flags.contains($0) }
-    }
-
-    private func isTriggerKey(_ keyCode: Int64) -> Bool {
-        optionKeyCodes.contains(keyCode) || commandKeyCodes.contains(keyCode)
+    private func resetDetector() {
+        detectorLock.lock()
+        detector.reset()
+        detectorLock.unlock()
     }
 
     private static let callback: CGEventTapCallBack = { _, type, event, userInfo in
@@ -350,11 +343,29 @@ final class OptionKeyMonitor {
         Unmanaged.passUnretained(event)
     }
 
+    private static let hidValueCallback: IOHIDValueCallback = { context, result, _, value in
+        guard result == kIOReturnSuccess, let context else {
+            return
+        }
+        let monitor = Unmanaged<OptionKeyMonitor>.fromOpaque(context).takeUnretainedValue()
+        monitor.handleHIDValue(value)
+    }
+
     private static let keyboardEventMask = CGEventMask(
         (1 << CGEventType.flagsChanged.rawValue)
             | (1 << CGEventType.keyDown.rawValue)
             | (1 << CGEventType.keyUp.rawValue)
     )
-}
 
-private final class EventTapProbe {}
+    private static let hidLeftOptionUsage: Int64 = 0xE2
+    private static let hidLeftCommandUsage: Int64 = 0xE3
+    private static let hidRightOptionUsage: Int64 = 0xE6
+    private static let hidRightCommandUsage: Int64 = 0xE7
+    private static let hidEscapeUsage: Int64 = 0x29
+    private static let hidUsageToKeyCode: [Int64: Int64] = [
+        hidLeftCommandUsage: 55,
+        hidRightCommandUsage: 54,
+        hidLeftOptionUsage: 58,
+        hidRightOptionUsage: 61
+    ]
+}
