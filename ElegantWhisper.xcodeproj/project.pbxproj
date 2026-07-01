@@ -30,6 +30,8 @@
 		010000000000000000000015 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000015 /* main.swift */; };
 		010000000000000000000016 /* ShortcutDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000016 /* ShortcutDetector.swift */; };
 		010000000000000000000017 /* DictationSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000017 /* DictationSession.swift */; };
+		010000000000000000000018 /* DictionaryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000018 /* DictionaryStore.swift */; };
+		010000000000000000000019 /* CorrectionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000019 /* CorrectionEngine.swift */; };
 		010000000000000000000101 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000101 /* AppIcon.icns */; };
 		010000000000000000000102 /* ElegantWhisperLogo.png in Resources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000102 /* ElegantWhisperLogo.png */; };
 		010000000000000000000201 /* AppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 020000000000000000000201 /* AppKit.framework */; };
@@ -66,6 +68,8 @@
 		020000000000000000000015 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		020000000000000000000016 /* ShortcutDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutDetector.swift; sourceTree = "<group>"; };
 		020000000000000000000017 /* DictationSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationSession.swift; sourceTree = "<group>"; };
+		020000000000000000000018 /* DictionaryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictionaryStore.swift; sourceTree = "<group>"; };
+		020000000000000000000019 /* CorrectionEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CorrectionEngine.swift; sourceTree = "<group>"; };
 		020000000000000000000101 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
 		020000000000000000000102 /* ElegantWhisperLogo.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ElegantWhisperLogo.png; sourceTree = "<group>"; };
 		020000000000000000000103 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -121,7 +125,9 @@
 				020000000000000000000004 /* AppError.swift */,
 				020000000000000000000005 /* AppState.swift */,
 				020000000000000000000006 /* AudioRecorder.swift */,
+				020000000000000000000019 /* CorrectionEngine.swift */,
 				020000000000000000000007 /* DebugLog.swift */,
+				020000000000000000000018 /* DictionaryStore.swift */,
 				020000000000000000000017 /* DictationSession.swift */,
 				020000000000000000000008 /* FloatingPanel.swift */,
 				020000000000000000000009 /* FocusDetector.swift */,
@@ -252,7 +258,9 @@
 				010000000000000000000004 /* AppError.swift in Sources */,
 				010000000000000000000005 /* AppState.swift in Sources */,
 				010000000000000000000006 /* AudioRecorder.swift in Sources */,
+				010000000000000000000019 /* CorrectionEngine.swift in Sources */,
 				010000000000000000000007 /* DebugLog.swift in Sources */,
+				010000000000000000000018 /* DictionaryStore.swift in Sources */,
 				010000000000000000000017 /* DictationSession.swift in Sources */,
 				010000000000000000000008 /* FloatingPanel.swift in Sources */,
 				010000000000000000000009 /* FocusDetector.swift in Sources */,

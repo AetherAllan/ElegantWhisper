@@ -16,7 +16,7 @@ final class SpeechTranscriber {
 
     var onPartial: ((String) -> Void)?
 
-    func start(language: RecognitionLanguage) throws {
+    func start(language: RecognitionLanguage, contextualStrings: [String] = []) throws {
         cancel()
 
         guard let recognizer = SFSpeechRecognizer(locale: Locale(identifier: language.rawValue)) else {
@@ -29,6 +29,10 @@ final class SpeechTranscriber {
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
         request.requiresOnDeviceRecognition = false
+        // These are lightweight vocabulary hints for Apple Speech, not a generative prompt.
+        // They help names, product terms, and mixed Chinese/English jargon survive recognition
+        // without letting a model rewrite what the user actually said.
+        request.contextualStrings = contextualStrings
 
         self.recognizer = recognizer
         self.request = request

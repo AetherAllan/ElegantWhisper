@@ -1,6 +1,6 @@
 import Foundation
 
-enum RecognitionLanguage: String, CaseIterable {
+enum RecognitionLanguage: String, CaseIterable, Codable {
     case englishUS = "en-US"
     case simplifiedChinese = "zh-CN"
     case traditionalChinese = "zh-TW"
@@ -21,8 +21,16 @@ enum RecognitionLanguage: String, CaseIterable {
 final class SettingsStore {
     static let shared = SettingsStore()
 
-    private let defaults = UserDefaults(suiteName: AppConstants.userDefaultsSuiteName) ?? .standard
-    private let keychain = KeychainStore()
+    private let defaults: UserDefaults
+    private let keychain: KeychainStore
+
+    init(
+        defaults: UserDefaults = UserDefaults(suiteName: AppConstants.userDefaultsSuiteName) ?? .standard,
+        keychain: KeychainStore = KeychainStore()
+    ) {
+        self.defaults = defaults
+        self.keychain = keychain
+    }
 
     private enum Key {
         static let language = "language"
@@ -100,7 +108,7 @@ final class SettingsStore {
 
     var saveHistory: Bool {
         get {
-            defaults.object(forKey: Key.saveHistory) as? Bool ?? false
+            defaults.object(forKey: Key.saveHistory) as? Bool ?? true
         }
         set {
             defaults.set(newValue, forKey: Key.saveHistory)

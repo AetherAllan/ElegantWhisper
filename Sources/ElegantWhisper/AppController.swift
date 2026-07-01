@@ -9,6 +9,8 @@ final class AppController {
     private let monitor = OptionKeyMonitor()
     private let recorder = AudioRecorder()
     private let transcriber = SpeechTranscriber()
+    private let dictionary = DictionaryStore.shared
+    private let correctionEngine = CorrectionEngine()
     private let focusDetector = FocusDetector()
     private let inputSourceManager = InputSourceManager()
     private let panel = FloatingPanel()
@@ -124,7 +126,10 @@ final class AppController {
         loggedFirstAudioLevel = false
 
         do {
-            try transcriber.start(language: settings.language)
+            try transcriber.start(
+                language: settings.language,
+                contextualStrings: dictionary.contextualStrings(for: settings.language)
+            )
             try recorder.start()
             DebugLog.event("recordingStart")
             _ = state.transition(to: .recording)
@@ -236,21 +241,23 @@ final class AppController {
             return
         }
 
+        let locallyCorrected = correctionEngine.correct(raw, entries: dictionary.entries(for: settings.language))
+
         if settings.llmEnabled {
             // Refinement is allowed to improve obvious recognition mistakes, but it is not allowed
             // to block insertion forever. LLMRefiner owns the timeout/fallback to raw text.
             _ = state.transition(to: .refining)
             panel.showStatus("Refining...")
             onChange?()
-            refinementTask = refiner.refine(raw) { [weak self] refined in
+            refinementTask = refiner.refine(locallyCorrected) { [weak self] refined in
                 guard let self, self.isCurrentSession(sessionID) else {
                     return
                 }
                 self.refinementTask = nil
-                self.inject(refined.isEmpty ? raw : refined, sessionID: sessionID)
+                self.inject(refined.isEmpty ? locallyCorrected : refined, sessionID: sessionID)
             }
         } else {
-            inject(raw, sessionID: sessionID)
+            inject(locallyCorrected, sessionID: sessionID)
         }
     }
 

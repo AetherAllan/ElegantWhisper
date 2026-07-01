@@ -5,6 +5,7 @@ final class SettingsWindowController: NSWindowController {
     private let refiner: LLMRefiner
     private let permissions = PermissionManager()
     private let history = HistoryStore.shared
+    private let dictionary = DictionaryStore.shared
 
     private let baseURLField = NSTextField()
     private let apiKeyField = NSSecureTextField()
@@ -12,6 +13,10 @@ final class SettingsWindowController: NSWindowController {
     private let timeoutField = NSTextField()
     private let clipboardCheckbox = NSButton(checkboxWithTitle: "Keep text on clipboard when no editable field is available", target: nil, action: nil)
     private let historyCheckbox = NSButton(checkboxWithTitle: "Save transcription history", target: nil, action: nil)
+    private let dictionaryTermField = NSTextField()
+    private let dictionaryAliasesField = NSTextField()
+    private let dictionarySearchField = NSSearchField()
+    private let dictionaryList = NSStackView()
     private let historyList = NSStackView()
     private let statusLabel = NSTextField(labelWithString: "")
 
@@ -19,7 +24,7 @@ final class SettingsWindowController: NSWindowController {
         self.settings = settings
         self.refiner = refiner
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 860, height: 520),
+            contentRect: NSRect(x: 0, y: 0, width: 900, height: 720),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -36,6 +41,7 @@ final class SettingsWindowController: NSWindowController {
 
     override func showWindow(_ sender: Any?) {
         loadValues()
+        reloadDictionary()
         reloadHistory()
         super.showWindow(sender)
         window?.center()
@@ -89,6 +95,41 @@ final class SettingsWindowController: NSWindowController {
         settingsTitle.font = .systemFont(ofSize: 17, weight: .semibold)
         let historyTitle = NSTextField(labelWithString: "History")
         historyTitle.font = .systemFont(ofSize: 17, weight: .semibold)
+        let dictionaryTitle = NSTextField(labelWithString: "Dictionary")
+        dictionaryTitle.font = .systemFont(ofSize: 17, weight: .semibold)
+
+        dictionaryTermField.placeholderString = "Python"
+        dictionaryAliasesField.placeholderString = "配森, 派森"
+        dictionarySearchField.placeholderString = "Search dictionary"
+        dictionarySearchField.target = self
+        dictionarySearchField.action = #selector(reloadDictionary)
+
+        let dictionaryGrid = NSGridView(views: [
+            [label("Term"), dictionaryTermField],
+            [label("Wrong forms"), dictionaryAliasesField],
+            [label("Search"), dictionarySearchField]
+        ])
+        dictionaryGrid.translatesAutoresizingMaskIntoConstraints = false
+        dictionaryGrid.rowSpacing = 8
+        dictionaryGrid.columnSpacing = 12
+        dictionaryGrid.column(at: 0).xPlacement = .trailing
+        dictionaryGrid.column(at: 1).width = 340
+
+        let addDictionaryButton = NSButton(title: "Add Term", target: self, action: #selector(addDictionaryTerm))
+        let dictionaryButtons = NSStackView(views: [addDictionaryButton])
+        dictionaryButtons.orientation = .horizontal
+        dictionaryButtons.spacing = 8
+
+        dictionaryList.orientation = .vertical
+        dictionaryList.alignment = .leading
+        dictionaryList.spacing = 8
+        dictionaryList.translatesAutoresizingMaskIntoConstraints = false
+
+        let dictionaryScroll = NSScrollView()
+        dictionaryScroll.documentView = dictionaryList
+        dictionaryScroll.hasVerticalScroller = true
+        dictionaryScroll.borderType = .lineBorder
+        dictionaryScroll.translatesAutoresizingMaskIntoConstraints = false
 
         historyList.orientation = .vertical
         historyList.alignment = .leading
@@ -103,7 +144,22 @@ final class SettingsWindowController: NSWindowController {
 
         let clearButton = NSButton(title: "Clear History", target: self, action: #selector(clearHistory))
 
-        let main = NSStackView(views: [hero, shortcut, permissionCards, settingsTitle, grid, buttons, statusLabel, historyTitle, historyScroll, clearButton])
+        let main = NSStackView(views: [
+            hero,
+            shortcut,
+            permissionCards,
+            settingsTitle,
+            grid,
+            buttons,
+            statusLabel,
+            dictionaryTitle,
+            dictionaryGrid,
+            dictionaryButtons,
+            dictionaryScroll,
+            historyTitle,
+            historyScroll,
+            clearButton
+        ])
         main.orientation = .vertical
         main.alignment = .leading
         main.spacing = 14
@@ -121,8 +177,11 @@ final class SettingsWindowController: NSWindowController {
             main.trailingAnchor.constraint(lessThanOrEqualTo: content.trailingAnchor, constant: -34),
             main.topAnchor.constraint(equalTo: content.topAnchor, constant: 38),
             grid.widthAnchor.constraint(equalToConstant: 560),
+            dictionaryGrid.widthAnchor.constraint(equalToConstant: 560),
             buttons.trailingAnchor.constraint(equalTo: grid.trailingAnchor),
             statusLabel.widthAnchor.constraint(equalToConstant: 400),
+            dictionaryScroll.widthAnchor.constraint(equalToConstant: 650),
+            dictionaryScroll.heightAnchor.constraint(equalToConstant: 120),
             historyScroll.widthAnchor.constraint(equalToConstant: 620),
             historyScroll.heightAnchor.constraint(equalToConstant: 150)
         ])
@@ -258,6 +317,41 @@ final class SettingsWindowController: NSWindowController {
         }
     }
 
+    @objc private func reloadDictionary() {
+        dictionaryList.arrangedSubviews.forEach { view in
+            dictionaryList.removeArrangedSubview(view)
+            view.removeFromSuperview()
+        }
+
+        let items = dictionary.entries(matching: dictionarySearchField.stringValue)
+        if items.isEmpty {
+            let empty = NSTextField(labelWithString: "No dictionary terms yet.")
+            empty.textColor = .secondaryLabelColor
+            dictionaryList.addArrangedSubview(empty)
+            return
+        }
+
+        for item in items.prefix(50) {
+            dictionaryList.addArrangedSubview(dictionaryRow(item))
+        }
+    }
+
+    private func dictionaryRow(_ entry: DictionaryEntry) -> NSView {
+        let aliases = entry.aliases.isEmpty ? "no wrong forms" : entry.aliases.joined(separator: ", ")
+        let label = NSTextField(labelWithString: "\(entry.term)  ->  \(aliases)  (\(entry.language.menuTitle))")
+        label.lineBreakMode = .byTruncatingTail
+        label.maximumNumberOfLines = 1
+        label.widthAnchor.constraint(equalToConstant: 470).isActive = true
+
+        let delete = DictionaryActionButton(title: "Delete", target: self, action: #selector(deleteDictionaryTerm(_:)))
+        delete.entryID = entry.id
+
+        let row = NSStackView(views: [label, delete])
+        row.orientation = .horizontal
+        row.spacing = 8
+        return row
+    }
+
     private func historyRow(_ item: HistoryItem) -> NSView {
         let date = item.createdAt.formatted(date: .abbreviated, time: .shortened)
         let app = item.appName ?? "Unknown app"
@@ -269,8 +363,10 @@ final class SettingsWindowController: NSWindowController {
 
         let copy = HistoryCopyButton(title: "Copy", target: self, action: #selector(copyHistory(_:)))
         copy.historyText = item.text
+        let useAsTerm = HistoryCopyButton(title: "Use as Term", target: self, action: #selector(useHistoryAsDictionaryTerm(_:)))
+        useAsTerm.historyText = item.text
 
-        let row = NSStackView(views: [label, copy])
+        let row = NSStackView(views: [label, copy, useAsTerm])
         row.orientation = .horizontal
         row.spacing = 8
         return row
@@ -289,8 +385,50 @@ final class SettingsWindowController: NSWindowController {
             self?.reloadHistory()
         }
     }
+
+    @objc private func addDictionaryTerm() {
+        let ok = dictionary.add(
+            term: dictionaryTermField.stringValue,
+            aliases: parseAliases(dictionaryAliasesField.stringValue),
+            language: settings.language
+        )
+        guard ok else {
+            statusLabel.stringValue = "Dictionary term is empty"
+            return
+        }
+        dictionaryTermField.stringValue = ""
+        dictionaryAliasesField.stringValue = ""
+        statusLabel.stringValue = "Dictionary term saved"
+        reloadDictionary()
+    }
+
+    @objc private func deleteDictionaryTerm(_ sender: DictionaryActionButton) {
+        guard let id = sender.entryID else {
+            return
+        }
+        dictionary.delete(id: id)
+        statusLabel.stringValue = "Dictionary term deleted"
+        reloadDictionary()
+    }
+
+    @objc private func useHistoryAsDictionaryTerm(_ sender: HistoryCopyButton) {
+        dictionaryTermField.stringValue = sender.historyText
+        dictionaryAliasesField.stringValue = ""
+        statusLabel.stringValue = "Edit the term and add wrong forms before saving"
+    }
+
+    private func parseAliases(_ text: String) -> [String] {
+        // Do not split on spaces: many correct terms and wrong forms are English phrases.
+        text.components(separatedBy: CharacterSet(charactersIn: ",，;；\n"))
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
 }
 
 private final class HistoryCopyButton: NSButton {
     var historyText = ""
+}
+
+private final class DictionaryActionButton: NSButton {
+    var entryID: UUID?
 }

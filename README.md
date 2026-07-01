@@ -156,8 +156,11 @@ Open `Open ElegantWhisper` from the menu bar to configure:
 - Request timeout
 - Whether to keep text on the clipboard when no editable field is available
 - Whether to save local transcription history
+- Personal dictionary terms and common wrong recognition forms
 
-The History section stores completed dictations locally. Canceled recordings are not saved.
+The History section stores completed dictations locally in `~/Library/Application Support/ElegantWhisper/history.json`. Canceled recordings are not saved. History is enabled by default and can be disabled in Settings.
+
+The Dictionary section stores local correction terms in `~/Library/Application Support/ElegantWhisper/dictionary.json`. Add the correct term as `Term` and common wrong outputs as `Wrong forms`, for example `Python` with `配森` and `派森`. ElegantWhisper uses the correct terms as Apple Speech contextual hints during recording, then applies only conservative local replacements after the final transcript. Dictionary files are local-only and written with user-only file permissions.
 
 `LLM Refinement` is disabled by default. When enabled, it sends only the final recognized text to an OpenAI-compatible `/chat/completions` endpoint and asks the model to fix obvious speech recognition errors without rewriting the text.
 
@@ -184,4 +187,5 @@ After building, manually verify:
 - Switching to another editable field during transcription inserts into the current field.
 - With no editable field, the result stays on the clipboard.
 - Completed dictations appear in History; canceled dictations do not.
+- Dictionary entries improve later recognition and replace configured wrong forms.
 - LLM failures fall back to the raw Apple Speech result.
