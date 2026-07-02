@@ -1,14 +1,12 @@
 import AVFoundation
 import Foundation
 
-// AVAudioEngine calls the input tap on a realtime audio thread, while the app
-// uses the recorder from the main controller. The mutable engine state is still
-// owned by AppController's state machine; this conformance only tells Swift that
-// the callback handoff below is intentional and that UI work is re-entered on
-// MainActor.
-final class AudioRecorder: @unchecked Sendable {
+// AVAudioEngine calls the input tap on a realtime audio thread. Keep recorder
+// lifecycle state on MainActor and keep per-buffer audio state inside the tap's
+// private AudioLevelMeter so stop/start never races the realtime callback.
+@MainActor
+final class AudioRecorder {
     private let engine = AVAudioEngine()
-    private var smoothedLevel: Float = 0
     private var isRunning = false
     private var tapInstalled = false
 
@@ -29,11 +27,14 @@ final class AudioRecorder: @unchecked Sendable {
         tapInstalled = false
 
         do {
-            input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
-                guard let self else { return }
-                self.updateLevel(buffer)
-                self.onBuffer?(buffer)
-            }
+            let levelMeter = AudioLevelMeter(onLevel: onLevel)
+            let bufferCallback = onBuffer
+            input.installTap(
+                onBus: 0,
+                bufferSize: 1024,
+                format: format,
+                block: Self.makeTapBlock(levelMeter: levelMeter, bufferCallback: bufferCallback)
+            )
             tapInstalled = true
 
             engine.prepare()
@@ -60,14 +61,39 @@ final class AudioRecorder: @unchecked Sendable {
         engine.stop()
         isRunning = false
         tapInstalled = false
-        smoothedLevel = 0
         let callback = onLevel
         Task { @MainActor in
             callback?(0)
         }
     }
 
-    private func updateLevel(_ buffer: AVAudioPCMBuffer) {
+    nonisolated private static func makeTapBlock(
+        levelMeter: AudioLevelMeter,
+        bufferCallback: (@Sendable (AVAudioPCMBuffer) -> Void)?
+    ) -> AVAudioNodeTapBlock {
+        // Build this closure outside MainActor isolation. AVAudioEngine invokes
+        // tap blocks on its realtime audio queue; a MainActor-isolated closure
+        // traps at runtime under Swift 6 executor checks.
+        { buffer, _ in
+            levelMeter.update(with: buffer)
+            bufferCallback?(buffer)
+        }
+    }
+}
+
+// ponytail: one meter per installed tap. AVAudioEngine delivers a tap serially,
+// so the smoothing envelope is owned by that callback path and is never reset
+// from MainActor. If Apple ever documents concurrent tap delivery, replace this
+// with a lock-free atomic Float or move level smoothing to MainActor.
+private final class AudioLevelMeter: @unchecked Sendable {
+    private var smoothedLevel: Float = 0
+    private let onLevel: (@MainActor @Sendable (Float) -> Void)?
+
+    init(onLevel: (@MainActor @Sendable (Float) -> Void)?) {
+        self.onLevel = onLevel
+    }
+
+    func update(with buffer: AVAudioPCMBuffer) {
         guard let channel = buffer.floatChannelData?[0], buffer.frameLength > 0 else {
             return
         }

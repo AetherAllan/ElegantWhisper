@@ -94,24 +94,30 @@ final class SpeechTranscriber: @unchecked Sendable {
     }
 
     func append(_ buffer: AVAudioPCMBuffer) {
-        let request = queue.sync { self.request }
-        request?.append(buffer)
+        // Keep append serialized with finish/cancel. Pulling `request` out of
+        // the queue and appending later allowed an in-flight audio callback to
+        // write after `endAudio()` or `cancel()` had already closed the request.
+        queue.sync {
+            request?.append(buffer)
+        }
     }
 
     func finish(_ completion: @escaping @MainActor @Sendable (String) -> Void) {
-        let state = queue.sync { () -> (Int, SFSpeechAudioBufferRecognitionRequest?, Bool, String) in
+        let state = queue.sync { () -> (Int, Bool, String) in
             finalCompletion = completion
             timeoutWorkItem?.cancel()
             timeoutWorkItem = nil
-            return (sessionID, request, completedEarly || request == nil, lastText)
+            let shouldCompleteNow = completedEarly || request == nil
+            if !shouldCompleteNow {
+                request?.endAudio()
+            }
+            return (sessionID, shouldCompleteNow, lastText)
         }
 
-        if state.2 {
-            completeOnce(state.3, sessionID: state.0)
+        if state.1 {
+            completeOnce(state.2, sessionID: state.0)
             return
         }
-
-        state.1?.endAudio()
 
         let expectedSessionID = state.0
         let workItem = DispatchWorkItem { [weak self] in
