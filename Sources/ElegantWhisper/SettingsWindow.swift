@@ -1,5 +1,6 @@
 import AppKit
 
+@MainActor
 final class SettingsWindowController: NSWindowController {
     private let settings: SettingsStore
     private let refiner: LLMRefiner
@@ -425,10 +426,12 @@ final class SettingsWindowController: NSWindowController {
     }
 }
 
+@MainActor
 private final class HistoryCopyButton: NSButton {
     var historyText = ""
 }
 
+@MainActor
 private final class DictionaryActionButton: NSButton {
     var entryID: UUID?
 }

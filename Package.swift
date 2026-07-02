@@ -1,4 +1,4 @@
-// swift-tools-version: 6.2
+// swift-tools-version: 6.3
 import PackageDescription
 
 let package = Package(
@@ -10,9 +10,6 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "ElegantWhisper",
-            swiftSettings: [
-                .swiftLanguageMode(.v5)
-            ],
             linkerSettings: [
                 .linkedFramework("AppKit"),
                 .linkedFramework("ApplicationServices"),
@@ -28,5 +25,6 @@ let package = Package(
             name: "ElegantWhisperTests",
             dependencies: ["ElegantWhisper"]
         )
-    ]
+    ],
+    swiftLanguageModes: [.v6]
 )

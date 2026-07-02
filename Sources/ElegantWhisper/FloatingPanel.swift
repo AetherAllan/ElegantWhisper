@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 
+@MainActor
 final class FloatingPanel {
     private let panel: NSPanel
     private let rootView = NSView()
@@ -145,12 +146,14 @@ final class FloatingPanel {
             context.duration = 0.22
             panel.animator().alphaValue = 0
             panel.animator().setFrame(scaledFrame(0.96), display: true)
-        } completionHandler: { [weak self, panel] in
-            guard self?.presentationID == expectedID else {
-                return
+        } completionHandler: { [weak self] in
+            Task { @MainActor in
+                guard self?.presentationID == expectedID else {
+                    return
+                }
+                self?.panel.orderOut(nil)
+                self?.panel.alphaValue = 1
             }
-            panel.orderOut(nil)
-            panel.alphaValue = 1
         }
     }
 
@@ -204,6 +207,7 @@ final class FloatingPanel {
     }
 }
 
+@MainActor
 private final class WaveformView: NSView {
     var level: CGFloat = 0 {
         didSet {

@@ -38,7 +38,7 @@ struct PermissionStatus {
     }
 }
 
-final class PermissionManager {
+final class PermissionManager: Sendable {
     func status() -> PermissionStatus {
         let microphone = AVCaptureDevice.authorizationStatus(for: .audio)
         let speech = SFSpeechRecognizer.authorizationStatus()
@@ -62,24 +62,27 @@ final class PermissionManager {
         )
     }
 
-    func requestMicrophone(_ completion: @escaping (Bool) -> Void) {
+    func requestMicrophone(_ completion: @escaping @MainActor @Sendable (Bool) -> Void) {
         AVCaptureDevice.requestAccess(for: .audio) { granted in
-            DispatchQueue.main.async {
+            Task { @MainActor in
                 completion(granted)
             }
         }
     }
 
-    func requestSpeech(_ completion: @escaping (Bool) -> Void) {
+    func requestSpeech(_ completion: @escaping @MainActor @Sendable (Bool) -> Void) {
         SFSpeechRecognizer.requestAuthorization { status in
-            DispatchQueue.main.async {
+            Task { @MainActor in
                 completion(status == .authorized)
             }
         }
     }
 
     func requestAccessibilityPrompt() {
-        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+        // Swift 6 treats the SDK's `kAXTrustedCheckOptionPrompt` extern as shared mutable state.
+        // The Accessibility API key is a stable documented string, so using the literal avoids a
+        // broad @preconcurrency import while preserving the exact AX prompt behavior.
+        let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
         _ = AXIsProcessTrustedWithOptions(options)
     }
 

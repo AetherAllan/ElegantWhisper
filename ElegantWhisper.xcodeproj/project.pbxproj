@@ -25,7 +25,7 @@
 		010000000000000000000010 /* PermissionOnboardingWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000010 /* PermissionOnboardingWindow.swift */; };
 		010000000000000000000011 /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000011 /* SettingsStore.swift */; };
 		010000000000000000000012 /* SettingsWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000012 /* SettingsWindow.swift */; };
-		010000000000000000000013 /* LiveTranscriptionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000013 /* LiveTranscriptionEngine.swift */; };
+		010000000000000000000013 /* SpeechTranscriber.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000013 /* SpeechTranscriber.swift */; };
 		010000000000000000000014 /* TextInjector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000014 /* TextInjector.swift */; };
 		010000000000000000000015 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000015 /* main.swift */; };
 		010000000000000000000016 /* ShortcutDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000016 /* ShortcutDetector.swift */; };
@@ -63,7 +63,7 @@
 		020000000000000000000010 /* PermissionOnboardingWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionOnboardingWindow.swift; sourceTree = "<group>"; };
 		020000000000000000000011 /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
 		020000000000000000000012 /* SettingsWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsWindow.swift; sourceTree = "<group>"; };
-		020000000000000000000013 /* LiveTranscriptionEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTranscriptionEngine.swift; sourceTree = "<group>"; };
+		020000000000000000000013 /* SpeechTranscriber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechTranscriber.swift; sourceTree = "<group>"; };
 		020000000000000000000014 /* TextInjector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextInjector.swift; sourceTree = "<group>"; };
 		020000000000000000000015 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		020000000000000000000016 /* ShortcutDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutDetector.swift; sourceTree = "<group>"; };
@@ -141,7 +141,7 @@
 				020000000000000000000011 /* SettingsStore.swift */,
 				020000000000000000000012 /* SettingsWindow.swift */,
 				020000000000000000000016 /* ShortcutDetector.swift */,
-				020000000000000000000013 /* LiveTranscriptionEngine.swift */,
+				020000000000000000000013 /* SpeechTranscriber.swift */,
 				020000000000000000000014 /* TextInjector.swift */,
 				020000000000000000000015 /* main.swift */,
 			);
@@ -274,7 +274,7 @@
 				010000000000000000000011 /* SettingsStore.swift in Sources */,
 				010000000000000000000012 /* SettingsWindow.swift in Sources */,
 				010000000000000000000016 /* ShortcutDetector.swift in Sources */,
-				010000000000000000000013 /* LiveTranscriptionEngine.swift in Sources */,
+				010000000000000000000013 /* SpeechTranscriber.swift in Sources */,
 				010000000000000000000014 /* TextInjector.swift in Sources */,
 				010000000000000000000015 /* main.swift in Sources */,
 			);
@@ -306,7 +306,7 @@
 				SDKROOT = macosx;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
 			};
 			name = Debug;
 		};
@@ -328,7 +328,7 @@
 				SDKROOT = macosx;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
 			};
 			name = Release;
 		};
@@ -347,7 +347,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.aetherallan.ElegantWhisper;
 				PRODUCT_NAME = ElegantWhisper;
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = app;
 			};
 			name = Debug;
@@ -367,7 +367,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.aetherallan.ElegantWhisper;
 				PRODUCT_NAME = ElegantWhisper;
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = app;
 			};
 			name = Release;

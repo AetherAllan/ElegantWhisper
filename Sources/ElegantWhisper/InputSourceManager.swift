@@ -1,32 +1,37 @@
 import Carbon
 import Foundation
 
+// TISInputSource is a Carbon reference type. The snapshot is only used on the
+// main thread around one paste operation, but Dispatch/Task delay APIs still
+// require captured values to be Sendable under Swift 6.
+struct InputSourceSnapshot: @unchecked Sendable {
+    let source: TISInputSource
+    let temporaryASCIIInputSourceID: String
+}
+
+@MainActor
 final class InputSourceManager {
     typealias InputSource = TISInputSource
-    private var temporaryASCIIInputSourceID: String?
 
-    func switchToASCIIIfNeeded() -> InputSource? {
+    func switchToASCIIIfNeeded() -> InputSourceSnapshot? {
         // CJK input methods can treat simulated Cmd+V differently while a composition buffer is
         // active. Temporarily switching to ABC/US keeps paste as a plain command, then we restore
         // the user's original input source after the target app has consumed the clipboard.
         guard let current = currentInputSource(), isCJK(current), let ascii = asciiInputSource() else {
-            temporaryASCIIInputSourceID = nil
             return nil
         }
         TISSelectInputSource(ascii)
-        temporaryASCIIInputSourceID = sourceID(ascii)
-        return current
+        return InputSourceSnapshot(source: current, temporaryASCIIInputSourceID: sourceID(ascii))
     }
 
-    func restore(_ source: InputSource?) {
-        guard let source, let temporaryASCIIInputSourceID else {
+    func restore(_ snapshot: InputSourceSnapshot?) {
+        guard let snapshot else {
             return
         }
-        defer { self.temporaryASCIIInputSourceID = nil }
-        guard currentInputSource().map(sourceID) == temporaryASCIIInputSourceID else {
+        guard currentInputSource().map(sourceID) == snapshot.temporaryASCIIInputSourceID else {
             return
         }
-        TISSelectInputSource(source)
+        TISSelectInputSource(snapshot.source)
     }
 
     private func currentInputSource() -> InputSource? {

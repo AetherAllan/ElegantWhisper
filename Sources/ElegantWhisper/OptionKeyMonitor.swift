@@ -2,10 +2,16 @@ import ApplicationServices
 import Foundation
 import IOKit.hid
 
-final class OptionKeyMonitor {
-    var onToggle: (() -> Void)?
-    var onCancel: (() -> Void)?
+// The event tap and IOHID fallback deliberately live on a private run loop so
+// Command/Option detection keeps working while the app is in the background.
+// Internal lifecycle state is protected by lifecycleLock because stop() can be
+// called from the app side while the event tap/watchdog is running on the
+// monitor thread. Callbacks are the only values that cross back to MainActor.
+final class OptionKeyMonitor: @unchecked Sendable {
+    var onToggle: (@MainActor @Sendable () -> Void)?
+    var onCancel: (@MainActor @Sendable () -> Void)?
 
+    private let lifecycleLock = NSLock()
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var hidManager: IOHIDManager?
@@ -35,16 +41,21 @@ final class OptionKeyMonitor {
     }
 
     func start() -> Bool {
-        if eventTap != nil || hidManager != nil || monitorThread != nil {
+        if withLifecycleLock({ eventTap != nil || hidManager != nil || monitorThread != nil }) {
             return true
         }
 
         // The keyboard monitor must keep working while the Dock window is closed or another
         // app is frontmost. Running the tap on its own run loop avoids coupling hotkeys to
         // AppKit window focus or the main run loop's current mode.
-        shouldStop = false
+        withLifecycleLock {
+            shouldStop = false
+        }
         let semaphore = DispatchSemaphore(value: 0)
-        final class StartResult {
+        // Thread's closure is @Sendable in Swift 6. This box is written once by
+        // the monitor thread before signaling the semaphore and read once by the
+        // caller after the semaphore returns.
+        final class StartResult: @unchecked Sendable {
             var ok = false
         }
         let result = StartResult()
@@ -62,56 +73,75 @@ final class OptionKeyMonitor {
             self.cleanupKeyboardMonitorState()
         }
         thread.name = "\(AppConstants.productName).KeyboardMonitor"
-        monitorThread = thread
+        withLifecycleLock {
+            monitorThread = thread
+        }
         thread.start()
 
         let waitResult = semaphore.wait(timeout: .now() + 3)
         guard waitResult == .success else {
-            shouldStop = true
-            if let runLoop {
-                CFRunLoopStop(runLoop)
+            let loop = withLifecycleLock { () -> CFRunLoop? in
+                shouldStop = true
+                monitorThread = nil
+                return runLoop
             }
-            monitorThread = nil
+            if let loop {
+                CFRunLoopStop(loop)
+            }
             return false
         }
         if result.ok {
             return true
         }
 
-        monitorThread = nil
+        withLifecycleLock {
+            monitorThread = nil
+        }
         return false
     }
 
     func stop() {
-        shouldStop = true
-        if let tap = eventTap {
+        let state = withLifecycleLock { () -> (CFMachPort?, CFRunLoopSource?, IOHIDManager?, CFRunLoop?, Timer?) in
+            shouldStop = true
+            let state = (eventTap, runLoopSource, hidManager, runLoop, watchdog)
+            eventTap = nil
+            runLoopSource = nil
+            hidManager = nil
+            runLoop = nil
+            watchdog = nil
+            return state
+        }
+        if let tap = state.0 {
             CGEvent.tapEnable(tap: tap, enable: false)
         }
-        if let runLoopSource, let runLoop {
+        if let runLoopSource = state.1, let runLoop = state.3 {
             CFRunLoopRemoveSource(runLoop, runLoopSource, .commonModes)
         }
-        if let runLoop {
+        if let hidManager = state.2, let runLoop = state.3 {
+            IOHIDManagerUnscheduleFromRunLoop(hidManager, runLoop, CFRunLoopMode.defaultMode.rawValue)
+            IOHIDManagerClose(hidManager, IOOptionBits(kIOHIDOptionsTypeNone))
+        }
+        if let runLoop = state.3 {
             CFRunLoopStop(runLoop)
         }
-        watchdog?.invalidate()
-        eventTap = nil
-        runLoopSource = nil
-        runLoop = nil
-        monitorThread = nil
+        state.4?.invalidate()
         resetDetector()
     }
 
     private func startKeyboardMonitorOnCurrentThread() -> Bool {
-        runLoop = CFRunLoopGetCurrent()
+        withLifecycleLock {
+            runLoop = CFRunLoopGetCurrent()
+        }
         if createEventTap() {
             // macOS can disable an event tap after timeout or user-input pressure. The watchdog
             // keeps the app from silently losing global hotkeys until the user restarts it.
-            watchdog = Timer(timeInterval: 2, repeats: true) { [weak self] _ in
+            let timer = Timer(timeInterval: 2, repeats: true) { [weak self] _ in
                 self?.watchEventTap()
             }
-            if let watchdog {
-                RunLoop.current.add(watchdog, forMode: .common)
+            withLifecycleLock {
+                watchdog = timer
             }
+            RunLoop.current.add(timer, forMode: .common)
             return true
         }
 
@@ -136,10 +166,17 @@ final class OptionKeyMonitor {
             return false
         }
 
-        eventTap = tap
-        runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
-        if let runLoopSource {
-            CFRunLoopAddSource(CFRunLoopGetCurrent(), runLoopSource, .commonModes)
+        let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
+        if withLifecycleLock({ shouldStop }) {
+            CFMachPortInvalidate(tap)
+            return false
+        }
+        withLifecycleLock {
+            eventTap = tap
+            runLoopSource = source
+        }
+        if let source {
+            CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .commonModes)
         }
         CGEvent.tapEnable(tap: tap, enable: true)
         DebugLog.event("eventTapCreated")
@@ -147,13 +184,14 @@ final class OptionKeyMonitor {
     }
 
     private func watchEventTap() {
-        guard !shouldStop else {
-            if let runLoop {
+        let state = withLifecycleLock { (shouldStop, runLoop, eventTap) }
+        guard !state.0 else {
+            if let runLoop = state.1 {
                 CFRunLoopStop(runLoop)
             }
             return
         }
-        guard let tap = eventTap else {
+        guard let tap = state.2 else {
             DebugLog.event("eventTapRecreated")
             resetDetector()
             _ = createEventTap()
@@ -170,19 +208,27 @@ final class OptionKeyMonitor {
     }
 
     private func removeCurrentEventTap() {
-        if let tap = eventTap {
+        let state = withLifecycleLock { () -> (CFMachPort?, CFRunLoopSource?) in
+            let state = (eventTap, runLoopSource)
+            eventTap = nil
+            runLoopSource = nil
+            return state
+        }
+        if let tap = state.0 {
             CGEvent.tapEnable(tap: tap, enable: false)
         }
-        if let runLoopSource {
+        if let runLoopSource = state.1 {
             CFRunLoopRemoveSource(CFRunLoopGetCurrent(), runLoopSource, .commonModes)
         }
-        eventTap = nil
-        runLoopSource = nil
     }
 
     private func cleanupEventTapState() {
-        watchdog?.invalidate()
-        watchdog = nil
+        let timer = withLifecycleLock { () -> Timer? in
+            let timer = watchdog
+            watchdog = nil
+            return timer
+        }
+        timer?.invalidate()
         removeCurrentEventTap()
     }
 
@@ -205,32 +251,45 @@ final class OptionKeyMonitor {
             return false
         }
 
-        hidManager = manager
+        if withLifecycleLock({ shouldStop }) {
+            IOHIDManagerUnscheduleFromRunLoop(manager, CFRunLoopGetCurrent(), CFRunLoopMode.defaultMode.rawValue)
+            IOHIDManagerClose(manager, IOOptionBits(kIOHIDOptionsTypeNone))
+            return false
+        }
+        withLifecycleLock {
+            hidManager = manager
+        }
         DebugLog.event("hidMonitorCreated")
         return true
     }
 
     private func removeCurrentHIDMonitor() {
-        guard let hidManager else {
+        let manager = withLifecycleLock { () -> IOHIDManager? in
+            let manager = hidManager
+            hidManager = nil
+            return manager
+        }
+        guard let manager else {
             return
         }
-        IOHIDManagerUnscheduleFromRunLoop(hidManager, CFRunLoopGetCurrent(), CFRunLoopMode.defaultMode.rawValue)
-        IOHIDManagerClose(hidManager, IOOptionBits(kIOHIDOptionsTypeNone))
-        self.hidManager = nil
+        IOHIDManagerUnscheduleFromRunLoop(manager, CFRunLoopGetCurrent(), CFRunLoopMode.defaultMode.rawValue)
+        IOHIDManagerClose(manager, IOOptionBits(kIOHIDOptionsTypeNone))
     }
 
     private func cleanupKeyboardMonitorState() {
         cleanupEventTapState()
         removeCurrentHIDMonitor()
-        runLoop = nil
-        monitorThread = nil
+        withLifecycleLock {
+            runLoop = nil
+            monitorThread = nil
+        }
     }
 
     private func handle(type: CGEventType, event: CGEvent) {
         switch type {
         case .tapDisabledByTimeout, .tapDisabledByUserInput:
             resetDetector()
-            if let eventTap {
+            if let eventTap = withLifecycleLock({ eventTap }) {
                 CGEvent.tapEnable(tap: eventTap, enable: true)
                 DebugLog.event("eventTapReenabled")
             }
@@ -297,8 +356,9 @@ final class OptionKeyMonitor {
         case .toggle:
             fireToggle()
         case .cancel:
-            DispatchQueue.main.async { [weak self] in
-                self?.onCancel?()
+            let handler = onCancel
+            Task { @MainActor in
+                handler?()
             }
         case nil:
             break
@@ -319,8 +379,9 @@ final class OptionKeyMonitor {
         }
         lastToggleTime = now
         DebugLog.event("shortcutDetected")
-        DispatchQueue.main.async { [weak self] in
-            self?.onToggle?()
+        let handler = onToggle
+        Task { @MainActor in
+            handler?()
         }
     }
 
@@ -328,6 +389,12 @@ final class OptionKeyMonitor {
         detectorLock.lock()
         detector.reset()
         detectorLock.unlock()
+    }
+
+    private func withLifecycleLock<T>(_ body: () -> T) -> T {
+        lifecycleLock.lock()
+        defer { lifecycleLock.unlock() }
+        return body()
     }
 
     private static let callback: CGEventTapCallBack = { _, type, event, userInfo in

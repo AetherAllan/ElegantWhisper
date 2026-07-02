@@ -17,7 +17,10 @@ struct HistoryItem: Codable, Identifiable {
     let result: HistoryResult
 }
 
-final class HistoryStore {
+// History mutations are serialized on `queue`; readers receive value-type
+// snapshots. That is enough for the current app and avoids an actor migration
+// that would touch every AppKit view for no behavioral gain.
+final class HistoryStore: @unchecked Sendable {
     static let shared = HistoryStore()
 
     private let queue = DispatchQueue(label: "com.aetherallan.ElegantWhisper.history")

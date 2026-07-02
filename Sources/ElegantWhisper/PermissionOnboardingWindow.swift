@@ -1,7 +1,8 @@
 import AppKit
 
+@MainActor
 final class PermissionOnboardingWindowController: NSWindowController {
-    var onComplete: (() -> Void)?
+    var onComplete: (@MainActor () -> Void)?
 
     private let permissions = PermissionManager()
     private var timer: Timer?
@@ -69,7 +70,7 @@ final class PermissionOnboardingWindowController: NSWindowController {
 
         let rows = NSStackView(views: [
             row(title: "Microphone", reason: "Record your voice for dictation.", status: microphoneStatus, actionTitle: "Allow", action: #selector(requestMicrophone)),
-            row(title: "Speech Recognition", reason: "Run local Apple SpeechAnalyzer transcription.", status: speechStatus, actionTitle: "Allow", action: #selector(requestSpeech)),
+            row(title: "Speech Recognition", reason: "Transcribe your voice with Apple's Speech framework.", status: speechStatus, actionTitle: "Allow", action: #selector(requestSpeech)),
             row(title: "Accessibility", reason: "Find the focused field and paste text safely.", status: accessibilityStatus, actionTitle: "Open Settings", action: #selector(requestAccessibility)),
             row(title: "Input Monitoring", reason: "Listen for Command/Option while ElegantWhisper is in the background.", status: inputMonitoringStatus, actionTitle: "Allow", action: #selector(requestInputMonitoring))
         ])
@@ -145,7 +146,9 @@ final class PermissionOnboardingWindowController: NSWindowController {
     private func startPolling() {
         stopPolling()
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            self?.refresh()
+            Task { @MainActor in
+                self?.refresh()
+            }
         }
     }
 

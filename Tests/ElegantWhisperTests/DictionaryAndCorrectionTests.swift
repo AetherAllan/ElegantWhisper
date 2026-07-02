@@ -15,6 +15,14 @@ final class DictionaryAndCorrectionTests: XCTestCase {
         XCTAssertEqual(Set(entries[0].aliases), ["配森", "派森"])
     }
 
+    func testContextualStringsUseCorrectTermsOnly() throws {
+        let file = try temporaryFile()
+        let store = DictionaryStore(fileURL: file)
+        XCTAssertTrue(store.add(term: "JSON", aliases: ["杰森"], language: .simplifiedChinese))
+
+        XCTAssertEqual(store.contextualStrings(for: .simplifiedChinese), ["JSON"])
+    }
+
     func testCorrectionUsesAliasesConservatively() {
         let entry = DictionaryEntry(term: "Python", aliases: ["配森"], language: .simplifiedChinese)
         let result = CorrectionEngine().correct("我在写配森脚本", entries: [entry])
@@ -39,15 +47,6 @@ final class DictionaryAndCorrectionTests: XCTestCase {
 
         settings.saveHistory = false
         XCTAssertFalse(settings.saveHistory)
-    }
-
-    func testTranscriptAccumulatorReplacesVolatileTextInsteadOfAppendingIt() {
-        var accumulator = TranscriptAccumulator()
-
-        XCTAssertEqual(accumulator.update(text: "hello wor", isFinal: false), "hello wor")
-        XCTAssertEqual(accumulator.update(text: "hello world", isFinal: false), "hello world")
-        XCTAssertEqual(accumulator.update(text: "hello world", isFinal: true), "hello world")
-        XCTAssertEqual(accumulator.update(text: " again", isFinal: false), "hello world again")
     }
 
     private func temporaryFile() throws -> URL {

@@ -2,7 +2,11 @@ import AppKit
 import ApplicationServices
 import Foundation
 
-struct FocusTarget {
+// AXUIElement and NSRunningApplication are CoreFoundation/AppKit reference
+// types without Swift Sendable annotations. A FocusTarget is immutable and is
+// only validated on MainActor before paste, but it may be held across a short
+// activation delay. Treat it as a handle, not as editable shared state.
+struct FocusTarget: @unchecked Sendable {
     let app: NSRunningApplication
     let element: AXUIElement
     let bundleIdentifier: String?
@@ -12,6 +16,7 @@ struct FocusTarget {
     }
 }
 
+@MainActor
 final class FocusDetector {
     private let editableRoles: Set<String> = [
         kAXTextFieldRole,

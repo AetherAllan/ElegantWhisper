@@ -1,6 +1,6 @@
 import Foundation
 
-final class LLMRefiner {
+final class LLMRefiner: Sendable {
     private let settings: SettingsStore
 
     init(settings: SettingsStore) {
@@ -8,14 +8,16 @@ final class LLMRefiner {
     }
 
     @discardableResult
-    func refine(_ text: String, completion: @escaping (String) -> Void) -> URLSessionDataTask? {
+    func refine(_ text: String, completion: @escaping @MainActor @Sendable (String) -> Void) -> URLSessionDataTask? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard settings.llmEnabled,
               !trimmed.isEmpty,
               !settings.apiKey.isEmpty,
               let request = makeRequest(text: trimmed)
         else {
-            completion(text)
+            Task { @MainActor in
+                completion(text)
+            }
             return nil
         }
 
@@ -29,30 +31,40 @@ final class LLMRefiner {
                   let corrected = response.choices.first?.message.content.trimmingCharacters(in: .whitespacesAndNewlines),
                   self.acceptsCorrection(original: trimmed, corrected: corrected)
             else {
-                DispatchQueue.main.async { completion(text) }
+                Task { @MainActor in
+                    completion(text)
+                }
                 return
             }
-            DispatchQueue.main.async { completion(corrected) }
+            Task { @MainActor in
+                completion(corrected)
+            }
         }
         task.resume()
         return task
     }
 
-    func testConnection(completion: @escaping (Bool, String) -> Void) {
+    func testConnection(completion: @escaping @MainActor @Sendable (Bool, String) -> Void) {
         guard let request = makeRequest(text: "测试 Python 和 JSON。") else {
-            completion(false, "Missing API settings")
+            Task { @MainActor in
+                completion(false, "Missing API settings")
+            }
             return
         }
 
         URLSession.shared.dataTask(with: request) { data, response, error in
             if let error {
-                DispatchQueue.main.async { completion(false, error.localizedDescription) }
+                Task { @MainActor in
+                    completion(false, error.localizedDescription)
+                }
                 return
             }
             guard let http = response as? HTTPURLResponse,
                   (200..<300).contains(http.statusCode)
             else {
-                DispatchQueue.main.async { completion(false, "HTTP request failed") }
+                Task { @MainActor in
+                    completion(false, "HTTP request failed")
+                }
                 return
             }
             guard let data,
@@ -60,10 +72,14 @@ final class LLMRefiner {
                   let response = try? JSONDecoder().decode(ChatResponse.self, from: data),
                   response.choices.first?.message.content.isEmpty == false
             else {
-                DispatchQueue.main.async { completion(false, "Empty or invalid response") }
+                Task { @MainActor in
+                    completion(false, "Empty or invalid response")
+                }
                 return
             }
-            DispatchQueue.main.async { completion(true, "Connection OK") }
+            Task { @MainActor in
+                completion(true, "Connection OK")
+            }
         }.resume()
     }
 

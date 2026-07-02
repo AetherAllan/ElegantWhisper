@@ -19,7 +19,10 @@ struct DictionaryEntry: Codable, Identifiable, Equatable {
     }
 }
 
-final class DictionaryStore {
+// Public methods serialize all mutable state through `queue`. Keeping this as a
+// synchronous store avoids forcing every settings/history UI call into async code
+// just for Swift's shared-singleton check.
+final class DictionaryStore: @unchecked Sendable {
     static let shared = DictionaryStore()
 
     private let queue = DispatchQueue(label: "com.aetherallan.ElegantWhisper.dictionary")
@@ -50,6 +53,19 @@ final class DictionaryStore {
         queue.sync {
             loadIfNeeded()
             return cachedEntries.filter { $0.language == language }
+        }
+    }
+
+    func contextualStrings(for language: RecognitionLanguage, limit: Int = 80) -> [String] {
+        queue.sync {
+            loadIfNeeded()
+            // Apple Speech contextual strings are recognition hints, so feed the desired spelling
+            // only. Aliases are common wrong outputs such as "配森"; biasing the recognizer toward
+            // those aliases would make the exact mistake more likely instead of less likely.
+            return cachedEntries
+                .filter { $0.language == language }
+                .prefix(limit)
+                .map(\.term)
         }
     }
 

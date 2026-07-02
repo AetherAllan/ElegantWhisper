@@ -1,14 +1,19 @@
 import AVFoundation
 import Foundation
 
-final class AudioRecorder {
+// AVAudioEngine calls the input tap on a realtime audio thread, while the app
+// uses the recorder from the main controller. The mutable engine state is still
+// owned by AppController's state machine; this conformance only tells Swift that
+// the callback handoff below is intentional and that UI work is re-entered on
+// MainActor.
+final class AudioRecorder: @unchecked Sendable {
     private let engine = AVAudioEngine()
     private var smoothedLevel: Float = 0
     private var isRunning = false
     private var tapInstalled = false
 
-    var onBuffer: ((AVAudioPCMBuffer) -> Void)?
-    var onLevel: ((Float) -> Void)?
+    var onBuffer: (@Sendable (AVAudioPCMBuffer) -> Void)?
+    var onLevel: (@MainActor @Sendable (Float) -> Void)?
 
     func start() throws {
         if isRunning {
@@ -56,8 +61,9 @@ final class AudioRecorder {
         isRunning = false
         tapInstalled = false
         smoothedLevel = 0
-        DispatchQueue.main.async { [onLevel] in
-            onLevel?(0)
+        let callback = onLevel
+        Task { @MainActor in
+            callback?(0)
         }
     }
 
@@ -77,8 +83,10 @@ final class AudioRecorder {
         let coefficient: Float = rms > smoothedLevel ? 0.40 : 0.15
         smoothedLevel += (rms - smoothedLevel) * coefficient
 
-        DispatchQueue.main.async { [onLevel, smoothedLevel] in
-            onLevel?(smoothedLevel)
+        let level = smoothedLevel
+        let callback = onLevel
+        Task { @MainActor in
+            callback?(level)
         }
     }
 }

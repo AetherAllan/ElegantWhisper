@@ -18,7 +18,10 @@ enum RecognitionLanguage: String, CaseIterable, Codable {
     }
 }
 
-final class SettingsStore {
+// SettingsStore has no app-owned mutable cache: values go through UserDefaults
+// and Keychain calls. UserDefaults is thread-safe for these simple get/set uses,
+// and KeychainStore performs one Security framework operation per access.
+final class SettingsStore: @unchecked Sendable {
     static let shared = SettingsStore()
 
     private let defaults: UserDefaults

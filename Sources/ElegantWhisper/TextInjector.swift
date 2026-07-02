@@ -3,11 +3,12 @@ import ApplicationServices
 import Carbon
 import Foundation
 
-enum InjectionResult {
+enum InjectionResult: Sendable {
     case pasteAttempted
     case copied
 }
 
+@MainActor
 final class TextInjector {
     private let focusDetector: FocusDetector
     private let inputSourceManager: InputSourceManager
@@ -18,7 +19,7 @@ final class TextInjector {
         self.inputSourceManager = inputSourceManager
     }
 
-    func inject(_ text: String, target: FocusTarget?, completion: @escaping (InjectionResult) -> Void) {
+    func inject(_ text: String, target: FocusTarget?, completion: @escaping @MainActor @Sendable (InjectionResult) -> Void) {
         let pasteboard = NSPasteboard.general
         // Preserve every pasteboard flavor, not just plain text. Users often keep rich text,
         // images, or files on the clipboard, and dictation should not permanently destroy that.
@@ -38,7 +39,9 @@ final class TextInjector {
 
         let previousInputSource = inputSourceManager.switchToASCIIIfNeeded()
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+        Task { @MainActor [weak self, target, previousInputSource, snapshot, text, sessionToken] in
+            try? await Task.sleep(for: .milliseconds(150))
+            let pasteboard = NSPasteboard.general
             // Re-read focus after activation. The original AX element may be stale, and pasting
             // into a stale or different app is worse than falling back to "copied".
             guard let self,
@@ -56,18 +59,18 @@ final class TextInjector {
                 completion(.copied)
                 return
             }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
-                // Many apps read the pasteboard asynchronously after Cmd+V. Restoring too early
-                // makes the target paste the user's old clipboard instead of the transcript.
-                if pasteboard.changeCount == ownedChangeCount,
-                   pasteboard.string(forType: .string) == text,
-                   pasteboard.string(forType: self.sessionPasteboardType) == sessionToken
-                {
-                    snapshot.restore(to: pasteboard)
-                }
-                self.inputSourceManager.restore(previousInputSource)
-                completion(.pasteAttempted)
+
+            try? await Task.sleep(for: .milliseconds(700))
+            // Many apps read the pasteboard asynchronously after Cmd+V. Restoring too early
+            // makes the target paste the user's old clipboard instead of the transcript.
+            if pasteboard.changeCount == ownedChangeCount,
+               pasteboard.string(forType: .string) == text,
+               pasteboard.string(forType: self.sessionPasteboardType) == sessionToken
+            {
+                snapshot.restore(to: pasteboard)
             }
+            self.inputSourceManager.restore(previousInputSource)
+            completion(.pasteAttempted)
         }
     }
 
@@ -138,7 +141,10 @@ final class TextInjector {
     }
 }
 
-private struct PasteboardSnapshot {
+// NSPasteboardItem is an AppKit reference object and is not annotated Sendable.
+// The snapshot is immutable after capture and is restored only on MainActor
+// after a deliberate delay, so this wrapper is the narrow concurrency boundary.
+private struct PasteboardSnapshot: @unchecked Sendable {
     let items: [NSPasteboardItem]
 
     static func capture(from pasteboard: NSPasteboard) -> PasteboardSnapshot {

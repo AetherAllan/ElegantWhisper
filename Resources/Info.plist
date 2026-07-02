@@ -27,7 +27,7 @@
     <key>NSMicrophoneUsageDescription</key>
     <string>ElegantWhisper records your voice to transcribe speech into text.</string>
     <key>NSSpeechRecognitionUsageDescription</key>
-    <string>ElegantWhisper uses Apple SpeechAnalyzer to transcribe your voice locally.</string>
+    <string>ElegantWhisper uses Apple Speech Recognition to transcribe your voice.</string>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
 </dict>

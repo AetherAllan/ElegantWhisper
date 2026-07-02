@@ -2,7 +2,6 @@ import Foundation
 
 enum AppMode: String {
     case idle
-    case preparing
     case recording
     case transcribing
     case refining
@@ -11,7 +10,6 @@ enum AppMode: String {
     var title: String {
         switch self {
         case .idle: "Idle"
-        case .preparing: "Preparing"
         case .recording: "Recording"
         case .transcribing: "Transcribing"
         case .refining: "Refining"
@@ -20,6 +18,7 @@ enum AppMode: String {
     }
 }
 
+@MainActor
 final class AppState {
     private(set) var mode: AppMode = .idle
 
@@ -28,14 +27,12 @@ final class AppState {
         // (hotkeys, Speech callbacks, LLM callbacks, paste completion), and allowing arbitrary
         // transitions is how duplicate recordings or late paste operations happen.
         switch (mode, next) {
-        case (.idle, .preparing),
-             (.preparing, .recording),
+        case (.idle, .recording),
              (.recording, .transcribing),
              (.transcribing, .refining),
              (.transcribing, .injecting),
              (.refining, .injecting),
              (.injecting, .idle),
-             (.preparing, .idle),
              (.recording, .idle),
              (.transcribing, .idle),
              (.refining, .idle):
