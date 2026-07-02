@@ -12,11 +12,7 @@ enum AppConstants {
             .appendingPathComponent(productName, isDirectory: true)
     }
 
-    static var modelsDirectory: URL {
-        applicationSupportDirectory.appendingPathComponent("Models", isDirectory: true)
-    }
-
     static func ensureApplicationDirectories() throws {
-        try FileManager.default.createDirectory(at: modelsDirectory, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: applicationSupportDirectory, withIntermediateDirectories: true)
     }
 }

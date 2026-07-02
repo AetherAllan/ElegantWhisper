@@ -1,12 +1,12 @@
 # ElegantWhisper
 
-ElegantWhisper is a macOS 14+ Dock and menu-bar voice input app built with AppKit.
+ElegantWhisper is a macOS 26+ Dock and menu-bar voice input app built with AppKit.
 
-It records with a single left/right Command or Option key tap, streams Apple Speech Recognition partial results, optionally applies conservative OpenAI-compatible correction, then inserts the final text into the focused editable field when it is safe to do so.
+It records with a single left/right Command or Option key tap, transcribes with Apple's local SpeechAnalyzer API, optionally applies conservative OpenAI-compatible correction, then inserts the final text into the focused editable field when it is safe to do so.
 
 ## Requirements
 
-- macOS 14 or newer
+- macOS 26 or newer
 - Xcode 26 or newer, or a Swift toolchain with Xcode Command Line Tools
 - Microphone permission
 - Speech Recognition permission
@@ -102,7 +102,7 @@ The app runs as a regular Dock app and also keeps a menu-bar status item for qui
 - App bundle: `ElegantWhisper.app`
 - Bundle identifier: `com.aetherallan.ElegantWhisper`
 - Application Support: `~/Library/Application Support/ElegantWhisper/`
-- Models: `~/Library/Application Support/ElegantWhisper/Models/`
+- Speech models: managed by Apple's `AssetInventory`, not stored in the app bundle or Application Support
 - History: `~/Library/Application Support/ElegantWhisper/history.json`
 - UserDefaults suite: `com.aetherallan.ElegantWhisper`
 - Keychain service: `com.aetherallan.ElegantWhisper`
@@ -120,6 +120,8 @@ System Settings -> Privacy & Security -> Microphone -> enable ElegantWhisper.
 ### Speech Recognition
 
 System Settings -> Privacy & Security -> Speech Recognition -> enable ElegantWhisper.
+
+ElegantWhisper keeps this permission even after moving to SpeechAnalyzer. The app still uses Apple's Speech framework for local transcription, and the permission prompt makes that privacy boundary explicit.
 
 ### Accessibility
 
@@ -160,7 +162,7 @@ Open `Open ElegantWhisper` from the menu bar to configure:
 
 The History section stores completed dictations locally in `~/Library/Application Support/ElegantWhisper/history.json`. Canceled recordings are not saved. History is enabled by default and can be disabled in Settings.
 
-The Dictionary section stores local correction terms in `~/Library/Application Support/ElegantWhisper/dictionary.json`. Add the correct term as `Term` and common wrong outputs as `Wrong forms`, for example `Python` with `配森` and `派森`. ElegantWhisper uses the correct terms as Apple Speech contextual hints during recording, then applies only conservative local replacements after the final transcript. Dictionary files are local-only and written with user-only file permissions.
+The Dictionary section stores local correction terms in `~/Library/Application Support/ElegantWhisper/dictionary.json`. Add the correct term as `Term` and common wrong outputs as `Wrong forms`, for example `Python` with `配森` and `派森`. The first SpeechAnalyzer version does not bias recognition with dictionary terms; it only applies conservative local replacements after the final transcript. Dictionary files are local-only and written with user-only file permissions.
 
 `LLM Refinement` is disabled by default. When enabled, it sends only the final recognized text to an OpenAI-compatible `/chat/completions` endpoint and asks the model to fix obvious speech recognition errors without rewriting the text.
 
@@ -187,5 +189,5 @@ After building, manually verify:
 - Switching to another editable field during transcription inserts into the current field.
 - With no editable field, the result stays on the clipboard.
 - Completed dictations appear in History; canceled dictations do not.
-- Dictionary entries improve later recognition and replace configured wrong forms.
+- Dictionary entries replace configured wrong forms after the final transcript.
 - LLM failures fall back to the raw Apple Speech result.

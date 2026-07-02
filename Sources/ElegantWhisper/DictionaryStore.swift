@@ -53,19 +53,6 @@ final class DictionaryStore {
         }
     }
 
-    func contextualStrings(for language: RecognitionLanguage, limit: Int = 80) -> [String] {
-        queue.sync {
-            loadIfNeeded()
-            // Apple Speech contextualStrings are recognition hints, so feed the desired spelling
-            // only. Aliases are common wrong outputs such as "配森"; biasing the recognizer toward
-            // those aliases would make the exact mistake more likely instead of less likely.
-            return cachedEntries
-                .filter { $0.language == language }
-                .prefix(limit)
-                .map(\.term)
-        }
-    }
-
     @discardableResult
     func add(term rawTerm: String, aliases rawAliases: [String], language: RecognitionLanguage) -> Bool {
         let term = rawTerm.trimmingCharacters(in: .whitespacesAndNewlines)

@@ -8,7 +8,7 @@ final class AppController {
     private let permissions = PermissionManager()
     private let monitor = OptionKeyMonitor()
     private let recorder = AudioRecorder()
-    private let transcriber = SpeechTranscriber()
+    private let transcriber = LiveTranscriptionEngine()
     private let dictionary = DictionaryStore.shared
     private let correctionEngine = CorrectionEngine()
     private let focusDetector = FocusDetector()
@@ -21,6 +21,8 @@ final class AppController {
     private var latestPartial = ""
     private var monitorStarted = false
     private var loggedFirstAudioLevel = false
+    private var prepareTask: Task<Void, Never>?
+    private var finishTask: Task<Void, Never>?
     private var refinementTask: URLSessionDataTask?
 
     var onChange: (() -> Void)?
@@ -43,6 +45,10 @@ final class AppController {
         transcriber.onPartial = { [weak self] text in
             self?.latestPartial = text
             self?.panel.updatePartial(text)
+        }
+        transcriber.onStatus = { [weak self] text in
+            self?.panel.showStatus(text)
+            self?.onUserMessage?(text)
         }
         recorder.onLevel = { [weak self] level in
             if level > 0.02, self?.loggedFirstAudioLevel == false {
@@ -89,7 +95,7 @@ final class AppController {
             startRecording()
         case .recording:
             stopAndTranscribe()
-        case .transcribing, .refining:
+        case .preparing, .transcribing, .refining:
             cancelCurrentOperation()
         case .injecting:
             onUserMessage?("Busy: \(state.mode.title)")
@@ -121,23 +127,52 @@ final class AppController {
 
         currentSession = DictationSession(originalTarget: focusDetector.currentEditableTarget())
         latestPartial = ""
+        prepareTask?.cancel()
+        prepareTask = nil
+        finishTask?.cancel()
+        finishTask = nil
         refinementTask?.cancel()
         refinementTask = nil
         loggedFirstAudioLevel = false
 
-        do {
-            try transcriber.start(
-                language: settings.language,
-                contextualStrings: dictionary.contextualStrings(for: settings.language)
-            )
-            try recorder.start()
-            DebugLog.event("recordingStart")
-            _ = state.transition(to: .recording)
-            panel.showRecording(text: "")
-            DebugLog.event("panelShow")
-            onChange?()
-        } catch {
-            showError(error.localizedDescription)
+        guard let sessionID = currentSession?.id,
+              state.transition(to: .preparing)
+        else {
+            return
+        }
+        panel.showStatus("Preparing local speech model...")
+        onChange?()
+
+        let language = settings.language
+        prepareTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await self.transcriber.prepare(language: language)
+                try await self.transcriber.start()
+                try await MainActor.run {
+                    guard self.isCurrentSession(sessionID), self.state.mode == .preparing else {
+                        self.transcriber.cancel()
+                        return
+                    }
+                    try self.recorder.start()
+                    DebugLog.event("recordingStart")
+                    _ = self.state.transition(to: .recording)
+                    self.panel.showRecording(text: "")
+                    DebugLog.event("panelShow")
+                    self.prepareTask = nil
+                    self.onChange?()
+                }
+            } catch is CancellationError {
+                await MainActor.run {
+                    guard self.isCurrentSession(sessionID) else { return }
+                    self.resetToIdle(message: "Cancelled", hidePanel: true)
+                }
+            } catch {
+                await MainActor.run {
+                    guard self.isCurrentSession(sessionID) else { return }
+                    self.showError(error.localizedDescription)
+                }
+            }
         }
     }
 
@@ -154,8 +189,14 @@ final class AppController {
             showError("No active session")
             return
         }
-        transcriber.finish { [weak self] text in
-            self?.handleFinalTranscript(text, sessionID: sessionID)
+        finishTask?.cancel()
+        finishTask = Task { [weak self] in
+            guard let self else { return }
+            let text = await self.transcriber.finish()
+            await MainActor.run {
+                self.finishTask = nil
+                self.handleFinalTranscript(text, sessionID: sessionID)
+            }
         }
     }
 
@@ -166,6 +207,10 @@ final class AppController {
         recorder.stop()
         DebugLog.event("recordingStop")
         transcriber.cancel()
+        prepareTask?.cancel()
+        prepareTask = nil
+        finishTask?.cancel()
+        finishTask = nil
         refinementTask?.cancel()
         refinementTask = nil
         currentSession = nil
@@ -178,11 +223,30 @@ final class AppController {
 
     func cancelCurrentOperation() {
         switch state.mode {
+        case .preparing:
+            transcriber.cancel()
+            prepareTask?.cancel()
+            prepareTask = nil
+            finishTask?.cancel()
+            finishTask = nil
+            refinementTask?.cancel()
+            refinementTask = nil
+            currentSession = nil
+            latestPartial = ""
+            _ = state.transition(to: .idle)
+            panel.hide()
+            DebugLog.event("panelHide")
+            onUserMessage?("Cancelled")
+            onChange?()
         case .recording:
             cancelRecording()
         case .transcribing, .refining:
             recorder.stop()
             transcriber.cancel()
+            prepareTask?.cancel()
+            prepareTask = nil
+            finishTask?.cancel()
+            finishTask = nil
             refinementTask?.cancel()
             refinementTask = nil
             currentSession = nil
@@ -311,6 +375,10 @@ final class AppController {
     private func showError(_ message: String) {
         recorder.stop()
         transcriber.cancel()
+        prepareTask?.cancel()
+        prepareTask = nil
+        finishTask?.cancel()
+        finishTask = nil
         refinementTask?.cancel()
         refinementTask = nil
         currentSession = nil
@@ -318,6 +386,26 @@ final class AppController {
         _ = state.transition(to: .idle)
         panel.showError(message)
         DebugLog.event("panelHide")
+        onUserMessage?(message)
+        onChange?()
+    }
+
+    private func resetToIdle(message: String, hidePanel: Bool) {
+        recorder.stop()
+        transcriber.cancel()
+        prepareTask?.cancel()
+        prepareTask = nil
+        finishTask?.cancel()
+        finishTask = nil
+        refinementTask?.cancel()
+        refinementTask = nil
+        currentSession = nil
+        latestPartial = ""
+        _ = state.transition(to: .idle)
+        if hidePanel {
+            panel.hide()
+            DebugLog.event("panelHide")
+        }
         onUserMessage?(message)
         onChange?()
     }

@@ -48,11 +48,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func rebuildMenu() {
         let menu = NSMenu()
 
-        let toggleTitle = controller.state.mode == .recording ? "Stop and Transcribe" : "Start Recording"
+        let toggleTitle: String
+        switch controller.state.mode {
+        case .recording:
+            toggleTitle = "Stop and Transcribe"
+        case .preparing:
+            toggleTitle = "Cancel Preparing"
+        default:
+            toggleTitle = "Start Recording"
+        }
         menu.addItem(NSMenuItem(title: toggleTitle, action: #selector(toggleRecording), keyEquivalent: ""))
 
         let cancel = NSMenuItem(title: "Cancel Recording", action: #selector(cancelRecording), keyEquivalent: "")
-        cancel.isEnabled = [.recording, .transcribing, .refining].contains(controller.state.mode)
+        cancel.isEnabled = [.preparing, .recording, .transcribing, .refining].contains(controller.state.mode)
         menu.addItem(cancel)
 
         menu.addItem(.separator())
@@ -77,7 +85,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q"))
 
         statusItem?.menu = menu
-        statusItem?.button?.title = controller.state.mode == .recording ? "● \(AppConstants.productName)" : AppConstants.productName
+        statusItem?.button?.title = [.preparing, .recording].contains(controller.state.mode) ? "● \(AppConstants.productName)" : AppConstants.productName
     }
 
     private func languageMenu() -> NSMenuItem {

@@ -21,13 +21,13 @@
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>LSMinimumSystemVersion</key>
-    <string>14.0</string>
+    <string>26.0</string>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSMicrophoneUsageDescription</key>
     <string>ElegantWhisper records your voice to transcribe speech into text.</string>
     <key>NSSpeechRecognitionUsageDescription</key>
-    <string>ElegantWhisper uses Apple Speech Recognition to transcribe your voice.</string>
+    <string>ElegantWhisper uses Apple SpeechAnalyzer to transcribe your voice locally.</string>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
 </dict>
