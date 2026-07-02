@@ -12,6 +12,7 @@ final class FloatingPanel {
     private var widthConstraint: NSLayoutConstraint?
     private var presentationID = UUID()
     private var pendingHide: DispatchWorkItem?
+    private var lastLevelUpdateTime: TimeInterval = 0
 
     init() {
         panel = NSPanel(
@@ -85,16 +86,27 @@ final class FloatingPanel {
         beginPresentation()
         waveform.isHidden = false
         waveform.level = 0
+        lastLevelUpdateTime = 0
         waveform.needsDisplay = true
-        setText(text.isEmpty ? "Listening..." : text)
+        setText(text.isEmpty ? "Listening..." : text, animated: false)
         show()
     }
 
     func updatePartial(_ text: String) {
-        setText(text.isEmpty ? "Listening..." : text)
+        // Partial recognition can arrive in bursts. Do not animate every token:
+        // the label should track Speech immediately while only status/success
+        // transitions keep the slower visual polish.
+        setText(text.isEmpty ? "Listening..." : text, animated: false)
     }
 
     func updateLevel(_ level: Float) {
+        let now = ProcessInfo.processInfo.systemUptime
+        // Audio callbacks can arrive 40+ times per second. Drawing the waveform
+        // at roughly display cadence keeps MainActor free for transcript text.
+        if level > 0, now - lastLevelUpdateTime < 1.0 / 30.0 {
+            return
+        }
+        lastLevelUpdateTime = now
         waveform.level = CGFloat(level)
     }
 
@@ -170,14 +182,24 @@ final class FloatingPanel {
         }
     }
 
-    private func setText(_ text: String) {
+    private func setText(_ text: String, animated: Bool = true) {
         label.stringValue = text
         let textWidth = min(260, max(72, ceil(label.intrinsicContentSize.width)))
         let totalWidth = textWidth + (waveform.isHidden ? 32 : 64)
         widthConstraint?.constant = totalWidth
 
+        guard animated else {
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0
+                context.allowsImplicitAnimation = false
+                panel.contentView?.layoutSubtreeIfNeeded()
+            }
+            position()
+            return
+        }
+
         NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.25
+            context.duration = 0.18
             panel.contentView?.layoutSubtreeIfNeeded()
             position()
         }
