@@ -123,7 +123,10 @@ final class AppController {
             return
         }
 
-        currentSession = DictationSession(originalTarget: focusDetector.currentEditableTarget())
+        currentSession = DictationSession(
+            originalTarget: focusDetector.currentEditableTarget(),
+            originalApplication: NSWorkspace.shared.frontmostApplication
+        )
         latestPartial = ""
         refinementTask?.cancel()
         refinementTask = nil
@@ -279,25 +282,27 @@ final class AppController {
         // editor to another while Speech is finalizing, the current field is the least surprising
         // insertion target. The start-time target is only a fallback.
         let originalTarget = currentSession?.originalTarget
+        let originalApplication = currentSession?.originalApplication
         let target = focusDetector.currentEditableTarget() ?? originalTarget.flatMap {
             focusDetector.isValid($0) ? $0 : nil
         }
+        let fallbackApp = fallbackPasteApplication(target: target, originalApplication: originalApplication)
 
-        guard target != nil || settings.keepClipboardWithoutTarget else {
-            saveHistory(text, result: HistoryResult.failed, app: originalTarget?.app)
+        guard target != nil || fallbackApp != nil || settings.keepClipboardWithoutTarget else {
+            saveHistory(text, result: HistoryResult.failed, app: originalTarget?.app ?? originalApplication)
             showError("No editable field")
             return
         }
 
-        let historyApp = target?.app ?? originalTarget?.app
-        injector.inject(text, target: target) { [weak self] result in
+        let historyApp = target?.app ?? fallbackApp ?? originalTarget?.app ?? originalApplication
+        injector.inject(text, target: target, fallbackApp: fallbackApp) { [weak self] result in
             guard let self, self.isCurrentSession(sessionID) else {
                 return
             }
             switch result {
             case .pasteAttempted:
-                self.panel.showSuccess("Paste Sent")
-                self.onUserMessage?("Paste sent")
+                self.panel.hide()
+                DebugLog.event("panelHide")
                 self.saveHistory(text, result: HistoryResult.pasteAttempted, app: historyApp)
             case .copied:
                 self.panel.showSuccess("复制")
@@ -332,6 +337,26 @@ final class AppController {
             return
         }
         HistoryStore.shared.append(text: text, result: result, app: app)
+    }
+
+    private func fallbackPasteApplication(target: FocusTarget?, originalApplication: NSRunningApplication?) -> NSRunningApplication? {
+        guard target == nil else {
+            return nil
+        }
+
+        let frontmost = NSWorkspace.shared.frontmostApplication
+        if let frontmost, frontmost.bundleIdentifier != AppConstants.bundleIdentifier {
+            return frontmost
+        }
+
+        if let originalApplication,
+           !originalApplication.isTerminated,
+           originalApplication.bundleIdentifier != AppConstants.bundleIdentifier
+        {
+            return originalApplication
+        }
+
+        return nil
     }
 
     private func isCurrentSession(_ id: UUID) -> Bool {

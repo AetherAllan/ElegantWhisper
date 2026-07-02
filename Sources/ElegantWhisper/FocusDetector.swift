@@ -66,10 +66,6 @@ final class FocusDetector {
         return isEditable(target.element)
     }
 
-    func isSameElement(_ lhs: AXUIElement, _ rhs: AXUIElement) -> Bool {
-        CFEqual(lhs, rhs)
-    }
-
     private func focusedElement() -> AXUIElement? {
         let systemWide = AXUIElementCreateSystemWide()
         // Prefer the focused application first. Browser text areas and Electron editors often
@@ -124,6 +120,7 @@ final class FocusDetector {
     private func isEditable(_ element: AXUIElement) -> Bool {
         let role = stringAttribute(element, kAXRoleAttribute)
         let subrole = stringAttribute(element, kAXSubroleAttribute)
+        let roleDescription = stringAttribute(element, kAXRoleDescriptionAttribute)
 
         if role == "AXSecureTextField" || subrole == "AXSecureTextField" {
             return false
@@ -139,9 +136,13 @@ final class FocusDetector {
             return true
         }
 
-        // Some editors expose text semantics through a custom text-like role plus settable text.
+        // Web contenteditable fields, including Chrome/ChatGPT, often surface as a generic AX
+        // wrapper whose role description is "text entry area" while the raw role is not one of
+        // AppKit's standard text roles. Keep the "text-like" gate, but include the localized role
+        // description before checking settable text attributes.
+        //
         // Do not treat arbitrary settable AXValue as editable; sliders and custom controls use it too.
-        guard isTextLike(role) || isTextLike(subrole) else {
+        guard isTextLike(role) || isTextLike(subrole) || isTextLike(roleDescription) else {
             return false
         }
         var settable = DarwinBoolean(false)
