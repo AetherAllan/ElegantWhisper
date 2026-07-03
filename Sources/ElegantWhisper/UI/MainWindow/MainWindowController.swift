@@ -285,6 +285,12 @@ final class MainWindowController: NSWindowController, NSTextViewDelegate {
             scroll.topAnchor.constraint(equalTo: pageContainer.topAnchor),
             scroll.bottomAnchor.constraint(equalTo: pageContainer.bottomAnchor)
         ])
+        DispatchQueue.main.async {
+            // Each page render creates a new scroll view. Keep navigation predictable by showing
+            // the page header first instead of inheriting a previous page's middle/bottom position.
+            scroll.contentView.scroll(to: .zero)
+            scroll.reflectScrolledClipView(scroll.contentView)
+        }
     }
 
     func selectedProvider() -> LLMProvider {

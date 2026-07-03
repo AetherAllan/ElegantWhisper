@@ -17,13 +17,14 @@ final class CorrectionEngine {
         guard aliasContainsASCIIWord(alias) else {
             return text.replacingOccurrences(of: alias, with: term)
         }
-        let pattern = "\\b\(NSRegularExpression.escapedPattern(for: alias))\\b"
+        let escapedAlias = NSRegularExpression.escapedPattern(for: alias)
+        let pattern = "(?<![A-Za-z0-9_])\(escapedAlias)(?![A-Za-z0-9_])"
         guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
             return text
         }
-        // ASCII aliases need word boundaries. "js" should become "JavaScript", but "json"
-        // must stay untouched. Chinese aliases intentionally use direct replacement because
-        // they do not have whitespace word boundaries.
+        // ASCII aliases need ASCII-only boundaries. Foundation's `\b` treats Chinese neighbors
+        // inconsistently for our use case, so "HryFine" next to Chinese text must still match,
+        // while "js" inside "json" must stay untouched.
         let range = NSRange(text.startIndex..<text.endIndex, in: text)
         return regex.stringByReplacingMatches(
             in: text,

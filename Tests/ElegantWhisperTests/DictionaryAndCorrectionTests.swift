@@ -37,6 +37,28 @@ final class DictionaryAndCorrectionTests: XCTestCase {
         XCTAssertEqual(result, "json and JavaScript")
     }
 
+    func testASCIIAliasWorksNextToChineseText() {
+        let entries = [
+            DictionaryEntry(term: "refine", aliases: ["HryFine"], language: .simplifiedChinese),
+            DictionaryEntry(term: "TypeScript", aliases: ["Tapes script"], language: .simplifiedChinese)
+        ]
+        let result = CorrectionEngine().correct(
+            "让我看现在这个HryFine工作了吗，我喜欢Tapes script。",
+            entries: entries
+        )
+
+        XCTAssertEqual(
+            result,
+            "让我看现在这个refine工作了吗，我喜欢TypeScript。"
+        )
+    }
+
+    func testNoBuiltInCorrectionRewritesUSBDriveMention() {
+        let result = CorrectionEngine().correct("这个U盘需要格式化", entries: [])
+
+        XCTAssertEqual(result, "这个U盘需要格式化")
+    }
+
     func testHistoryDefaultsToEnabled() {
         let suiteName = "com.aetherallan.ElegantWhisper.tests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

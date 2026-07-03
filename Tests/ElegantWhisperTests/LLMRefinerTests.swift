@@ -34,6 +34,19 @@ final class LLMRefinerTests: XCTestCase {
         XCTAssertFalse(refiner.acceptsChoice(original: "这是一个比较长的原始转写，不能因为模型截断就丢掉后半段。", choice: choice))
     }
 
+    func testAcceptsWrappedModelCorrection() {
+        let refiner = LLMRefiner(settings: .shared)
+        let choice = ChatResponse.Choice(
+            message: ChatMessage(role: "assistant", content: "Corrected text: “我在写 Python 和 JSON”"),
+            finishReason: "stop"
+        )
+
+        XCTAssertEqual(
+            refiner.acceptedCorrection(original: "我在写配森和杰森", choice: choice),
+            "我在写 Python 和 JSON"
+        )
+    }
+
     func testProviderInfersOpenRouterFromExistingBaseURL() {
         let settings = makeSettings()
         settings.apiBaseURL = "https://openrouter.ai/api/v1"
@@ -56,6 +69,7 @@ final class LLMRefinerTests: XCTestCase {
         ))
 
         XCTAssertEqual(request.url?.absoluteString, "https://openrouter.ai/api/v1/chat/completions")
+        XCTAssertEqual(request.timeoutInterval, 25)
         XCTAssertEqual(request.value(forHTTPHeaderField: "X-OpenRouter-Title"), AppConstants.productName)
 
         let body = try XCTUnwrap(request.httpBody)
@@ -88,6 +102,7 @@ final class LLMRefinerTests: XCTestCase {
 
         XCTAssertTrue(prompt.contains("Do not polish"))
         XCTAssertTrue(prompt.contains("MCP"))
+        XCTAssertFalse(prompt.contains("Common ASR hints"))
     }
 
     func testActiveStylePackPromptIsUsedInRequest() throws {

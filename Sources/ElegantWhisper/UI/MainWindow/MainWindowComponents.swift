@@ -28,7 +28,7 @@ enum MainWindowUI {
     }
 
     static func scrollView(for stack: NSStackView) -> NSScrollView {
-        let document = NSView()
+        let document = FlippedDocumentView()
         document.translatesAutoresizingMaskIntoConstraints = false
         document.addSubview(stack)
 
@@ -202,5 +202,11 @@ enum MainWindowUI {
         let label = body(text)
         label.font = .systemFont(ofSize: 14, weight: .medium)
         return label
+    }
+}
+
+private final class FlippedDocumentView: NSView {
+    override var isFlipped: Bool {
+        true
     }
 }

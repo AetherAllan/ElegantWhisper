@@ -16,34 +16,84 @@ final class LLMRefiner: Sendable {
         completion: @escaping @MainActor @Sendable (String) -> Void
     ) -> URLSessionDataTask? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard settings.llmEnabled,
-              !trimmed.isEmpty,
-              !settings.apiKey.isEmpty,
+        guard settings.llmEnabled else {
+            DebugLog.event("llmRefineSkippedDisabled")
+            Task { @MainActor in
+                completion(text)
+            }
+            return nil
+        }
+        guard !trimmed.isEmpty else {
+            DebugLog.event("llmRefineSkippedEmpty")
+            Task { @MainActor in
+                completion(text)
+            }
+            return nil
+        }
+        guard !settings.apiKey.isEmpty,
               let request = makeRequest(text: trimmed, hotwords: hotwords)
         else {
+            DebugLog.event("llmRefineSkippedMissingSettings")
             Task { @MainActor in
                 completion(text)
             }
             return nil
         }
 
+        DebugLog.event("llmRefineStarted")
         let task = URLSession.shared.dataTask(with: request) { data, response, error in
-            guard error == nil,
-                  let http = response as? HTTPURLResponse,
-                  (200..<300).contains(http.statusCode),
-                  let data,
-                  data.count < 512_000,
-                  let response = try? JSONDecoder().decode(ChatResponse.self, from: data),
-                  let choice = response.choices.first,
-                  self.acceptsChoice(original: trimmed, choice: choice)
-            else {
+            if let error {
+                DebugLog.event("llmRefineFallback:error:\(error._code)")
                 Task { @MainActor in
                     completion(text)
                 }
                 return
             }
+            guard let http = response as? HTTPURLResponse else {
+                DebugLog.event("llmRefineFallback:noHTTPResponse")
+                Task { @MainActor in
+                    completion(text)
+                }
+                return
+            }
+            guard (200..<300).contains(http.statusCode) else {
+                DebugLog.event("llmRefineFallback:http\(http.statusCode)")
+                Task { @MainActor in
+                    completion(text)
+                }
+                return
+            }
+            guard let data, data.count < 512_000 else {
+                DebugLog.event("llmRefineFallback:badBody")
+                Task { @MainActor in
+                    completion(text)
+                }
+                return
+            }
+            guard let response = try? JSONDecoder().decode(ChatResponse.self, from: data) else {
+                DebugLog.event("llmRefineFallback:decode")
+                Task { @MainActor in
+                    completion(text)
+                }
+                return
+            }
+            guard let choice = response.choices.first else {
+                DebugLog.event("llmRefineFallback:noChoice")
+                Task { @MainActor in
+                    completion(text)
+                }
+                return
+            }
+            guard let correction = self.acceptedCorrection(original: trimmed, choice: choice) else {
+                DebugLog.event("llmRefineFallback:rejected")
+                Task { @MainActor in
+                    completion(text)
+                }
+                return
+            }
+            DebugLog.event("llmRefineCompleted")
             Task { @MainActor in
-                completion(choice.message.content.trimmingCharacters(in: .whitespacesAndNewlines))
+                completion(correction)
             }
         }
         task.resume()
@@ -100,7 +150,7 @@ final class LLMRefiner: Sendable {
         let url = completionsURL(from: base)
         let provider = settings.llmProvider
         let stylePack = stylePacks.activePack()
-        var request = URLRequest(url: url, timeoutInterval: settings.requestTimeout)
+        var request = URLRequest(url: url, timeoutInterval: effectiveTimeout())
         request.httpMethod = "POST"
         request.setValue("Bearer \(settings.apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -121,13 +171,21 @@ final class LLMRefiner: Sendable {
     }
 
     func acceptsChoice(original: String, choice: ChatResponse.Choice) -> Bool {
+        acceptedCorrection(original: original, choice: choice) != nil
+    }
+
+    func acceptedCorrection(original: String, choice: ChatResponse.Choice) -> String? {
         // OpenAI-compatible APIs report `finish_reason=length` when max_tokens cuts the response.
         // A truncated correction is worse than no correction because it can silently drop the end
         // of a dictation before paste. Fall back to the original transcript instead.
         guard choice.finishReason != "length" else {
-            return false
+            return nil
         }
-        return acceptsCorrection(original: original, corrected: choice.message.content)
+        let corrected = normalizeModelOutput(choice.message.content)
+        guard acceptsCorrection(original: original, corrected: corrected) else {
+            return nil
+        }
+        return corrected
     }
 
     func acceptsCorrection(original: String, corrected: String) -> Bool {
@@ -158,6 +216,51 @@ final class LLMRefiner: Sendable {
         // should usually be close to input length, so a character-based ceiling is enough here and
         // avoids building a tokenizer just for a safety budget.
         min(4096, max(256, text.count * 2))
+    }
+
+    func effectiveTimeout() -> TimeInterval {
+        // OpenRouter Free randomly routes to free models, and some are slow enough that a 12 second
+        // timeout causes frequent silent fallbacks. Keep the UI value for paid/stable providers,
+        // but give the free router enough room to prove whether polishing actually works.
+        settings.llmProvider == .openRouterFree ? max(settings.requestTimeout, 25) : settings.requestTimeout
+    }
+
+    func normalizeModelOutput(_ output: String) -> String {
+        var value = output.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Free OpenAI-compatible routers often return a helpful label even when the prompt asks
+        // for text only. Strip only boring wrappers; the stricter length/edit checks still decide
+        // whether the correction is safe enough to paste.
+        let prefixes = [
+            "Corrected text:",
+            "Corrected:",
+            "Output:",
+            "Result:",
+            "修正后：",
+            "修正结果：",
+            "结果："
+        ]
+        if let prefix = prefixes.first(where: {
+            value.range(of: $0, options: [.caseInsensitive, .anchored]) != nil
+        }) {
+            value = String(value.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        if value.hasPrefix("```"), value.hasSuffix("```") {
+            value = value
+                .replacingOccurrences(of: "```text", with: "")
+                .replacingOccurrences(of: "```", with: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        let matchingQuotes: [(Character, Character)] = [("\"", "\""), ("“", "”"), ("'", "'"), ("‘", "’")]
+        if let first = value.first,
+           let last = value.last,
+           matchingQuotes.contains(where: { $0.0 == first && $0.1 == last })
+        {
+            value = String(value.dropFirst().dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return value
     }
 
     private func completionsURL(from base: URL) -> URL {
