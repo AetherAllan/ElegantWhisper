@@ -100,7 +100,15 @@ final class SettingsStore: @unchecked Sendable {
 
     var model: String {
         get {
-            defaults.string(forKey: Key.model) ?? LLMProvider.openAI.defaultModel ?? "gpt-4o-mini"
+            let stored = defaults.string(forKey: Key.model)
+            if llmProvider == .openRouterFree, stored == "openrouter/free" {
+                // openrouter/free is a random router. It made polishing look "successful" in logs
+                // while sometimes routing to models that returned empty/reasoning-only or unrelated
+                // text. Existing installs using that old preset should move to the stable free
+                // model without requiring users to rediscover the setting manually.
+                return LLMProvider.openRouterFree.defaultModel ?? "nvidia/nemotron-3-nano-30b-a3b:free"
+            }
+            return stored ?? LLMProvider.openAI.defaultModel ?? "gpt-4o-mini"
         }
         set {
             defaults.set(newValue.trimmingCharacters(in: .whitespacesAndNewlines), forKey: Key.model)

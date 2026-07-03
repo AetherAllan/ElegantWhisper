@@ -132,7 +132,7 @@ final class MainWindowController: NSWindowController, NSTextViewDelegate, NSText
             right.trailingAnchor.constraint(lessThanOrEqualTo: content.trailingAnchor, constant: -28),
             right.topAnchor.constraint(equalTo: content.topAnchor, constant: 26),
             right.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -26),
-            right.widthAnchor.constraint(lessThanOrEqualToConstant: 860),
+            right.widthAnchor.constraint(lessThanOrEqualToConstant: 620),
             noticeLabel.widthAnchor.constraint(equalTo: right.widthAnchor),
             pageContainer.widthAnchor.constraint(equalTo: right.widthAnchor)
         ])

@@ -15,6 +15,7 @@ final class AppController {
     private let focusDetector = FocusDetector()
     private let inputSourceManager = InputSourceManager()
     private let panel = FloatingPanel()
+    private let clock = ContinuousClock()
     private lazy var refiner = LLMRefiner(settings: settings)
     private lazy var injector = TextInjector(focusDetector: focusDetector, inputSourceManager: inputSourceManager)
 
@@ -23,6 +24,7 @@ final class AppController {
     private var monitorStarted = false
     private var loggedFirstAudioLevel = false
     private var refinementTask: URLSessionDataTask?
+    private var recordingStoppedAt: ContinuousClock.Instant?
 
     var onChange: (@MainActor () -> Void)?
     var onUserMessage: (@MainActor (String) -> Void)?
@@ -131,6 +133,7 @@ final class AppController {
         refinementTask?.cancel()
         refinementTask = nil
         loggedFirstAudioLevel = false
+        recordingStoppedAt = nil
 
         do {
             try transcriber.start(
@@ -153,6 +156,7 @@ final class AppController {
         guard state.transition(to: .transcribing) else {
             return
         }
+        recordingStoppedAt = clock.now
         recorder.stop()
         DebugLog.event("recordingStop")
         panel.showStatus("Transcribing...")
@@ -176,6 +180,7 @@ final class AppController {
         transcriber.cancel()
         refinementTask?.cancel()
         refinementTask = nil
+        recordingStoppedAt = nil
         currentSession = nil
         latestPartial = ""
         _ = state.transition(to: .idle)
@@ -193,6 +198,7 @@ final class AppController {
             transcriber.cancel()
             refinementTask?.cancel()
             refinementTask = nil
+            recordingStoppedAt = nil
             currentSession = nil
             latestPartial = ""
             _ = state.transition(to: .idle)
@@ -250,6 +256,7 @@ final class AppController {
         }
 
         let locallyCorrected = correctionEngine.correct(raw, entries: dictionary.entries(for: settings.language))
+        let asrFinalizedIn = recordingStoppedAt.map { $0.duration(to: clock.now) }
 
         if settings.llmEnabled {
             // Refinement is allowed to improve obvious recognition mistakes, but it is not allowed
@@ -258,7 +265,11 @@ final class AppController {
             panel.showStatus("Refining...")
             onChange?()
             let hotwords = dictionary.contextualStrings(for: settings.language)
-            refinementTask = refiner.refine(locallyCorrected, hotwords: hotwords) { [weak self] refined in
+            refinementTask = refiner.refine(
+                locallyCorrected,
+                hotwords: hotwords,
+                asrFinalizedIn: asrFinalizedIn
+            ) { [weak self] refined in
                 guard let self, self.isCurrentSession(sessionID) else {
                     return
                 }
@@ -311,6 +322,7 @@ final class AppController {
                 self.saveHistory(text, result: HistoryResult.copied, app: historyApp)
             }
             self.refinementTask = nil
+            self.recordingStoppedAt = nil
             self.currentSession = nil
             self.latestPartial = ""
             _ = self.state.transition(to: .idle)
@@ -323,6 +335,7 @@ final class AppController {
         transcriber.cancel()
         refinementTask?.cancel()
         refinementTask = nil
+        recordingStoppedAt = nil
         currentSession = nil
         latestPartial = ""
         _ = state.transition(to: .idle)

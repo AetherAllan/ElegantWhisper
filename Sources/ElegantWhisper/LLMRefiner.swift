@@ -1,5 +1,39 @@
 import Foundation
 
+private extension Duration {
+    var milliseconds: Double {
+        let components = components
+        return Double(components.seconds) * 1_000 + Double(components.attoseconds) / 1_000_000_000_000_000
+    }
+}
+
+struct RefinementMetrics: Sendable {
+    let asrFinalizedIn: Duration?
+    let requestStartedAt: ContinuousClock.Instant
+    var firstByteAt: ContinuousClock.Instant?
+    var completedAt: ContinuousClock.Instant?
+
+    func summaryLine() -> String {
+        let asr = asrFinalizedIn.map(Self.formatMilliseconds) ?? "n/a"
+        guard let firstByteAt, let completedAt else {
+            return "polishMetrics ASR finalize: \(asr) | LLM TTFB: n/a | LLM generation: n/a | Total polish: n/a"
+        }
+
+        let ttfb = requestStartedAt.duration(to: firstByteAt)
+        let generation = firstByteAt.duration(to: completedAt)
+        let total = requestStartedAt.duration(to: completedAt)
+        return "polishMetrics ASR finalize: \(asr) | LLM TTFB: \(Self.formatMilliseconds(ttfb)) | LLM generation: \(Self.formatMilliseconds(generation)) | Total polish: \(Self.formatSeconds(total))"
+    }
+
+    private static func formatMilliseconds(_ duration: Duration) -> String {
+        "\(Int64(duration.milliseconds.rounded())) ms"
+    }
+
+    private static func formatSeconds(_ duration: Duration) -> String {
+        String(format: "%.2f s", duration.milliseconds / 1_000)
+    }
+}
+
 final class LLMRefiner: Sendable {
     private let settings: SettingsStore
     private let stylePacks: StylePackStore
@@ -13,6 +47,7 @@ final class LLMRefiner: Sendable {
     func refine(
         _ text: String,
         hotwords: [String] = [],
+        asrFinalizedIn: Duration? = nil,
         completion: @escaping @MainActor @Sendable (String) -> Void
     ) -> URLSessionDataTask? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -40,8 +75,10 @@ final class LLMRefiner: Sendable {
             return nil
         }
 
-        DebugLog.event("llmRefineStarted")
-        let task = URLSession.shared.dataTask(with: request) { data, response, error in
+        let requestStartedAt = ContinuousClock().now
+        let metrics = RefinementMetrics(asrFinalizedIn: asrFinalizedIn, requestStartedAt: requestStartedAt)
+        let delegate = TimedLLMRequestDelegate(metrics: metrics) { data, response, error, metrics in
+            DebugLog.event(metrics.summaryLine())
             if let error {
                 DebugLog.event("llmRefineFallback:error:\(error._code)")
                 Task { @MainActor in
@@ -57,7 +94,7 @@ final class LLMRefiner: Sendable {
                 return
             }
             guard (200..<300).contains(http.statusCode) else {
-                DebugLog.event("llmRefineFallback:http\(http.statusCode)")
+                DebugLog.event("llmRefineFallback:http\(http.statusCode):\(self.providerErrorReason(from: data) ?? "unknown")")
                 Task { @MainActor in
                     completion(text)
                 }
@@ -84,6 +121,7 @@ final class LLMRefiner: Sendable {
                 }
                 return
             }
+            DebugLog.event("llmRefineResponse:\(response.provider ?? "unknown"):\(response.model ?? "unknown"):\(choice.finishReason ?? "unknown")")
             guard let correction = self.acceptedCorrection(original: trimmed, choice: choice) else {
                 DebugLog.event("llmRefineFallback:rejected")
                 Task { @MainActor in
@@ -96,6 +134,13 @@ final class LLMRefiner: Sendable {
                 completion(correction)
             }
         }
+        let queue = OperationQueue()
+        queue.maxConcurrentOperationCount = 1
+        let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: queue)
+
+        DebugLog.event("llmRefineStarted")
+        DebugLog.event("llmHTTPStart")
+        let task = session.dataTask(with: request)
         task.resume()
         return task
     }
@@ -118,15 +163,17 @@ final class LLMRefiner: Sendable {
             guard let http = response as? HTTPURLResponse,
                   (200..<300).contains(http.statusCode)
             else {
+                let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+                let reason = self.providerErrorReason(from: data) ?? "request failed"
                 Task { @MainActor in
-                    completion(false, "HTTP request failed")
+                    completion(false, "HTTP \(statusCode): \(reason)")
                 }
                 return
             }
             guard let data,
                   data.count < 512_000,
                   let response = try? JSONDecoder().decode(ChatResponse.self, from: data),
-                  response.choices.first?.message.content.isEmpty == false
+                  response.choices.first?.message.content?.isEmpty == false
             else {
                 Task { @MainActor in
                     completion(false, "Empty or invalid response")
@@ -163,7 +210,8 @@ final class LLMRefiner: Sendable {
                 ChatMessage(role: "user", content: text)
             ],
             temperature: 0,
-            maxTokens: maxTokens(for: text)
+            maxTokens: maxTokens(for: text),
+            reasoning: provider.reasoningPolicy
         )
 
         request.httpBody = try? JSONEncoder().encode(body)
@@ -181,7 +229,7 @@ final class LLMRefiner: Sendable {
         guard choice.finishReason != "length" else {
             return nil
         }
-        let corrected = normalizeModelOutput(choice.message.content)
+        let corrected = normalizeModelOutput(choice.message.content ?? "")
         guard acceptsCorrection(original: original, corrected: corrected) else {
             return nil
         }
@@ -212,10 +260,10 @@ final class LLMRefiner: Sendable {
     }
 
     func maxTokens(for text: String) -> Int {
-        // Keep short requests cheap, but do not cap long dictations at 256 tokens. The output
-        // should usually be close to input length, so a character-based ceiling is enough here and
-        // avoids building a tokenizer just for a safety budget.
-        min(4096, max(256, text.count * 2))
+        // Polishing should return text close to the transcript length. A 256-token floor gives
+        // free/router models too much room to emit reasoning or explanations before any usable
+        // correction. Keep the short-text floor small, but still scale for long dictations.
+        min(4096, max(96, text.count * 2))
     }
 
     func effectiveTimeout() -> TimeInterval {
@@ -263,6 +311,27 @@ final class LLMRefiner: Sendable {
         return value
     }
 
+    func providerErrorReason(from data: Data?) -> String? {
+        guard let data,
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let error = object["error"] as? [String: Any],
+              let message = error["message"] as? String
+        else {
+            return nil
+        }
+        let lower = message.lowercased()
+        if lower.contains("free-models-per-day") {
+            return "free-models-per-day"
+        }
+        if lower.contains("rate limit") {
+            return "rate-limit"
+        }
+        if lower.contains("invalid") {
+            return "invalid-request"
+        }
+        return "provider-error"
+    }
+
     private func completionsURL(from base: URL) -> URL {
         if base.path.trimmingCharacters(in: .init(charactersIn: "/")).hasSuffix("chat/completions") {
             return base
@@ -298,27 +367,81 @@ final class LLMRefiner: Sendable {
     }
 }
 
+private final class TimedLLMRequestDelegate: NSObject, URLSessionDataDelegate, @unchecked Sendable {
+    private let completion: @Sendable (Data?, URLResponse?, Error?, RefinementMetrics) -> Void
+    private let clock = ContinuousClock()
+    private var metrics: RefinementMetrics
+    private var body = Data()
+
+    init(
+        metrics: RefinementMetrics,
+        completion: @escaping @Sendable (Data?, URLResponse?, Error?, RefinementMetrics) -> Void
+    ) {
+        self.metrics = metrics
+        self.completion = completion
+    }
+
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        // TTFB is measured at the first response body byte. That is close enough for the product
+        // question here: high TTFB means network/provider/model queue, while low TTFB with a long
+        // completion tail means generation speed or output length.
+        if metrics.firstByteAt == nil {
+            metrics.firstByteAt = clock.now
+            DebugLog.event("llmHTTPFirstByte")
+        }
+        body.append(data)
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        metrics.completedAt = clock.now
+        DebugLog.event("llmHTTPComplete")
+        completion(body, task.response, error, metrics)
+        session.finishTasksAndInvalidate()
+    }
+}
+
 private struct ChatRequest: Encodable {
     let model: String
     let messages: [ChatMessage]
     let temperature: Double
     let maxTokens: Int
+    let reasoning: ChatReasoning?
 
     enum CodingKeys: String, CodingKey {
         case model
         case messages
         case temperature
         case maxTokens = "max_tokens"
+        case reasoning
+    }
+}
+
+private struct ChatReasoning: Encodable {
+    let effort: String
+    let exclude: Bool
+}
+
+private extension LLMProvider {
+    var reasoningPolicy: ChatReasoning? {
+        switch self {
+        case .openRouterFree:
+            // OpenRouter Free is a random router, so this is only a best-effort hint. Some routed
+            // models ignore or reject non-thinking mode; fallback validation still protects paste.
+            ChatReasoning(effort: "none", exclude: true)
+        case .openAI, .custom:
+            nil
+        }
     }
 }
 
 struct ChatMessage: Codable {
     let role: String
-    let content: String
+    let content: String?
 }
 
 struct ChatResponse: Decodable {
     let model: String?
+    let provider: String?
     let choices: [Choice]
 
     struct Choice: Decodable {

@@ -3,6 +3,18 @@ import Foundation
 import XCTest
 
 final class LLMRefinerTests: XCTestCase {
+    func testRefinementMetricsSummaryLine() {
+        let start = ContinuousClock().now
+        var metrics = RefinementMetrics(asrFinalizedIn: .milliseconds(420), requestStartedAt: start)
+        metrics.firstByteAt = start.advanced(by: .milliseconds(780))
+        metrics.completedAt = start.advanced(by: .milliseconds(1_290))
+
+        XCTAssertEqual(
+            metrics.summaryLine(),
+            "polishMetrics ASR finalize: 420 ms | LLM TTFB: 780 ms | LLM generation: 510 ms | Total polish: 1.29 s"
+        )
+    }
+
     func testAcceptsSmallConservativeCorrection() {
         let refiner = LLMRefiner(settings: .shared)
 
@@ -32,6 +44,37 @@ final class LLMRefinerTests: XCTestCase {
         )
 
         XCTAssertFalse(refiner.acceptsChoice(original: "这是一个比较长的原始转写，不能因为模型截断就丢掉后半段。", choice: choice))
+    }
+
+    func testRejectsNullContentFromReasoningOnlyProviderResponse() throws {
+        let json = """
+        {
+          "model": "reasoning-model",
+          "choices": [
+            {
+              "message": { "role": "assistant", "content": null, "reasoning": "thinking only" },
+              "finish_reason": "length"
+            }
+          ]
+        }
+        """
+        let response = try JSONDecoder().decode(ChatResponse.self, from: Data(json.utf8))
+
+        XCTAssertFalse(LLMRefiner(settings: .shared).acceptsChoice(original: "我想用配森解析杰森", choice: response.choices[0]))
+    }
+
+    func testProviderErrorReasonClassifiesFreeDailyLimitWithoutLoggingBody() {
+        let data = Data("""
+        {
+          "error": {
+            "message": "Rate limit exceeded: free-models-per-day. Add credits.",
+            "code": 429
+          },
+          "user_id": "should-not-be-logged"
+        }
+        """.utf8)
+
+        XCTAssertEqual(LLMRefiner(settings: .shared).providerErrorReason(from: data), "free-models-per-day")
     }
 
     func testAcceptsWrappedModelCorrection() {
@@ -74,13 +117,24 @@ final class LLMRefinerTests: XCTestCase {
 
         let body = try XCTUnwrap(request.httpBody)
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
-        XCTAssertEqual(json["model"] as? String, "openrouter/free")
-        XCTAssertEqual(json["max_tokens"] as? Int, 256)
+        XCTAssertEqual(json["model"] as? String, "nvidia/nemotron-3-nano-30b-a3b:free")
+        XCTAssertEqual(json["max_tokens"] as? Int, 96)
+        let reasoning = try XCTUnwrap(json["reasoning"] as? [String: Any])
+        XCTAssertEqual(reasoning["effort"] as? String, "none")
+        XCTAssertEqual(reasoning["exclude"] as? Bool, true)
 
         let messages = try XCTUnwrap(json["messages"] as? [[String: Any]])
         let systemPrompt = try XCTUnwrap(messages.first?["content"] as? String)
         XCTAssertTrue(systemPrompt.contains("Python"))
         XCTAssertTrue(systemPrompt.contains("JSON"))
+    }
+
+    func testOldOpenRouterFreeRouterSettingUsesStableFreeModel() {
+        let settings = makeSettings()
+        settings.llmProvider = .openRouterFree
+        settings.model = "openrouter/free"
+
+        XCTAssertEqual(settings.model, "nvidia/nemotron-3-nano-30b-a3b:free")
     }
 
     func testLongRequestGetsLargerOutputBudget() throws {

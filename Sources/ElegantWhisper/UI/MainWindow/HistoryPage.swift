@@ -27,18 +27,23 @@ extension MainWindowController {
         let title = NSTextField(labelWithString: "\(date) · \(app) · \(displayName(for: item.result))")
         title.font = .systemFont(ofSize: 12, weight: .medium)
         title.textColor = .secondaryLabelColor
+        title.lineBreakMode = .byTruncatingTail
+        title.maximumNumberOfLines = 1
+        title.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         let body = NSTextField(labelWithString: text)
         body.font = .systemFont(ofSize: 14)
         body.textColor = .labelColor
         body.lineBreakMode = .byTruncatingTail
         body.maximumNumberOfLines = includeActions ? 2 : 1
+        body.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         let textStack = NSStackView(views: [title, body])
         textStack.orientation = .vertical
         textStack.alignment = .leading
         textStack.spacing = 4
         textStack.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        textStack.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         guard includeActions else {
             return textStack
@@ -54,6 +59,7 @@ extension MainWindowController {
         row.alignment = .centerY
         row.spacing = 10
         row.distribution = .fill
+        row.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         return row
     }
 }

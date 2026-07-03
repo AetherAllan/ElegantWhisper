@@ -24,7 +24,7 @@ enum LLMProvider: String, CaseIterable, Codable {
     var defaultModel: String? {
         switch self {
         case .openAI: "gpt-4o-mini"
-        case .openRouterFree: "openrouter/free"
+        case .openRouterFree: "nvidia/nemotron-3-nano-30b-a3b:free"
         case .custom: nil
         }
     }
