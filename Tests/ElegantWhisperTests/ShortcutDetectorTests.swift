@@ -3,11 +3,11 @@ import ApplicationServices
 import XCTest
 
 final class ShortcutDetectorTests: XCTestCase {
-    func testSingleLeftCommandTogglesOnRelease() {
+    func testSingleLeftCommandDoesNotToggle() {
         let detector = ShortcutDetector()
 
         XCTAssertNil(detector.handleFlagsChanged(keyCode: 55, flags: [.maskCommand]))
-        XCTAssertEqual(detector.handleFlagsChanged(keyCode: 55, flags: []), .toggle)
+        XCTAssertNil(detector.handleFlagsChanged(keyCode: 55, flags: []))
     }
 
     func testSingleRightOptionTogglesOnRelease() {
@@ -34,7 +34,7 @@ final class ShortcutDetectorTests: XCTestCase {
         XCTAssertNil(detector.handleFlagsChanged(keyCode: 54, flags: []))
 
         XCTAssertNil(detector.handleFlagsChanged(keyCode: 55, flags: [.maskCommand]))
-        XCTAssertEqual(detector.handleFlagsChanged(keyCode: 55, flags: []), .toggle)
+        XCTAssertNil(detector.handleFlagsChanged(keyCode: 55, flags: []))
     }
 
     func testCommandOptionCrossChordDoesNotToggle() {
@@ -49,9 +49,9 @@ final class ShortcutDetectorTests: XCTestCase {
     func testEscapeCancelsAndResetsDetector() {
         let detector = ShortcutDetector()
 
-        XCTAssertNil(detector.handleFlagsChanged(keyCode: 55, flags: [.maskCommand]))
+        XCTAssertNil(detector.handleFlagsChanged(keyCode: 61, flags: [.maskAlternate]))
         XCTAssertEqual(detector.handleKeyDown(keyCode: 53), .cancel)
-        XCTAssertNil(detector.handleFlagsChanged(keyCode: 55, flags: []))
+        XCTAssertNil(detector.handleFlagsChanged(keyCode: 61, flags: []))
     }
 
     func testStrayModifierReleaseDoesNotArmDetector() {
@@ -59,5 +59,28 @@ final class ShortcutDetectorTests: XCTestCase {
 
         XCTAssertNil(detector.handleFlagsChanged(keyCode: 55, flags: []))
         XCTAssertNil(detector.handleFlagsChanged(keyCode: 55, flags: []))
+    }
+
+    func testCommandVDoesNotToggle() {
+        let detector = ShortcutDetector()
+
+        XCTAssertNil(detector.handleFlagsChanged(keyCode: 55, flags: [.maskCommand]))
+        XCTAssertNil(detector.handleKeyDown(keyCode: 9))
+        XCTAssertNil(detector.handleFlagsChanged(keyCode: 55, flags: []))
+    }
+
+    func testCommandCDoesNotToggle() {
+        let detector = ShortcutDetector()
+
+        XCTAssertNil(detector.handleFlagsChanged(keyCode: 55, flags: [.maskCommand]))
+        XCTAssertNil(detector.handleKeyDown(keyCode: 8))
+        XCTAssertNil(detector.handleFlagsChanged(keyCode: 55, flags: []))
+    }
+
+    func testSingleLeftOptionDoesNotToggle() {
+        let detector = ShortcutDetector()
+
+        XCTAssertNil(detector.handleFlagsChanged(keyCode: 58, flags: [.maskAlternate]))
+        XCTAssertNil(detector.handleFlagsChanged(keyCode: 58, flags: []))
     }
 }

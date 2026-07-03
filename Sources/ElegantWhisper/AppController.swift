@@ -70,7 +70,7 @@ final class AppController {
         }
         let status = permissions.status()
         // Accessibility gives us AX focus and paste safety; Input Monitoring is required for
-        // background Command/Option detection. Without both, the app appears to work only while
+        // background Right Option detection. Without both, the app appears to work only while
         // its own Dock window is focused.
         guard status.accessibilityGranted, status.inputMonitoringGranted else {
             onUserMessage?("Accessibility and Input Monitoring required before hotkeys can start")
@@ -141,6 +141,7 @@ final class AppController {
             DebugLog.event("recordingStart")
             _ = state.transition(to: .recording)
             panel.showRecording(text: "")
+            panel.retryShowIfNeeded()
             DebugLog.event("panelShow")
             onChange?()
         } catch {
@@ -234,8 +235,8 @@ final class AppController {
         permissions.openInputMonitoringSettings()
     }
 
-    func settingsWindowController() -> SettingsWindowController {
-        SettingsWindowController(settings: settings, refiner: refiner)
+    func mainWindowController() -> MainWindowController {
+        MainWindowController(settings: settings, refiner: refiner, controller: self)
     }
 
     private func handleFinalTranscript(_ text: String, sessionID: UUID) {
@@ -256,7 +257,8 @@ final class AppController {
             _ = state.transition(to: .refining)
             panel.showStatus("Refining...")
             onChange?()
-            refinementTask = refiner.refine(locallyCorrected) { [weak self] refined in
+            let hotwords = dictionary.contextualStrings(for: settings.language)
+            refinementTask = refiner.refine(locallyCorrected, hotwords: hotwords) { [weak self] refined in
                 guard let self, self.isCurrentSession(sessionID) else {
                     return
                 }

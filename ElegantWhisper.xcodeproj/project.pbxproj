@@ -24,7 +24,6 @@
 		01000000000000000000000F /* PermissionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02000000000000000000000F /* PermissionManager.swift */; };
 		010000000000000000000010 /* PermissionOnboardingWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000010 /* PermissionOnboardingWindow.swift */; };
 		010000000000000000000011 /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000011 /* SettingsStore.swift */; };
-		010000000000000000000012 /* SettingsWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000012 /* SettingsWindow.swift */; };
 		010000000000000000000013 /* SpeechTranscriber.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000013 /* SpeechTranscriber.swift */; };
 		010000000000000000000014 /* TextInjector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000014 /* TextInjector.swift */; };
 		010000000000000000000015 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000015 /* main.swift */; };
@@ -32,6 +31,18 @@
 		010000000000000000000017 /* DictationSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000017 /* DictationSession.swift */; };
 		010000000000000000000018 /* DictionaryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000018 /* DictionaryStore.swift */; };
 		010000000000000000000019 /* CorrectionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000019 /* CorrectionEngine.swift */; };
+		01000000000000000000001A /* LLMProviderPreset.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02000000000000000000001A /* LLMProviderPreset.swift */; };
+		01000000000000000000001B /* LLMPromptBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02000000000000000000001B /* LLMPromptBuilder.swift */; };
+		01000000000000000000001C /* DictionaryPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02000000000000000000001C /* DictionaryPage.swift */; };
+		01000000000000000000001D /* HistoryPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02000000000000000000001D /* HistoryPage.swift */; };
+		01000000000000000000001E /* MainWindowActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02000000000000000000001E /* MainWindowActions.swift */; };
+		01000000000000000000001F /* MainWindowComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02000000000000000000001F /* MainWindowComponents.swift */; };
+		010000000000000000000020 /* MainWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000020 /* MainWindowController.swift */; };
+		010000000000000000000021 /* MainWindowTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000021 /* MainWindowTypes.swift */; };
+		010000000000000000000022 /* OverviewPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000022 /* OverviewPage.swift */; };
+		010000000000000000000023 /* PolishingPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000023 /* PolishingPage.swift */; };
+		010000000000000000000024 /* SettingsPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000024 /* SettingsPage.swift */; };
+		010000000000000000000025 /* StylePackStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000025 /* StylePackStore.swift */; };
 		010000000000000000000101 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000101 /* AppIcon.icns */; };
 		010000000000000000000102 /* ElegantWhisperLogo.png in Resources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000102 /* ElegantWhisperLogo.png */; };
 		010000000000000000000201 /* AppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 020000000000000000000201 /* AppKit.framework */; };
@@ -62,7 +73,6 @@
 		02000000000000000000000F /* PermissionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionManager.swift; sourceTree = "<group>"; };
 		020000000000000000000010 /* PermissionOnboardingWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionOnboardingWindow.swift; sourceTree = "<group>"; };
 		020000000000000000000011 /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
-		020000000000000000000012 /* SettingsWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsWindow.swift; sourceTree = "<group>"; };
 		020000000000000000000013 /* SpeechTranscriber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechTranscriber.swift; sourceTree = "<group>"; };
 		020000000000000000000014 /* TextInjector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextInjector.swift; sourceTree = "<group>"; };
 		020000000000000000000015 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
@@ -70,6 +80,18 @@
 		020000000000000000000017 /* DictationSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationSession.swift; sourceTree = "<group>"; };
 		020000000000000000000018 /* DictionaryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictionaryStore.swift; sourceTree = "<group>"; };
 		020000000000000000000019 /* CorrectionEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CorrectionEngine.swift; sourceTree = "<group>"; };
+		02000000000000000000001A /* LLMProviderPreset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMProviderPreset.swift; sourceTree = "<group>"; };
+		02000000000000000000001B /* LLMPromptBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMPromptBuilder.swift; sourceTree = "<group>"; };
+		02000000000000000000001C /* DictionaryPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictionaryPage.swift; sourceTree = "<group>"; };
+		02000000000000000000001D /* HistoryPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryPage.swift; sourceTree = "<group>"; };
+		02000000000000000000001E /* MainWindowActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowActions.swift; sourceTree = "<group>"; };
+		02000000000000000000001F /* MainWindowComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowComponents.swift; sourceTree = "<group>"; };
+		020000000000000000000020 /* MainWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowController.swift; sourceTree = "<group>"; };
+		020000000000000000000021 /* MainWindowTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowTypes.swift; sourceTree = "<group>"; };
+		020000000000000000000022 /* OverviewPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverviewPage.swift; sourceTree = "<group>"; };
+		020000000000000000000023 /* PolishingPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PolishingPage.swift; sourceTree = "<group>"; };
+		020000000000000000000024 /* SettingsPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsPage.swift; sourceTree = "<group>"; };
+		020000000000000000000025 /* StylePackStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StylePackStore.swift; sourceTree = "<group>"; };
 		020000000000000000000101 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
 		020000000000000000000102 /* ElegantWhisperLogo.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ElegantWhisperLogo.png; sourceTree = "<group>"; };
 		020000000000000000000103 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -134,18 +156,45 @@
 				02000000000000000000000A /* HistoryStore.swift */,
 				02000000000000000000000B /* InputSourceManager.swift */,
 				02000000000000000000000C /* KeychainStore.swift */,
+				02000000000000000000001B /* LLMPromptBuilder.swift */,
+				02000000000000000000001A /* LLMProviderPreset.swift */,
 				02000000000000000000000D /* LLMRefiner.swift */,
 				02000000000000000000000E /* OptionKeyMonitor.swift */,
 				02000000000000000000000F /* PermissionManager.swift */,
 				020000000000000000000010 /* PermissionOnboardingWindow.swift */,
 				020000000000000000000011 /* SettingsStore.swift */,
-				020000000000000000000012 /* SettingsWindow.swift */,
 				020000000000000000000016 /* ShortcutDetector.swift */,
 				020000000000000000000013 /* SpeechTranscriber.swift */,
+				020000000000000000000025 /* StylePackStore.swift */,
 				020000000000000000000014 /* TextInjector.swift */,
+				040000000000000000000006 /* UI */,
 				020000000000000000000015 /* main.swift */,
 			);
 			path = Sources/ElegantWhisper;
+			sourceTree = "<group>";
+		};
+		040000000000000000000006 /* UI */ = {
+			isa = PBXGroup;
+			children = (
+				040000000000000000000007 /* MainWindow */,
+			);
+			path = UI;
+			sourceTree = "<group>";
+		};
+		040000000000000000000007 /* MainWindow */ = {
+			isa = PBXGroup;
+			children = (
+				02000000000000000000001C /* DictionaryPage.swift */,
+				02000000000000000000001D /* HistoryPage.swift */,
+				02000000000000000000001E /* MainWindowActions.swift */,
+				02000000000000000000001F /* MainWindowComponents.swift */,
+				020000000000000000000020 /* MainWindowController.swift */,
+				020000000000000000000021 /* MainWindowTypes.swift */,
+				020000000000000000000022 /* OverviewPage.swift */,
+				020000000000000000000023 /* PolishingPage.swift */,
+				020000000000000000000024 /* SettingsPage.swift */,
+			);
+			path = MainWindow;
 			sourceTree = "<group>";
 		};
 		040000000000000000000003 /* Resources */ = {
@@ -272,10 +321,21 @@
 				01000000000000000000000F /* PermissionManager.swift in Sources */,
 				010000000000000000000010 /* PermissionOnboardingWindow.swift in Sources */,
 				010000000000000000000011 /* SettingsStore.swift in Sources */,
-				010000000000000000000012 /* SettingsWindow.swift in Sources */,
 				010000000000000000000016 /* ShortcutDetector.swift in Sources */,
 				010000000000000000000013 /* SpeechTranscriber.swift in Sources */,
+				010000000000000000000025 /* StylePackStore.swift in Sources */,
 				010000000000000000000014 /* TextInjector.swift in Sources */,
+				01000000000000000000001B /* LLMPromptBuilder.swift in Sources */,
+				01000000000000000000001A /* LLMProviderPreset.swift in Sources */,
+				01000000000000000000001C /* DictionaryPage.swift in Sources */,
+				01000000000000000000001D /* HistoryPage.swift in Sources */,
+				01000000000000000000001E /* MainWindowActions.swift in Sources */,
+				01000000000000000000001F /* MainWindowComponents.swift in Sources */,
+				010000000000000000000020 /* MainWindowController.swift in Sources */,
+				010000000000000000000021 /* MainWindowTypes.swift in Sources */,
+				010000000000000000000022 /* OverviewPage.swift in Sources */,
+				010000000000000000000023 /* PolishingPage.swift in Sources */,
+				010000000000000000000024 /* SettingsPage.swift in Sources */,
 				010000000000000000000015 /* main.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

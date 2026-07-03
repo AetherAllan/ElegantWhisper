@@ -92,6 +92,20 @@ final class FloatingPanel {
         show()
     }
 
+    func retryShowIfNeeded() {
+        let expectedID = presentationID
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.presentationID == expectedID, !self.panel.isVisible else {
+                return
+            }
+            // macOS occasionally accepts orderFrontRegardless before the panel has a stable
+            // screen/frame during app activation changes. Retry once; repeated retries would hide
+            // the real permission/window-level problem instead of fixing it.
+            DebugLog.event("panelShowRetry")
+            self.show()
+        }
+    }
+
     func updatePartial(_ text: String) {
         // Partial recognition can arrive in bursts. Do not animate every token:
         // the label should track Speech immediately while only status/success

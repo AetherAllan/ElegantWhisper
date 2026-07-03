@@ -2,18 +2,24 @@ import Foundation
 
 final class LLMRefiner: Sendable {
     private let settings: SettingsStore
+    private let stylePacks: StylePackStore
 
-    init(settings: SettingsStore) {
+    init(settings: SettingsStore, stylePacks: StylePackStore = .shared) {
         self.settings = settings
+        self.stylePacks = stylePacks
     }
 
     @discardableResult
-    func refine(_ text: String, completion: @escaping @MainActor @Sendable (String) -> Void) -> URLSessionDataTask? {
+    func refine(
+        _ text: String,
+        hotwords: [String] = [],
+        completion: @escaping @MainActor @Sendable (String) -> Void
+    ) -> URLSessionDataTask? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard settings.llmEnabled,
               !trimmed.isEmpty,
               !settings.apiKey.isEmpty,
-              let request = makeRequest(text: trimmed)
+              let request = makeRequest(text: trimmed, hotwords: hotwords)
         else {
             Task { @MainActor in
                 completion(text)
@@ -28,8 +34,8 @@ final class LLMRefiner: Sendable {
                   let data,
                   data.count < 512_000,
                   let response = try? JSONDecoder().decode(ChatResponse.self, from: data),
-                  let corrected = response.choices.first?.message.content.trimmingCharacters(in: .whitespacesAndNewlines),
-                  self.acceptsCorrection(original: trimmed, corrected: corrected)
+                  let choice = response.choices.first,
+                  self.acceptsChoice(original: trimmed, choice: choice)
             else {
                 Task { @MainActor in
                     completion(text)
@@ -37,7 +43,7 @@ final class LLMRefiner: Sendable {
                 return
             }
             Task { @MainActor in
-                completion(corrected)
+                completion(choice.message.content.trimmingCharacters(in: .whitespacesAndNewlines))
             }
         }
         task.resume()
@@ -45,7 +51,7 @@ final class LLMRefiner: Sendable {
     }
 
     func testConnection(completion: @escaping @MainActor @Sendable (Bool, String) -> Void) {
-        guard let request = makeRequest(text: "测试 Python 和 JSON。") else {
+        guard let request = makeRequest(text: "我想用配森解析杰森文件。", hotwords: ["Python", "JSON"]) else {
             Task { @MainActor in
                 completion(false, "Missing API settings")
             }
@@ -78,12 +84,12 @@ final class LLMRefiner: Sendable {
                 return
             }
             Task { @MainActor in
-                completion(true, "Connection OK")
+                completion(true, "Connection OK (\(response.model ?? self.settings.model))")
             }
         }.resume()
     }
 
-    private func makeRequest(text: String) -> URLRequest? {
+    func makeRequest(text: String, hotwords: [String] = []) -> URLRequest? {
         guard let base = URL(string: settings.apiBaseURL),
               isAllowedBaseURL(base),
               !settings.apiKey.isEmpty
@@ -92,24 +98,36 @@ final class LLMRefiner: Sendable {
         }
 
         let url = completionsURL(from: base)
+        let provider = settings.llmProvider
+        let stylePack = stylePacks.activePack()
         var request = URLRequest(url: url, timeoutInterval: settings.requestTimeout)
         request.httpMethod = "POST"
         request.setValue("Bearer \(settings.apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        provider.applyHeaders(to: &request)
 
         let body = ChatRequest(
             model: settings.model,
             messages: [
-                ChatMessage(role: "system", content: """
-                You correct conservative speech recognition errors only. Fix obvious Chinese homophones and spoken technical terms such as 配森 -> Python and 杰森 -> JSON. Do not polish, expand, summarize, translate, delete, or change meaning. If the text is already correct, return it unchanged. Return only the corrected text.
-                """),
+                ChatMessage(role: "system", content: LLMPromptBuilder.systemPrompt(stylePack: stylePack, hotwords: hotwords)),
                 ChatMessage(role: "user", content: text)
             ],
-            temperature: 0
+            temperature: 0,
+            maxTokens: maxTokens(for: text)
         )
 
         request.httpBody = try? JSONEncoder().encode(body)
         return request
+    }
+
+    func acceptsChoice(original: String, choice: ChatResponse.Choice) -> Bool {
+        // OpenAI-compatible APIs report `finish_reason=length` when max_tokens cuts the response.
+        // A truncated correction is worse than no correction because it can silently drop the end
+        // of a dictation before paste. Fall back to the original transcript instead.
+        guard choice.finishReason != "length" else {
+            return false
+        }
+        return acceptsCorrection(original: original, corrected: choice.message.content)
     }
 
     func acceptsCorrection(original: String, corrected: String) -> Bool {
@@ -133,6 +151,13 @@ final class LLMRefiner: Sendable {
             return true
         }
         return editDistanceRatio(original, corrected) <= 0.8
+    }
+
+    func maxTokens(for text: String) -> Int {
+        // Keep short requests cheap, but do not cap long dictations at 256 tokens. The output
+        // should usually be close to input length, so a character-based ceiling is enough here and
+        // avoids building a tokenizer just for a safety budget.
+        min(4096, max(256, text.count * 2))
     }
 
     private func completionsURL(from base: URL) -> URL {
@@ -174,17 +199,32 @@ private struct ChatRequest: Encodable {
     let model: String
     let messages: [ChatMessage]
     let temperature: Double
+    let maxTokens: Int
+
+    enum CodingKeys: String, CodingKey {
+        case model
+        case messages
+        case temperature
+        case maxTokens = "max_tokens"
+    }
 }
 
-private struct ChatMessage: Codable {
+struct ChatMessage: Codable {
     let role: String
     let content: String
 }
 
-private struct ChatResponse: Decodable {
+struct ChatResponse: Decodable {
+    let model: String?
     let choices: [Choice]
 
     struct Choice: Decodable {
         let message: ChatMessage
+        let finishReason: String?
+
+        enum CodingKeys: String, CodingKey {
+            case message
+            case finishReason = "finish_reason"
+        }
     }
 }

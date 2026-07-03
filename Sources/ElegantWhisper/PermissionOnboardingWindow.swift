@@ -64,7 +64,7 @@ final class PermissionOnboardingWindowController: NSWindowController {
         let title = NSTextField(labelWithString: "Set up \(AppConstants.productName)")
         title.font = .systemFont(ofSize: 26, weight: .bold)
 
-        let subtitle = NSTextField(labelWithString: "Grant these permissions one by one. Background Command/Option hotkeys require Input Monitoring.")
+        let subtitle = NSTextField(labelWithString: "Grant these permissions one by one. Background Right Option hotkeys require Input Monitoring.")
         subtitle.font = .systemFont(ofSize: 13)
         subtitle.textColor = .secondaryLabelColor
 
@@ -72,7 +72,7 @@ final class PermissionOnboardingWindowController: NSWindowController {
             row(title: "Microphone", reason: "Record your voice for dictation.", status: microphoneStatus, actionTitle: "Allow", action: #selector(requestMicrophone)),
             row(title: "Speech Recognition", reason: "Transcribe your voice with Apple's Speech framework.", status: speechStatus, actionTitle: "Allow", action: #selector(requestSpeech)),
             row(title: "Accessibility", reason: "Find the focused field and paste text safely.", status: accessibilityStatus, actionTitle: "Open Settings", action: #selector(requestAccessibility)),
-            row(title: "Input Monitoring", reason: "Listen for Command/Option while ElegantWhisper is in the background.", status: inputMonitoringStatus, actionTitle: "Allow", action: #selector(requestInputMonitoring))
+            row(title: "Input Monitoring", reason: "Listen for Right Option while ElegantWhisper is in the background.", status: inputMonitoringStatus, actionTitle: "Allow", action: #selector(requestInputMonitoring))
         ])
         rows.orientation = .vertical
         rows.spacing = 12

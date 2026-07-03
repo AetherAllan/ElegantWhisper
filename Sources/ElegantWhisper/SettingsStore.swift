@@ -38,6 +38,7 @@ final class SettingsStore: @unchecked Sendable {
     private enum Key {
         static let language = "language"
         static let llmEnabled = "llmEnabled"
+        static let llmProvider = "llmProvider"
         static let apiBaseURL = "apiBaseURL"
         static let model = "model"
         static let requestTimeout = "requestTimeout"
@@ -63,9 +64,25 @@ final class SettingsStore: @unchecked Sendable {
         }
     }
 
+    var llmProvider: LLMProvider {
+        get {
+            if let raw = defaults.string(forKey: Key.llmProvider),
+               let provider = LLMProvider(rawValue: raw)
+            {
+                return provider
+            }
+            // Existing installs only have Base URL / Model. Infer from Base URL so old settings
+            // keep working without a separate migration file.
+            return LLMProvider.inferred(from: apiBaseURL)
+        }
+        set {
+            defaults.set(newValue.rawValue, forKey: Key.llmProvider)
+        }
+    }
+
     var apiBaseURL: String {
         get {
-            defaults.string(forKey: Key.apiBaseURL) ?? "https://api.openai.com/v1"
+            defaults.string(forKey: Key.apiBaseURL) ?? LLMProvider.openAI.defaultBaseURL ?? "https://api.openai.com/v1"
         }
         set {
             defaults.set(newValue.trimmingCharacters(in: .whitespacesAndNewlines), forKey: Key.apiBaseURL)
@@ -83,7 +100,7 @@ final class SettingsStore: @unchecked Sendable {
 
     var model: String {
         get {
-            defaults.string(forKey: Key.model) ?? "gpt-4o-mini"
+            defaults.string(forKey: Key.model) ?? LLMProvider.openAI.defaultModel ?? "gpt-4o-mini"
         }
         set {
             defaults.set(newValue.trimmingCharacters(in: .whitespacesAndNewlines), forKey: Key.model)

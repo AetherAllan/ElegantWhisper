@@ -7,9 +7,7 @@ enum ShortcutAction: Equatable {
 }
 
 final class ShortcutDetector {
-    private let triggerKeyCodes: Set<Int64> = [54, 55, 58, 61]
-    private let commandKeyCodes: Set<Int64> = [54, 55]
-    private let optionKeyCodes: Set<Int64> = [58, 61]
+    private let triggerKeyCodes: Set<Int64> = [61]
     private let escapeKeyCode: Int64 = 53
 
     private var downTriggerKeys = Set<Int64>()
@@ -83,25 +81,13 @@ final class ShortcutDetector {
     }
 
     private func hasBlockingModifiers(_ flags: CGEventFlags, for keyCode: Int64) -> Bool {
-        if flags.contains(.maskShift) || flags.contains(.maskControl) {
-            return true
-        }
-        if commandKeyCodes.contains(keyCode) {
-            return flags.contains(.maskAlternate)
-        }
-        if optionKeyCodes.contains(keyCode) {
-            return flags.contains(.maskCommand)
-        }
-        return true
+        // Only right Option is a dictation trigger. Command is intentionally not a trigger:
+        // macOS users expect Cmd+V/C/A/Z to remain pure editing shortcuts even if CGEventTap
+        // misses the non-modifier keyDown inside a secure text field.
+        flags.contains(.maskShift) || flags.contains(.maskControl) || flags.contains(.maskCommand) || keyCode != 61
     }
 
     private func isModifierFlagDown(for keyCode: Int64, flags: CGEventFlags) -> Bool {
-        if commandKeyCodes.contains(keyCode) {
-            return flags.contains(.maskCommand)
-        }
-        if optionKeyCodes.contains(keyCode) {
-            return flags.contains(.maskAlternate)
-        }
-        return false
+        keyCode == 61 && flags.contains(.maskAlternate)
     }
 }

@@ -4,18 +4,21 @@ import AppKit
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let controller = AppController()
     private var statusItem: NSStatusItem?
-    private var settingsWindow: SettingsWindowController?
+    private var mainWindow: MainWindowController?
     private var onboardingWindow: PermissionOnboardingWindowController?
     private var lastMessage = ""
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
+        setupMainMenu()
         setupStatusItem()
         controller.onChange = { [weak self] in
             self?.rebuildMenu()
+            self?.mainWindow?.refresh()
         }
         controller.onUserMessage = { [weak self] message in
             self?.lastMessage = message
+            self?.mainWindow?.showNotice(message)
             self?.rebuildMenu()
         }
         controller.start()
@@ -44,6 +47,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         item.button?.title = AppConstants.productName
         statusItem = item
+    }
+
+    private func setupMainMenu() {
+        let mainMenu = NSMenu()
+
+        let appItem = NSMenuItem()
+        let appMenu = NSMenu(title: AppConstants.productName)
+        appMenu.addItem(NSMenuItem(title: "About \(AppConstants.productName)", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: ""))
+        appMenu.addItem(.separator())
+        appMenu.addItem(NSMenuItem(title: "Quit \(AppConstants.productName)", action: #selector(quit), keyEquivalent: "q"))
+        appItem.submenu = appMenu
+        mainMenu.addItem(appItem)
+
+        let editItem = NSMenuItem()
+        let editMenu = NSMenu(title: "Edit")
+        // AppKit text controls rely on the responder chain for editing commands. Without this
+        // standard menu, secure text fields can focus correctly yet ignore Cmd+V.
+        editMenu.addItem(NSMenuItem(title: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x"))
+        editMenu.addItem(NSMenuItem(title: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c"))
+        editMenu.addItem(NSMenuItem(title: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v"))
+        editMenu.addItem(.separator())
+        editMenu.addItem(NSMenuItem(title: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a"))
+        editItem.submenu = editMenu
+        mainMenu.addItem(editItem)
+
+        NSApp.mainMenu = mainMenu
     }
 
     private func rebuildMenu() {
@@ -196,9 +225,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func showMainWindow() {
-        if settingsWindow == nil {
-            settingsWindow = controller.settingsWindowController()
+        if mainWindow == nil {
+            mainWindow = controller.mainWindowController()
         }
-        settingsWindow?.showWindow(nil)
+        mainWindow?.showWindow(nil)
     }
 }

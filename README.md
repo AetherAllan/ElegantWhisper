@@ -2,7 +2,7 @@
 
 ElegantWhisper is a macOS 26+ Dock and menu-bar voice input app built with AppKit.
 
-It records with a single left/right Command or Option key tap, transcribes with Apple's Speech framework, optionally applies conservative OpenAI-compatible correction, then inserts the final text into the focused editable field when it is safe to do so.
+It records with a single Right Option key tap, transcribes with Apple's Speech framework, optionally applies OpenAI-compatible Style Pack polishing, then inserts the final text into the focused editable field when it is safe to do so.
 
 ## Requirements
 
@@ -133,7 +133,7 @@ Accessibility is required to find the focused editable field and perform simulat
 
 System Settings -> Privacy & Security -> Input Monitoring -> enable ElegantWhisper.
 
-Input Monitoring is required for Command/Option detection while ElegantWhisper is in the background or while another app is focused. ElegantWhisper checks Apple's ListenEvent permission with `CGPreflightListenEventAccess()` and `IOHIDCheckAccess(kIOHIDRequestTypeListenEvent)`, then starts a listen-only `CGEventTap`. If that tap cannot be created on a developer build, it falls back to an `IOHIDManager` keyboard listener that uses the same Input Monitoring permission.
+Input Monitoring is required for Right Option detection while ElegantWhisper is in the background or while another app is focused. ElegantWhisper checks Apple's ListenEvent permission with `CGPreflightListenEventAccess()` and `IOHIDCheckAccess(kIOHIDRequestTypeListenEvent)`, then starts a listen-only `CGEventTap`. If that tap cannot be created on a developer build, it falls back to an `IOHIDManager` keyboard listener that uses the same Input Monitoring permission.
 
 After enabling Input Monitoring, quit and reopen ElegantWhisper. macOS often requires a relaunch before a newly granted ListenEvent permission is visible to the running process.
 
@@ -141,9 +141,9 @@ The menu bar includes `Permissions Status` with shortcuts to the relevant System
 
 ## Usage
 
-- Tap left or right Command/Option once to start recording.
-- Tap Command/Option again to stop recording and transcribe.
-- Command/Option combined with other keys keeps normal macOS behavior and does not start or stop recording.
+- Tap Right Option once to start recording.
+- Tap Right Option again to stop recording and transcribe.
+- Command shortcuts such as Cmd+V/C/A/Z and Option combined with other keys keep normal macOS behavior and do not start or stop recording.
 - Use `Cancel Recording` from the menu bar to cancel the current recording without transcription.
 - If a valid editable field is focused, ElegantWhisper inserts the final text automatically.
 - If no safe editable field is available, ElegantWhisper keeps the final text on the clipboard and shows `Text copied to clipboard`.
@@ -159,12 +159,13 @@ Open `Open ElegantWhisper` from the menu bar to configure:
 - Whether to keep text on the clipboard when no editable field is available
 - Whether to save local transcription history
 - Personal dictionary terms and common wrong recognition forms
+- Style Pack prompt templates for LLM polishing
 
 The History section stores completed dictations locally in `~/Library/Application Support/ElegantWhisper/history.json`. Canceled recordings are not saved. History is enabled by default and can be disabled in Settings.
 
 The Dictionary section stores local correction terms in `~/Library/Application Support/ElegantWhisper/dictionary.json`. Add the correct term as `Term` and common wrong outputs as `Wrong forms`, for example `Python` with `配森` and `派森`. ElegantWhisper applies conservative local replacements after the final transcript. Dictionary files are local-only and written with user-only file permissions.
 
-`LLM Refinement` is disabled by default. When enabled, it sends only the final recognized text to an OpenAI-compatible `/chat/completions` endpoint and asks the model to fix obvious speech recognition errors without rewriting the text.
+`LLM Refinement` is disabled by default. When enabled, it sends only the final recognized text to an OpenAI-compatible `/chat/completions` endpoint and uses the active Style Pack prompt. Style Packs are stored locally in `~/Library/Application Support/ElegantWhisper/style-packs.json`; use `{{HOTWORDS}}` where dictionary terms should be injected.
 
 ## Languages
 
@@ -182,8 +183,8 @@ The selected language is saved in the `com.aetherallan.ElegantWhisper` UserDefau
 
 After building, manually verify:
 
-- Command/Option alone starts and stops recording.
-- Command/Option with other keys still works normally.
+- Right Option alone starts and stops recording.
+- Cmd+V/C/A/Z and Option with other keys still work normally.
 - The floating recording panel does not steal focus from the original app.
 - Text inserts into TextEdit, browser address fields, web inputs, and chat inputs.
 - Switching to another editable field during transcription inserts into the current field.
@@ -191,3 +192,4 @@ After building, manually verify:
 - Completed dictations appear in History; canceled dictations do not.
 - Dictionary entries replace configured wrong forms after the final transcript.
 - LLM failures fall back to the raw Apple Speech result.
+- Style Pack prompt edits persist after relaunch, and Reset restores built-in prompts.

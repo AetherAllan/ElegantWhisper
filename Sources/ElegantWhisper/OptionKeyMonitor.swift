@@ -3,7 +3,7 @@ import Foundation
 import IOKit.hid
 
 // The event tap and IOHID fallback deliberately live on a private run loop so
-// Command/Option detection keeps working while the app is in the background.
+// Right Option detection keeps working while the app is in the background.
 // Internal lifecycle state is protected by lifecycleLock because stop() can be
 // called from the app side while the event tap/watchdog is running on the
 // monitor thread. Callbacks are the only values that cross back to MainActor.
@@ -156,7 +156,7 @@ final class OptionKeyMonitor: @unchecked Sendable {
         guard let tap = CGEvent.tapCreate(
             tap: .cgSessionEventTap,
             place: .headInsertEventTap,
-            // Keep this listen-only. ElegantWhisper only observes modifier taps; Command/Option
+            // Keep this listen-only. ElegantWhisper only observes Right Option taps; modifier
             // combinations must still reach macOS and the frontmost app as real shortcuts.
             options: .listenOnly,
             eventsOfInterest: Self.keyboardEventMask,
@@ -330,7 +330,7 @@ final class OptionKeyMonitor: @unchecked Sendable {
         guard let keyCode = Self.hidUsageToKeyCode[usage] else {
             if isPressed {
                 // Non-trigger key presses invalidate the current modifier-only cycle. That is what
-                // preserves normal Command/Option shortcuts: Command+C, Option+Arrow, etc. remain
+                // preserves normal shortcuts: Command+C, Option+Arrow, etc. remain
                 // the foreground app's shortcuts and never become dictation toggles.
                 handleKeyDown(0)
             }
