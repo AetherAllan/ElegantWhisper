@@ -74,6 +74,7 @@ samples/private/
 
 # Runtime logs and temporary files
 logs/
+work/
 *.log
 tmp/
 temp/

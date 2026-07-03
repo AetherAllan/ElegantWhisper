@@ -46,10 +46,6 @@ enum LLMPromptBuilder {
     {{HOTWORDS}}
     """
 
-    static func conservativeCorrectionPrompt(hotwords: [String]) -> String {
-        systemPrompt(template: conservativeTemplate, hotwords: hotwords)
-    }
-
     static func systemPrompt(stylePack: StylePack, hotwords: [String]) -> String {
         systemPrompt(template: stylePack.systemPrompt, hotwords: hotwords)
     }

@@ -66,13 +66,3 @@ final class SidebarButton: NSButton {
         nil
     }
 }
-
-@MainActor
-final class HistoryTextButton: NSButton {
-    var historyText = ""
-}
-
-@MainActor
-final class DictionaryActionButton: NSButton {
-    var entryID: UUID?
-}

@@ -92,7 +92,6 @@ final class HistoryStore: @unchecked Sendable {
 
     private func save() {
         do {
-            try AppConstants.ensureApplicationDirectories()
             if loadFailed {
                 try quarantineUnreadableHistory()
                 loadFailed = false
@@ -100,11 +99,7 @@ final class HistoryStore: @unchecked Sendable {
                 try? FileManager.default.removeItem(at: backupURL)
                 try FileManager.default.copyItem(at: fileURL, to: backupURL)
             }
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-            let data = try encoder.encode(HistoryFile(version: 1, items: cachedItems))
-            try data.write(to: fileURL, options: .atomic)
-            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: fileURL.path)
+            try AppConstants.writePrivateJSON(HistoryFile(version: 1, items: cachedItems), to: fileURL)
         } catch {
             DebugLog.event("historySaveFailed")
         }

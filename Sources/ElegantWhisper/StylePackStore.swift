@@ -5,10 +5,8 @@ struct StylePack: Codable, Identifiable, Equatable {
     var name: String
     var description: String
     var systemPrompt: String
-    var enabled: Bool
     var active: Bool
     var updatedAt: Date
-    var builtIn: Bool
 }
 
 // Style packs are local prompt templates, not provider settings. Keeping them in one small JSON
@@ -35,14 +33,14 @@ final class StylePackStore: @unchecked Sendable {
     func activePack() -> StylePack {
         queue.sync {
             loadIfNeeded()
-            return cachedPacks.first { $0.active && $0.enabled } ?? Self.builtinPacks[0]
+            return cachedPacks.first { $0.active } ?? Self.builtinPacks[0]
         }
     }
 
     func setActive(id: String) {
         queue.sync {
             loadIfNeeded()
-            guard cachedPacks.contains(where: { $0.id == id && $0.enabled }) else {
+            guard cachedPacks.contains(where: { $0.id == id }) else {
                 return
             }
             for index in cachedPacks.indices {
@@ -119,7 +117,7 @@ final class StylePackStore: @unchecked Sendable {
             cachedPacks = Self.builtinPacks
             return
         }
-        if cachedPacks.contains(where: { $0.active && $0.enabled }) {
+        if cachedPacks.contains(where: { $0.active }) {
             return
         }
         for index in cachedPacks.indices {
@@ -129,12 +127,7 @@ final class StylePackStore: @unchecked Sendable {
 
     private func save() {
         do {
-            try AppConstants.ensureApplicationDirectories()
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-            let data = try encoder.encode(StylePackFile(version: 1, packs: cachedPacks))
-            try data.write(to: fileURL, options: .atomic)
-            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: fileURL.path)
+            try AppConstants.writePrivateJSON(StylePackFile(version: 1, packs: cachedPacks), to: fileURL)
         } catch {
             DebugLog.event("stylePackSaveFailed")
         }
@@ -146,30 +139,24 @@ final class StylePackStore: @unchecked Sendable {
             name: "Conservative Correction",
             description: "Fix obvious ASR mistakes without changing meaning.",
             systemPrompt: LLMPromptBuilder.conservativeTemplate,
-            enabled: true,
             active: true,
-            updatedAt: Date(timeIntervalSince1970: 0),
-            builtIn: true
+            updatedAt: Date(timeIntervalSince1970: 0)
         ),
         StylePack(
             id: "builtin.prompt-cleanup",
             name: "Prompt Cleanup",
             description: "Turn spoken prompts into clearer requests while keeping the original intent.",
             systemPrompt: LLMPromptBuilder.promptCleanupTemplate,
-            enabled: true,
             active: false,
-            updatedAt: Date(timeIntervalSince1970: 0),
-            builtIn: true
+            updatedAt: Date(timeIntervalSince1970: 0)
         ),
         StylePack(
             id: "builtin.technical",
             name: "Clear Technical Writing",
             description: "Clean technical dictation while preserving symbols, paths, APIs, and commands.",
             systemPrompt: LLMPromptBuilder.technicalTemplate,
-            enabled: true,
             active: false,
-            updatedAt: Date(timeIntervalSince1970: 0),
-            builtIn: true
+            updatedAt: Date(timeIntervalSince1970: 0)
         )
     ]
 }

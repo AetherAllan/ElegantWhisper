@@ -53,12 +53,12 @@ extension MainWindowController {
     }
 
     @objc func resetStylePack() {
-        guard let pack = selectedStylePack(), pack.builtIn else {
-            showNotice("Only built-in style packs can be reset")
+        guard let pack = selectedStylePack() else {
+            showNotice("No style pack selected")
             return
         }
         guard stylePacks.resetBuiltin(id: pack.id) else {
-            showNotice("Unable to reset style pack")
+            showNotice("Only built-in style packs can be reset")
             return
         }
         populateStylePackPopup()
@@ -120,8 +120,8 @@ extension MainWindowController {
         renderCurrentPage()
     }
 
-    @objc func deleteDictionaryTerm(_ sender: DictionaryActionButton) {
-        guard let id = sender.entryID else {
+    @objc func deleteDictionaryTerm(_ sender: NSButton) {
+        guard let id = uuid(from: sender) else {
             return
         }
         dictionary.delete(id: id)
@@ -129,16 +129,22 @@ extension MainWindowController {
         renderCurrentPage()
     }
 
-    @objc func copyHistory(_ sender: HistoryTextButton) {
+    @objc func copyHistory(_ sender: NSButton) {
+        guard let item = historyItem(from: sender) else {
+            return
+        }
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(sender.historyText, forType: .string)
+        NSPasteboard.general.setString(item.text, forType: .string)
         showNotice("Copied history item")
     }
 
-    @objc func useHistoryAsDictionaryTerm(_ sender: HistoryTextButton) {
+    @objc func useHistoryAsDictionaryTerm(_ sender: NSButton) {
+        guard let item = historyItem(from: sender) else {
+            return
+        }
         currentPage = .dictionary
         updateSidebarSelection()
-        dictionaryTermField.stringValue = sender.historyText
+        dictionaryTermField.stringValue = item.text
         dictionaryAliasesField.stringValue = ""
         showNotice("Edit the term and add wrong forms before saving")
         renderCurrentPage()
@@ -165,5 +171,19 @@ extension MainWindowController {
         text.components(separatedBy: CharacterSet(charactersIn: ",，;；\n"))
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
+    }
+
+    func historyItem(from sender: NSButton) -> HistoryItem? {
+        guard let id = uuid(from: sender) else {
+            return nil
+        }
+        return history.items().first { $0.id == id }
+    }
+
+    func uuid(from sender: NSButton) -> UUID? {
+        guard let rawValue = sender.identifier?.rawValue else {
+            return nil
+        }
+        return UUID(uuidString: rawValue)
     }
 }

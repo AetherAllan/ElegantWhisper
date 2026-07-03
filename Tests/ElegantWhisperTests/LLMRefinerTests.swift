@@ -152,7 +152,7 @@ final class LLMRefinerTests: XCTestCase {
     }
 
     func testPromptKeepsConservativeBoundary() {
-        let prompt = LLMPromptBuilder.conservativeCorrectionPrompt(hotwords: ["MCP"])
+        let prompt = LLMPromptBuilder.systemPrompt(template: LLMPromptBuilder.conservativeTemplate, hotwords: ["MCP"])
 
         XCTAssertTrue(prompt.contains("Do not polish"))
         XCTAssertTrue(prompt.contains("MCP"))

@@ -120,16 +120,11 @@ final class DictionaryStore: @unchecked Sendable {
 
     private func save() {
         do {
-            try AppConstants.ensureApplicationDirectories()
             if loadFailed {
                 try quarantineUnreadableDictionary()
                 loadFailed = false
             }
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-            let data = try encoder.encode(cachedEntries)
-            try data.write(to: fileURL, options: .atomic)
-            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: fileURL.path)
+            try AppConstants.writePrivateJSON(cachedEntries, to: fileURL)
         } catch {
             DebugLog.event("dictionarySaveFailed")
         }

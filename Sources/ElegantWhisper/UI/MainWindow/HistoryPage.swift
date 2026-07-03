@@ -49,10 +49,10 @@ extension MainWindowController {
             return textStack
         }
 
-        let copy = HistoryTextButton(title: "Copy", target: self, action: #selector(copyHistory(_:)))
-        copy.historyText = item.text
-        let useAsTerm = HistoryTextButton(title: "Use as Term", target: self, action: #selector(useHistoryAsDictionaryTerm(_:)))
-        useAsTerm.historyText = item.text
+        let copy = NSButton(title: "Copy", target: self, action: #selector(copyHistory(_:)))
+        copy.identifier = NSUserInterfaceItemIdentifier(item.id.uuidString)
+        let useAsTerm = NSButton(title: "Use as Term", target: self, action: #selector(useHistoryAsDictionaryTerm(_:)))
+        useAsTerm.identifier = NSUserInterfaceItemIdentifier(item.id.uuidString)
 
         let row = NSStackView(views: [textStack, copy, useAsTerm])
         row.orientation = .horizontal

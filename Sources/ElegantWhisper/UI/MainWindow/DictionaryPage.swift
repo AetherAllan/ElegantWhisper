@@ -56,8 +56,8 @@ extension MainWindowController {
         text.spacing = 3
         text.setContentHuggingPriority(.defaultLow, for: .horizontal)
 
-        let delete = DictionaryActionButton(title: "Delete", target: self, action: #selector(deleteDictionaryTerm(_:)))
-        delete.entryID = entry.id
+        let delete = NSButton(title: "Delete", target: self, action: #selector(deleteDictionaryTerm(_:)))
+        delete.identifier = NSUserInterfaceItemIdentifier(entry.id.uuidString)
 
         let row = NSStackView(views: [text, delete])
         row.orientation = .horizontal
