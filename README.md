@@ -15,9 +15,6 @@
   <img src="https://img.shields.io/badge/Swift-6.3-orange" alt="Swift 6.3">
 </p>
 
-<p align="center">
-  <img src="docs/assets/hero.png" width="820" alt="ElegantWhisper brand preview">
-</p>
 
 ElegantWhisper is a macOS 26+ Dock and menu-bar voice input app built with AppKit. It records with a single Right Option tap, transcribes with Apple's Speech framework, optionally applies OpenAI-compatible Style Pack polishing, then inserts the final text into the focused editable field when it is safe to do so.
 
