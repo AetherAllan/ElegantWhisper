@@ -22,6 +22,7 @@ final class TextInjector {
     func inject(
         _ text: String,
         target: FocusTarget?,
+        fallbackApp: NSRunningApplication?,
         completion: @escaping @MainActor @Sendable (InjectionResult) -> Void
     ) {
         let pasteboard = NSPasteboard.general
@@ -32,11 +33,20 @@ final class TextInjector {
         copy(text, sessionToken: sessionToken, to: pasteboard)
         let ownedChangeCount = pasteboard.changeCount
 
-        guard let target, focusDetector.isValid(target) else {
+        let targetApp: NSRunningApplication
+        let validatedTarget: FocusTarget?
+        if let target, focusDetector.isValid(target) {
+            targetApp = target.app
+            validatedTarget = target
+        } else if let fallbackApp, isUsableFallbackApp(fallbackApp) {
+            targetApp = fallbackApp
+            validatedTarget = nil
+            DebugLog.event("textInjectionUsingFallbackApp")
+        } else {
+            DebugLog.event(target == nil ? "textInjectionCopied:noTarget" : "textInjectionCopied:invalidTarget")
             completion(.copied)
             return
         }
-        let targetApp = target.app
 
         if NSWorkspace.shared.frontmostApplication?.processIdentifier != targetApp.processIdentifier {
             targetApp.activate(options: [])
@@ -44,17 +54,19 @@ final class TextInjector {
 
         let previousInputSource = inputSourceManager.switchToASCIIIfNeeded()
 
-        Task { @MainActor [weak self, targetApp, previousInputSource, snapshot, text, sessionToken] in
+        Task { @MainActor [weak self, validatedTarget, targetApp, previousInputSource, snapshot, text, sessionToken] in
             try? await Task.sleep(for: .milliseconds(150))
             let pasteboard = NSPasteboard.general
-            guard let self, self.canPaste(to: targetApp) else {
+            guard let self, self.canPaste(to: targetApp, target: validatedTarget) else {
                 self?.inputSourceManager.restore(previousInputSource)
+                DebugLog.event("textInjectionCopied:pasteCheckFailed")
                 completion(.copied)
                 return
             }
 
             guard self.paste() else {
                 self.inputSourceManager.restore(previousInputSource)
+                DebugLog.event("textInjectionCopied:pasteEventFailed")
                 completion(.copied)
                 return
             }
@@ -69,13 +81,24 @@ final class TextInjector {
                 snapshot.restore(to: pasteboard)
             }
             self.inputSourceManager.restore(previousInputSource)
+            DebugLog.event("textInjectionPasteAttempted")
             completion(.pasteAttempted)
         }
     }
 
-    private func canPaste(to app: NSRunningApplication) -> Bool {
+    private func canPaste(to app: NSRunningApplication, target: FocusTarget?) -> Bool {
         guard NSWorkspace.shared.frontmostApplication?.processIdentifier == app.processIdentifier else {
             return false
+        }
+
+        guard let target else {
+            // ponytail: optimistic paste fallback. Some real editors, especially Electron/Monaco
+            // and web inputs, do not expose a stable editable AX element even when the insertion
+            // cursor is visible. When AppController has no AX target but knows the non-ElegantWhisper
+            // frontmost app, copy text and send Cmd+V to that app. If this ever causes unwanted
+            // pastes in non-editor surfaces, make this app allowlisted instead of adding another
+            // broad AX tree crawler.
+            return true
         }
 
         // Re-read focus after activation. Browser and Electron editors often expose a new AX
@@ -83,10 +106,24 @@ final class TextInjector {
         // CFEqual(original, focused) makes valid inputs fall back to "copied". The safe
         // invariant is narrower and matches the product behavior: the same target process must
         // still own a currently focused editable element before we send Cmd+V.
-        guard let focused = focusDetector.currentEditableTarget(processIdentifier: app.processIdentifier) else {
-            return false
+        if let focused = focusDetector.currentEditableTarget(processIdentifier: app.processIdentifier) {
+            return focusDetector.isValid(focused)
         }
-        return focusDetector.isValid(focused)
+
+        // Cursor, Codex, and other Electron-backed editors can keep keyboard focus in the editor
+        // while AXFocusedUIElement briefly returns nil after activation. Falling back to the exact
+        // element captured at recording start avoids losing the transcript, but still keeps the
+        // safety boundary tight: the same app must be frontmost and the original AX element must
+        // still be alive/editable before Cmd+V is posted.
+        if focusDetector.isValid(target) {
+            DebugLog.event("pasteUsingOriginalTargetFallback")
+            return true
+        }
+        return false
+    }
+
+    private func isUsableFallbackApp(_ app: NSRunningApplication) -> Bool {
+        !app.isTerminated && app.bundleIdentifier != AppConstants.bundleIdentifier
     }
 
     private func copy(_ text: String, sessionToken: String, to pasteboard: NSPasteboard) {

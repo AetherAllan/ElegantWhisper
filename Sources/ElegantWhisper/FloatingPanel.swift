@@ -95,12 +95,16 @@ final class FloatingPanel {
     func retryShowIfNeeded() {
         let expectedID = presentationID
         DispatchQueue.main.async { [weak self] in
-            guard let self, self.presentationID == expectedID, !self.panel.isVisible else {
+            guard let self,
+                  self.presentationID == expectedID,
+                  (!self.panel.isVisible || self.panel.alphaValue < 0.9)
+            else {
                 return
             }
             // macOS occasionally accepts orderFrontRegardless before the panel has a stable
-            // screen/frame during app activation changes. Retry once; repeated retries would hide
-            // the real permission/window-level problem instead of fixing it.
+            // screen/frame during app activation changes. isVisible alone is not enough: an old
+            // fade-out can leave the panel visible but transparent. Retry once; repeated retries
+            // would hide the real permission/window-level problem instead of fixing it.
             DebugLog.event("panelShowRetry")
             self.show()
         }
@@ -157,6 +161,15 @@ final class FloatingPanel {
         pendingHide?.cancel()
         pendingHide = nil
         presentationID = UUID()
+        // A new dictation can start while the previous success/error fade-out is still running.
+        // In that window NSPanel may report isVisible == true while the old animation keeps its
+        // alpha near 0, so every presentation must reset the visual state before show() decides
+        // whether it needs to bring the panel forward again.
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0
+            context.allowsImplicitAnimation = false
+            panel.alphaValue = 1
+        }
     }
 
     private func scheduleHide(after delay: TimeInterval, presentationID: UUID) {
@@ -168,10 +181,12 @@ final class FloatingPanel {
     }
 
     private func hide(presentationID expectedID: UUID) {
+        guard presentationID == expectedID else {
+            return
+        }
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.22
             panel.animator().alphaValue = 0
-            panel.animator().setFrame(scaledFrame(0.96), display: true)
         } completionHandler: { [weak self] in
             Task { @MainActor in
                 guard self?.presentationID == expectedID else {
@@ -185,14 +200,18 @@ final class FloatingPanel {
 
     private func show() {
         position()
-        if !panel.isVisible {
+        let wasVisible = panel.isVisible
+        if !wasVisible {
             panel.alphaValue = 0
-            panel.orderFrontRegardless()
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.35
-                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-                panel.animator().alphaValue = 1
-            }
+        }
+        // Always front and restore alpha, even when AppKit says the panel is already visible.
+        // An interrupted hide animation can otherwise leave a visible window fully transparent.
+        panel.orderFrontRegardless()
+        DebugLog.event("panelShowState:visible=\(wasVisible):alpha=\(panel.alphaValue)")
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = wasVisible && panel.alphaValue >= 0.99 ? 0 : 0.12
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            panel.animator().alphaValue = 1
         }
     }
 
@@ -230,17 +249,6 @@ final class FloatingPanel {
         panel.setFrameOrigin(NSPoint(x: x, y: y))
     }
 
-    private func scaledFrame(_ scale: CGFloat) -> NSRect {
-        let frame = panel.frame
-        let newWidth = frame.width * scale
-        let newHeight = frame.height * scale
-        return NSRect(
-            x: frame.midX - newWidth / 2,
-            y: frame.midY - newHeight / 2,
-            width: newWidth,
-            height: newHeight
-        )
-    }
 }
 
 @MainActor
