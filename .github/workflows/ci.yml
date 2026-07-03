@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build and Test
+    runs-on: macos-26
+
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          sw_vers
+          xcodebuild -version
+          swift --version
+
+      - name: SwiftPM tests
+        run: swift test
+
+      - name: SwiftPM release build
+        run: swift build -c release --product ElegantWhisper
+
+      - name: Configure unsigned Xcode build
+        run: |
+          cat > Signing.xcconfig <<'EOF'
+          DEVELOPMENT_TEAM =
+          CODE_SIGNING_ALLOWED = NO
+          CODE_SIGNING_REQUIRED = NO
+          EOF
+
+      - name: Xcode release build
+        run: |
+          xcodebuild \
+            -project ElegantWhisper.xcodeproj \
+            -scheme ElegantWhisper \
+            -configuration Release \
+            -derivedDataPath build/CI \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            DEVELOPMENT_TEAM= \
+            build

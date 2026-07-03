@@ -1,8 +1,52 @@
-# ElegantWhisper
+<p align="center">
+  <img src="Resources/ElegantWhisperLogo.png" width="104" alt="ElegantWhisper icon">
+</p>
 
-ElegantWhisper is a macOS 26+ Dock and menu-bar voice input app built with AppKit.
+<h1 align="center">ElegantWhisper</h1>
 
-It records with a single Right Option key tap, transcribes with Apple's Speech framework, optionally applies OpenAI-compatible Style Pack polishing, then inserts the final text into the focused editable field when it is safe to do so.
+<p align="center">
+  Native voice input for macOS.<br>
+  Tap Right Option, speak naturally, and insert polished text anywhere.
+</p>
+
+<p align="center">
+  <a href="https://github.com/AetherAllan/ElegantWhisper/actions/workflows/ci.yml"><img src="https://github.com/AetherAllan/ElegantWhisper/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <img src="https://img.shields.io/badge/macOS-26%2B-black" alt="macOS 26+">
+  <img src="https://img.shields.io/badge/Swift-6.3-orange" alt="Swift 6.3">
+</p>
+
+<p align="center">
+  <img src="docs/assets/hero.png" width="820" alt="ElegantWhisper brand preview">
+</p>
+
+ElegantWhisper is a macOS 26+ Dock and menu-bar voice input app built with AppKit. It records with a single Right Option tap, transcribes with Apple's Speech framework, optionally applies OpenAI-compatible Style Pack polishing, then inserts the final text into the focused editable field when it is safe to do so.
+
+## Why ElegantWhisper
+
+- **Native macOS experience** - AppKit window, menu-bar controls, global hotkey, and compact floating bar.
+- **One-key dictation** - Tap Right Option to start, tap Right Option again to stop and transcribe.
+- **Automatic insertion** - Inserts into the focused editor when possible; otherwise keeps the result on the clipboard.
+- **Personal dictionary** - Correct project names, technical terms, people, and recurring recognition mistakes.
+- **Optional polishing** - Use OpenAI-compatible providers and Style Packs for conservative recognition cleanup.
+- **Local history** - Completed dictations are saved locally and canceled recordings are ignored.
+
+## How It Works
+
+1. Focus a text field in another app.
+2. Tap Right Option to start recording.
+3. Speak naturally while the floating bar shows audio level and partial text.
+4. Tap Right Option again to stop.
+5. ElegantWhisper finalizes the transcript, applies local corrections, optionally runs polishing, and inserts or copies the result.
+
+Command shortcuts such as Cmd+V/C/A/Z and Option combined with other keys keep normal macOS behavior and do not start or stop recording.
+
+## Privacy
+
+- History, dictionary entries, Style Packs, and settings are stored locally.
+- API credentials are stored in the macOS Keychain.
+- LLM polishing is disabled by default.
+- When polishing is enabled, only the recognized text is sent to the configured API provider.
+- Audio is processed through Apple's Speech framework.
 
 ## Requirements
 
@@ -13,67 +57,36 @@ It records with a single Right Option key tap, transcribes with Apple's Speech f
 - Accessibility permission
 - Input Monitoring permission
 
-## Local Signing
+## Installation For Local Development
 
-The Xcode project reads your Apple Development Team from a local `Signing.xcconfig` file. This file is gitignored and is never committed.
-
-After cloning the repository, create your local signing config once:
+Create a local signing config once:
 
 ```sh
 cp Signing.xcconfig.example Signing.xcconfig
 ```
 
-Then edit `Signing.xcconfig` and replace `YOUR_TEAM_ID_HERE` with your Team ID from **Xcode → Settings → Accounts**.
+Then edit `Signing.xcconfig` and replace `YOUR_TEAM_ID_HERE` with your Team ID from **Xcode -> Settings -> Accounts**. This file is gitignored; certificates and private keys stay in your macOS Keychain.
 
-The committed `Signing.xcconfig.example` contains only a placeholder. Certificates and private keys stay in your macOS Keychain and are not stored in the repository.
-
-## Build With Xcode
-
-Open the project directly:
+Build and run from Xcode:
 
 ```sh
 open ElegantWhisper.xcodeproj
 ```
 
-Then select the `ElegantWhisper` scheme and run it from Xcode. The Xcode target uses the same bundle identifier, app name, Info.plist, icon, and entitlements as the command-line build:
-
-- Bundle identifier: `com.aetherallan.ElegantWhisper`
-- Entitlements: `Resources/ElegantWhisper.entitlements`
-- Info.plist: `Resources/Info.plist`
-
-You can also build the Xcode project from Terminal:
-
-```sh
-make xcode-build
-```
-
-The Xcode-built app is created at:
-
-```text
-build/XcodeDerivedData/Build/Products/Debug/ElegantWhisper.app
-```
-
-Run the Xcode-built app with:
-
-```sh
-make xcode-run
-```
-
-## Build With SwiftPM
-
-The Swift Package Manager path is still available for fast command-line builds:
+Or use SwiftPM:
 
 ```sh
 make build
+make run
 ```
 
-## Create the SwiftPM App Bundle
+Create a signed SwiftPM app bundle:
 
 ```sh
 make install
 ```
 
-The signed app bundle is created at:
+The app bundle is created at:
 
 ```text
 build/ElegantWhisper.app
@@ -85,27 +98,7 @@ The Makefile signs with the first available Apple Development identity when poss
 make sign-info
 ```
 
-For distribution outside your machine, use a Developer ID certificate and a notarization flow.
-
-## Run The SwiftPM Bundle
-
-```sh
-make run
-```
-
-The app runs as a regular Dock app and also keeps a menu-bar status item for quick controls.
-
-## Stable Identifiers
-
-- Product name: `ElegantWhisper`
-- Executable name: `ElegantWhisper`
-- App bundle: `ElegantWhisper.app`
-- Bundle identifier: `com.aetherallan.ElegantWhisper`
-- Application Support: `~/Library/Application Support/ElegantWhisper/`
-- Transcription: Apple Speech framework
-- History: `~/Library/Application Support/ElegantWhisper/history.json`
-- UserDefaults suite: `com.aetherallan.ElegantWhisper`
-- Keychain service: `com.aetherallan.ElegantWhisper`
+For distribution outside your own machine, use a Developer ID certificate and Apple notarization. See [docs/RELEASE.md](docs/RELEASE.md).
 
 ## Permissions
 
@@ -139,33 +132,35 @@ After enabling Input Monitoring, quit and reopen ElegantWhisper. macOS often req
 
 The menu bar includes `Permissions Status` with shortcuts to the relevant System Settings panes.
 
-## Usage
-
-- Tap Right Option once to start recording.
-- Tap Right Option again to stop recording and transcribe.
-- Command shortcuts such as Cmd+V/C/A/Z and Option combined with other keys keep normal macOS behavior and do not start or stop recording.
-- Use `Cancel Recording` from the menu bar to cancel the current recording without transcription.
-- If a valid editable field is focused, ElegantWhisper inserts the final text automatically.
-- If no safe editable field is available, ElegantWhisper keeps the final text on the clipboard and shows `Text copied to clipboard`.
-
 ## Settings
 
 Open `Open ElegantWhisper` from the menu bar to configure:
 
-- API Base URL
-- API Key
-- Model
-- Request timeout
+- API Base URL, API Key, Model, and request timeout
 - Whether to keep text on the clipboard when no editable field is available
 - Whether to save local transcription history
 - Personal dictionary terms and common wrong recognition forms
 - Style Pack prompt templates for LLM polishing
 
-The History section stores completed dictations locally in `~/Library/Application Support/ElegantWhisper/history.json`. Canceled recordings are not saved. History is enabled by default and can be disabled in Settings.
+History is stored at:
 
-The Dictionary section stores local correction terms in `~/Library/Application Support/ElegantWhisper/dictionary.json`. Add the correct term as `Term` and common wrong outputs as `Wrong forms`, for example `Python` with `配森` and `派森`. ElegantWhisper applies conservative local replacements after the final transcript. Dictionary files are local-only and written with user-only file permissions.
+```text
+~/Library/Application Support/ElegantWhisper/history.json
+```
 
-`LLM Refinement` is disabled by default. When enabled, it sends only the final recognized text to an OpenAI-compatible `/chat/completions` endpoint and uses the active Style Pack prompt. Style Packs are stored locally in `~/Library/Application Support/ElegantWhisper/style-packs.json`; use `{{HOTWORDS}}` where dictionary terms should be injected.
+Dictionary entries are stored at:
+
+```text
+~/Library/Application Support/ElegantWhisper/dictionary.json
+```
+
+Style Packs are stored at:
+
+```text
+~/Library/Application Support/ElegantWhisper/style-packs.json
+```
+
+`LLM Refinement` is disabled by default. When enabled, it sends only the final recognized text to an OpenAI-compatible `/chat/completions` endpoint and uses the active Style Pack prompt. Use `{{HOTWORDS}}` where dictionary terms should be injected.
 
 ## Languages
 
@@ -178,6 +173,27 @@ The `Language` menu supports:
 - 한국어
 
 The selected language is saved in the `com.aetherallan.ElegantWhisper` UserDefaults suite. The API key is stored in the macOS Keychain under the same stable service name.
+
+## CI/CD
+
+CI runs on GitHub Actions for every push to `main` and every pull request. It verifies:
+
+- `swift test`
+- `swift build -c release --product ElegantWhisper`
+- unsigned Xcode Release build
+
+Release CD is intentionally not enabled yet. Public distribution requires Developer ID signing, Apple notarization, and GitHub Secrets. See [docs/RELEASE.md](docs/RELEASE.md) for the release checklist.
+
+## Stable Identifiers
+
+- Product name: `ElegantWhisper`
+- Executable name: `ElegantWhisper`
+- App bundle: `ElegantWhisper.app`
+- Bundle identifier: `com.aetherallan.ElegantWhisper`
+- Application Support: `~/Library/Application Support/ElegantWhisper/`
+- Transcription: Apple Speech framework
+- UserDefaults suite: `com.aetherallan.ElegantWhisper`
+- Keychain service: `com.aetherallan.ElegantWhisper`
 
 ## Manual Verification
 
