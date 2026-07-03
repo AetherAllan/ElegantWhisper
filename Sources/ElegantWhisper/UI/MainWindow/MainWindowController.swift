@@ -1,7 +1,7 @@
 import AppKit
 
 @MainActor
-final class MainWindowController: NSWindowController, NSTextViewDelegate {
+final class MainWindowController: NSWindowController, NSTextViewDelegate, NSTextFieldDelegate {
     let controller: AppController
     let settings: SettingsStore
     let refiner: LLMRefiner
@@ -32,6 +32,8 @@ final class MainWindowController: NSWindowController, NSTextViewDelegate {
     let dictionaryTermField = NSTextField()
     let dictionaryAliasesField = NSTextField()
     let dictionarySearchField = NSSearchField()
+    var polishingDirty = false
+    var generalDirty = false
 
     init(settings: SettingsStore, refiner: LLMRefiner, controller: AppController) {
         self.settings = settings
@@ -77,8 +79,14 @@ final class MainWindowController: NSWindowController, NSTextViewDelegate {
             return
         }
         if currentPage == .polishing {
+            if !polishingDirty {
+                syncPolishingControlsFromSettings()
+            }
             updateEffectivePromptPreview()
             return
+        }
+        if currentPage == .settings, !generalDirty {
+            syncGeneralControlsFromSettings()
         }
         renderCurrentPage()
     }
@@ -140,7 +148,7 @@ final class MainWindowController: NSWindowController, NSTextViewDelegate {
         title.font = .systemFont(ofSize: 19, weight: .bold)
         title.textColor = .labelColor
 
-        let header = NSStackView(views: [title, MainWindowUI.pill("Local")])
+        let header = NSStackView(views: [title, MainWindowUI.pill("Apple Speech")])
         header.orientation = .horizontal
         header.alignment = .centerY
         header.spacing = 8
@@ -188,16 +196,26 @@ final class MainWindowController: NSWindowController, NSTextViewDelegate {
     func loadValues() {
         populateProviderPopup()
         populateStylePackPopup()
+        syncPolishingControlsFromSettings()
+        syncGeneralControlsFromSettings()
+        loadSelectedStylePackPrompt()
+        polishingDirty = false
+        generalDirty = false
+    }
+
+    func syncPolishingControlsFromSettings() {
         baseURLField.stringValue = settings.apiBaseURL
         apiKeyField.stringValue = settings.apiKey
         modelField.stringValue = settings.model
         timeoutField.stringValue = String(Int(settings.requestTimeout))
         llmCheckbox.state = settings.llmEnabled ? .on : .off
+    }
+
+    func syncGeneralControlsFromSettings() {
         clipboardCheckbox.state = settings.keepClipboardWithoutTarget ? .on : .off
         historyCheckbox.state = settings.saveHistory ? .on : .off
         populateLanguagePopup(languagePopup, selected: settings.language)
         populateLanguagePopup(dictionaryLanguagePopup, selected: settings.language)
-        loadSelectedStylePackPrompt()
     }
 
     func populateProviderPopup() {
@@ -370,5 +388,14 @@ final class MainWindowController: NSWindowController, NSTextViewDelegate {
             return
         }
         updateEffectivePromptPreview()
+    }
+
+    func controlTextDidChange(_ notification: Notification) {
+        guard let field = notification.object as? NSTextField else {
+            return
+        }
+        if field === baseURLField || field === apiKeyField || field === modelField || field === timeoutField {
+            polishingDirty = true
+        }
     }
 }

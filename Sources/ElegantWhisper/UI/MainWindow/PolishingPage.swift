@@ -7,6 +7,12 @@ extension MainWindowController {
         providerPopup.action = #selector(providerChanged)
         stylePackPopup.target = self
         stylePackPopup.action = #selector(stylePackChanged)
+        llmCheckbox.target = self
+        llmCheckbox.action = #selector(markPolishingDirty)
+        baseURLField.delegate = self
+        apiKeyField.delegate = self
+        modelField.delegate = self
+        timeoutField.delegate = self
 
         let form = MainWindowUI.form([
             ("Provider", providerPopup),

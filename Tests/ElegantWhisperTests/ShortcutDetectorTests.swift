@@ -83,4 +83,30 @@ final class ShortcutDetectorTests: XCTestCase {
         XCTAssertNil(detector.handleFlagsChanged(keyCode: 58, flags: [.maskAlternate]))
         XCTAssertNil(detector.handleFlagsChanged(keyCode: 58, flags: []))
     }
+
+    func testHIDStateKeepsAlreadyPressedCommandWhenRightOptionChanges() {
+        var hid = HIDKeyboardState()
+        let detector = ShortcutDetector()
+
+        XCTAssertNil(detector.handleFlagsChanged(keyCode: 55, flags: hid.update(usage: 0xE3, isPressed: true)))
+        XCTAssertNil(detector.handleFlagsChanged(keyCode: 61, flags: hid.update(usage: 0xE6, isPressed: true)))
+        XCTAssertNil(detector.handleFlagsChanged(keyCode: 61, flags: hid.update(usage: 0xE6, isPressed: false)))
+    }
+
+    func testHIDStateKeepsAlreadyPressedShiftWhenRightOptionChanges() {
+        var hid = HIDKeyboardState()
+        let detector = ShortcutDetector()
+
+        _ = hid.update(usage: 0xE1, isPressed: true)
+        XCTAssertNil(detector.handleFlagsChanged(keyCode: 61, flags: hid.update(usage: 0xE6, isPressed: true)))
+        XCTAssertNil(detector.handleFlagsChanged(keyCode: 61, flags: hid.update(usage: 0xE6, isPressed: false)))
+    }
+
+    func testHIDStateStillAllowsSingleRightOptionTap() {
+        var hid = HIDKeyboardState()
+        let detector = ShortcutDetector()
+
+        XCTAssertNil(detector.handleFlagsChanged(keyCode: 61, flags: hid.update(usage: 0xE6, isPressed: true)))
+        XCTAssertEqual(detector.handleFlagsChanged(keyCode: 61, flags: hid.update(usage: 0xE6, isPressed: false)), .toggle)
+    }
 }

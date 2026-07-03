@@ -3,6 +3,7 @@ import AppKit
 @MainActor
 extension MainWindowController {
     @objc func providerChanged() {
+        polishingDirty = true
         let provider = selectedProvider()
         if let baseURL = provider.defaultBaseURL {
             baseURLField.stringValue = baseURL
@@ -23,6 +24,7 @@ extension MainWindowController {
         settings.apiKey = apiKeyField.stringValue
         settings.model = modelField.stringValue
         settings.requestTimeout = TimeInterval(timeoutField.doubleValue)
+        polishingDirty = false
         showNotice("Polishing settings saved")
         renderCurrentPage()
     }
@@ -59,7 +61,8 @@ extension MainWindowController {
             showNotice("Unable to reset style pack")
             return
         }
-        loadValues()
+        populateStylePackPopup()
+        loadSelectedStylePackPrompt()
         showNotice("Built-in style pack reset")
         renderCurrentPage()
     }
@@ -68,8 +71,17 @@ extension MainWindowController {
         settings.language = selectedLanguage(in: languagePopup)
         settings.keepClipboardWithoutTarget = clipboardCheckbox.state == .on
         settings.saveHistory = historyCheckbox.state == .on
+        generalDirty = false
         showNotice("Settings saved")
         renderCurrentPage()
+    }
+
+    @objc func markPolishingDirty() {
+        polishingDirty = true
+    }
+
+    @objc func markGeneralDirty() {
+        generalDirty = true
     }
 
     @objc func testConnection() {

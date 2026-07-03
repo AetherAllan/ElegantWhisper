@@ -3,6 +3,13 @@ import AppKit
 @MainActor
 extension MainWindowController {
     func settingsPage() -> NSStackView {
+        languagePopup.target = self
+        languagePopup.action = #selector(markGeneralDirty)
+        clipboardCheckbox.target = self
+        clipboardCheckbox.action = #selector(markGeneralDirty)
+        historyCheckbox.target = self
+        historyCheckbox.action = #selector(markGeneralDirty)
+
         let general = MainWindowUI.form([
             ("Language", languagePopup)
         ])

@@ -288,16 +288,15 @@ final class AppController {
         let target = focusDetector.currentEditableTarget() ?? originalTarget.flatMap {
             focusDetector.isValid($0) ? $0 : nil
         }
-        let fallbackApp = fallbackPasteApplication(target: target, originalApplication: originalApplication)
 
-        guard target != nil || fallbackApp != nil || settings.keepClipboardWithoutTarget else {
+        guard target != nil || settings.keepClipboardWithoutTarget else {
             saveHistory(text, result: HistoryResult.failed, app: originalTarget?.app ?? originalApplication)
             showError("No editable field")
             return
         }
 
-        let historyApp = target?.app ?? fallbackApp ?? originalTarget?.app ?? originalApplication
-        injector.inject(text, target: target, fallbackApp: fallbackApp) { [weak self] result in
+        let historyApp = target?.app ?? originalTarget?.app ?? originalApplication
+        injector.inject(text, target: target) { [weak self] result in
             guard let self, self.isCurrentSession(sessionID) else {
                 return
             }
@@ -339,26 +338,6 @@ final class AppController {
             return
         }
         HistoryStore.shared.append(text: text, result: result, app: app)
-    }
-
-    private func fallbackPasteApplication(target: FocusTarget?, originalApplication: NSRunningApplication?) -> NSRunningApplication? {
-        guard target == nil else {
-            return nil
-        }
-
-        let frontmost = NSWorkspace.shared.frontmostApplication
-        if let frontmost, frontmost.bundleIdentifier != AppConstants.bundleIdentifier {
-            return frontmost
-        }
-
-        if let originalApplication,
-           !originalApplication.isTerminated,
-           originalApplication.bundleIdentifier != AppConstants.bundleIdentifier
-        {
-            return originalApplication
-        }
-
-        return nil
     }
 
     private func isCurrentSession(_ id: UUID) -> Bool {

@@ -20,6 +20,7 @@ final class OptionKeyMonitor: @unchecked Sendable {
     private var watchdog: Timer?
     private let detector = ShortcutDetector()
     private let detectorLock = NSLock()
+    private var hidKeyboardState = HIDKeyboardState()
     private var lastToggleTime: TimeInterval = 0
     private var shouldStop = false
 
@@ -321,6 +322,7 @@ final class OptionKeyMonitor: @unchecked Sendable {
 
         let usage = Int64(IOHIDElementGetUsage(element))
         let isPressed = IOHIDValueGetIntegerValue(value) != 0
+        let flags = updateHIDFlags(usage: usage, isPressed: isPressed)
 
         if usage == Self.hidEscapeUsage, isPressed {
             handleKeyDown(53)
@@ -337,18 +339,7 @@ final class OptionKeyMonitor: @unchecked Sendable {
             return
         }
 
-        handleFlagsChanged(keyCode: keyCode, flags: currentHIDFlags(usage: usage, isPressed: isPressed))
-    }
-
-    private func currentHIDFlags(usage: Int64, isPressed: Bool) -> CGEventFlags {
-        var flags = CGEventFlags()
-        if (usage == Self.hidLeftCommandUsage || usage == Self.hidRightCommandUsage) && isPressed {
-            flags.insert(.maskCommand)
-        }
-        if (usage == Self.hidLeftOptionUsage || usage == Self.hidRightOptionUsage) && isPressed {
-            flags.insert(.maskAlternate)
-        }
-        return flags
+        handleFlagsChanged(keyCode: keyCode, flags: flags)
     }
 
     private func handleAction(_ action: ShortcutAction?) {
@@ -388,7 +379,15 @@ final class OptionKeyMonitor: @unchecked Sendable {
     private func resetDetector() {
         detectorLock.lock()
         detector.reset()
+        hidKeyboardState.reset()
         detectorLock.unlock()
+    }
+
+    private func updateHIDFlags(usage: Int64, isPressed: Bool) -> CGEventFlags {
+        detectorLock.lock()
+        let flags = hidKeyboardState.update(usage: usage, isPressed: isPressed)
+        detectorLock.unlock()
+        return flags
     }
 
     private func withLifecycleLock<T>(_ body: () -> T) -> T {
@@ -434,5 +433,60 @@ final class OptionKeyMonitor: @unchecked Sendable {
         hidRightCommandUsage: 54,
         hidLeftOptionUsage: 58,
         hidRightOptionUsage: 61
+    ]
+}
+
+struct HIDKeyboardState {
+    private var pressedModifiers: Set<Int64> = []
+
+    mutating func update(usage: Int64, isPressed: Bool) -> CGEventFlags {
+        if Self.modifierUsages.contains(usage) {
+            if isPressed {
+                pressedModifiers.insert(usage)
+            } else {
+                pressedModifiers.remove(usage)
+            }
+        }
+        return flags
+    }
+
+    mutating func reset() {
+        pressedModifiers.removeAll()
+    }
+
+    private var flags: CGEventFlags {
+        var flags = CGEventFlags()
+        if pressedModifiers.contains(Self.leftCommandUsage) || pressedModifiers.contains(Self.rightCommandUsage) {
+            flags.insert(.maskCommand)
+        }
+        if pressedModifiers.contains(Self.leftOptionUsage) || pressedModifiers.contains(Self.rightOptionUsage) {
+            flags.insert(.maskAlternate)
+        }
+        if pressedModifiers.contains(Self.leftShiftUsage) || pressedModifiers.contains(Self.rightShiftUsage) {
+            flags.insert(.maskShift)
+        }
+        if pressedModifiers.contains(Self.leftControlUsage) || pressedModifiers.contains(Self.rightControlUsage) {
+            flags.insert(.maskControl)
+        }
+        return flags
+    }
+
+    private static let leftControlUsage: Int64 = 0xE0
+    private static let leftShiftUsage: Int64 = 0xE1
+    private static let leftOptionUsage: Int64 = 0xE2
+    private static let leftCommandUsage: Int64 = 0xE3
+    private static let rightControlUsage: Int64 = 0xE4
+    private static let rightShiftUsage: Int64 = 0xE5
+    private static let rightOptionUsage: Int64 = 0xE6
+    private static let rightCommandUsage: Int64 = 0xE7
+    private static let modifierUsages: Set<Int64> = [
+        leftControlUsage,
+        leftShiftUsage,
+        leftOptionUsage,
+        leftCommandUsage,
+        rightControlUsage,
+        rightShiftUsage,
+        rightOptionUsage,
+        rightCommandUsage
     ]
 }
