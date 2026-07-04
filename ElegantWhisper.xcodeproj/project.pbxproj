@@ -45,6 +45,12 @@
 		010000000000000000000025 /* StylePackStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000025 /* StylePackStore.swift */; };
 		010000000000000000000026 /* LearningCandidateStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000026 /* LearningCandidateStore.swift */; };
 		010000000000000000000027 /* PostEditLearner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000027 /* PostEditLearner.swift */; };
+		010000000000000000000028 /* LLMProviderClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000028 /* LLMProviderClient.swift */; };
+		010000000000000000000029 /* OpenRouterProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000029 /* OpenRouterProvider.swift */; };
+		01000000000000000000002A /* PlainTextProviderFallback.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02000000000000000000002A /* PlainTextProviderFallback.swift */; };
+		01000000000000000000002B /* ProviderCapabilityCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02000000000000000000002B /* ProviderCapabilityCache.swift */; };
+		01000000000000000000002C /* StructuredOutputSchema.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02000000000000000000002C /* StructuredOutputSchema.swift */; };
+		01000000000000000000002D /* PromptStaticContextCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02000000000000000000002D /* PromptStaticContextCache.swift */; };
 		010000000000000000000101 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000101 /* AppIcon.icns */; };
 		010000000000000000000102 /* ElegantWhisperLogo.png in Resources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000102 /* ElegantWhisperLogo.png */; };
 		010000000000000000000201 /* AppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 020000000000000000000201 /* AppKit.framework */; };
@@ -96,6 +102,12 @@
 		020000000000000000000025 /* StylePackStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StylePackStore.swift; sourceTree = "<group>"; };
 		020000000000000000000026 /* LearningCandidateStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LearningCandidateStore.swift; sourceTree = "<group>"; };
 		020000000000000000000027 /* PostEditLearner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostEditLearner.swift; sourceTree = "<group>"; };
+		020000000000000000000028 /* LLMProviderClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMProviderClient.swift; sourceTree = "<group>"; };
+		020000000000000000000029 /* OpenRouterProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenRouterProvider.swift; sourceTree = "<group>"; };
+		02000000000000000000002A /* PlainTextProviderFallback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlainTextProviderFallback.swift; sourceTree = "<group>"; };
+		02000000000000000000002B /* ProviderCapabilityCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderCapabilityCache.swift; sourceTree = "<group>"; };
+		02000000000000000000002C /* StructuredOutputSchema.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StructuredOutputSchema.swift; sourceTree = "<group>"; };
+		02000000000000000000002D /* PromptStaticContextCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptStaticContextCache.swift; sourceTree = "<group>"; };
 		020000000000000000000101 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
 		020000000000000000000102 /* ElegantWhisperLogo.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ElegantWhisperLogo.png; sourceTree = "<group>"; };
 		020000000000000000000103 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -162,16 +174,22 @@
 				02000000000000000000000C /* KeychainStore.swift */,
 				020000000000000000000026 /* LearningCandidateStore.swift */,
 				02000000000000000000001B /* LLMPromptBuilder.swift */,
+				020000000000000000000028 /* LLMProviderClient.swift */,
 				02000000000000000000001A /* LLMProviderPreset.swift */,
 				02000000000000000000000D /* LLMRefiner.swift */,
+				020000000000000000000029 /* OpenRouterProvider.swift */,
 				02000000000000000000000E /* OptionKeyMonitor.swift */,
 				02000000000000000000000F /* PermissionManager.swift */,
 				020000000000000000000010 /* PermissionOnboardingWindow.swift */,
+				02000000000000000000002A /* PlainTextProviderFallback.swift */,
 				020000000000000000000027 /* PostEditLearner.swift */,
+				02000000000000000000002D /* PromptStaticContextCache.swift */,
+				02000000000000000000002B /* ProviderCapabilityCache.swift */,
 				020000000000000000000011 /* SettingsStore.swift */,
 				020000000000000000000016 /* ShortcutDetector.swift */,
 				020000000000000000000013 /* SpeechTranscriber.swift */,
 				020000000000000000000025 /* StylePackStore.swift */,
+				02000000000000000000002C /* StructuredOutputSchema.swift */,
 				020000000000000000000014 /* TextInjector.swift */,
 				040000000000000000000006 /* UI */,
 				020000000000000000000015 /* main.swift */,
@@ -323,15 +341,21 @@
 				01000000000000000000000B /* InputSourceManager.swift in Sources */,
 				01000000000000000000000C /* KeychainStore.swift in Sources */,
 				010000000000000000000026 /* LearningCandidateStore.swift in Sources */,
+				010000000000000000000028 /* LLMProviderClient.swift in Sources */,
 				01000000000000000000000D /* LLMRefiner.swift in Sources */,
+				010000000000000000000029 /* OpenRouterProvider.swift in Sources */,
 				01000000000000000000000E /* OptionKeyMonitor.swift in Sources */,
 				01000000000000000000000F /* PermissionManager.swift in Sources */,
 				010000000000000000000010 /* PermissionOnboardingWindow.swift in Sources */,
+				01000000000000000000002A /* PlainTextProviderFallback.swift in Sources */,
 				010000000000000000000027 /* PostEditLearner.swift in Sources */,
+				01000000000000000000002D /* PromptStaticContextCache.swift in Sources */,
+				01000000000000000000002B /* ProviderCapabilityCache.swift in Sources */,
 				010000000000000000000011 /* SettingsStore.swift in Sources */,
 				010000000000000000000016 /* ShortcutDetector.swift in Sources */,
 				010000000000000000000013 /* SpeechTranscriber.swift in Sources */,
 				010000000000000000000025 /* StylePackStore.swift in Sources */,
+				01000000000000000000002C /* StructuredOutputSchema.swift in Sources */,
 				010000000000000000000014 /* TextInjector.swift in Sources */,
 				01000000000000000000001B /* LLMPromptBuilder.swift in Sources */,
 				01000000000000000000001A /* LLMProviderPreset.swift in Sources */,

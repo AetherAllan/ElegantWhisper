@@ -44,10 +44,19 @@ enum CorrectionRejectionReason: String {
 final class LLMRefiner: Sendable {
     private let settings: SettingsStore
     private let stylePacks: StylePackStore
+    private let capabilityCache: ProviderCapabilityCache
+    private let urlSession: URLSession
 
-    init(settings: SettingsStore, stylePacks: StylePackStore = .shared) {
+    init(
+        settings: SettingsStore,
+        stylePacks: StylePackStore = .shared,
+        capabilityCache: ProviderCapabilityCache = .shared,
+        urlSession: URLSession = .shared
+    ) {
         self.settings = settings
         self.stylePacks = stylePacks
+        self.capabilityCache = capabilityCache
+        self.urlSession = urlSession
     }
 
     @discardableResult
@@ -56,7 +65,7 @@ final class LLMRefiner: Sendable {
         hotwords: [String] = [],
         asrFinalizedIn: Duration? = nil,
         completion: @escaping @MainActor @Sendable (String) -> Void
-    ) -> URLSessionDataTask? {
+    ) -> LLMRefinementTask? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard settings.llmEnabled else {
             DebugLog.event("llmRefineSkippedDisabled")
@@ -73,7 +82,7 @@ final class LLMRefiner: Sendable {
             return nil
         }
         guard !settings.apiKey.isEmpty,
-              let request = makeRequest(text: trimmed, hotwords: hotwords)
+              let context = makeRequestContext(text: trimmed, hotwords: hotwords)
         else {
             DebugLog.event("llmRefineSkippedMissingSettings")
             Task { @MainActor in
@@ -84,122 +93,97 @@ final class LLMRefiner: Sendable {
 
         let requestStartedAt = ContinuousClock().now
         let metrics = RefinementMetrics(asrFinalizedIn: asrFinalizedIn, requestStartedAt: requestStartedAt)
-        let delegate = TimedLLMRequestDelegate(metrics: metrics) { data, response, error, metrics in
-            DebugLog.event(metrics.summaryLine())
-            if let error {
-                DebugLog.event("llmRefineFallback:error:\(error._code)")
-                Task { @MainActor in
-                    completion(text)
-                }
-                return
-            }
-            guard let http = response as? HTTPURLResponse else {
-                DebugLog.event("llmRefineFallback:noHTTPResponse")
-                Task { @MainActor in
-                    completion(text)
-                }
-                return
-            }
-            guard (200..<300).contains(http.statusCode) else {
-                DebugLog.event("llmRefineFallback:http\(http.statusCode):\(self.providerErrorReason(from: data) ?? "unknown")")
-                Task { @MainActor in
-                    completion(text)
-                }
-                return
-            }
-            guard let data, data.count < 512_000 else {
-                DebugLog.event("llmRefineFallback:badBody")
-                Task { @MainActor in
-                    completion(text)
-                }
-                return
-            }
-            guard let response = try? JSONDecoder().decode(ChatResponse.self, from: data) else {
-                DebugLog.event("llmRefineFallback:decode")
-                Task { @MainActor in
-                    completion(text)
-                }
-                return
-            }
-            guard let choice = response.choices.first else {
-                DebugLog.event("llmRefineFallback:noChoice")
-                Task { @MainActor in
-                    completion(text)
-                }
-                return
-            }
-            DebugLog.event("llmRefineResponse:\(response.provider ?? "unknown"):\(response.model ?? "unknown"):\(choice.finishReason ?? "unknown")")
-            guard let correction = self.acceptedCorrection(original: trimmed, choice: choice) else {
-                let normalized = self.normalizeModelOutput(choice.message.content ?? "")
-                let reason = self.rejectionReason(
-                    original: trimmed,
-                    corrected: normalized,
-                    finishReason: choice.finishReason
-                )?.rawValue ?? "unknown"
-                DebugLog.event("llmRefineFallback:rejected:\(reason):originalChars=\(trimmed.count):correctedChars=\(normalized.count):finishReason=\(choice.finishReason ?? "nil")")
-                Task { @MainActor in
-                    completion(text)
-                }
-                return
-            }
-            DebugLog.event("llmRefineCompleted")
-            Task { @MainActor in
-                completion(correction)
-            }
-        }
-        let queue = OperationQueue()
-        queue.maxConcurrentOperationCount = 1
-        let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: queue)
+        let provider = providerClient(for: context.provider)
+        let task = LLMRefinementTask()
 
         DebugLog.event("llmRefineStarted")
-        DebugLog.event("llmHTTPStart")
-        let task = session.dataTask(with: request)
-        task.resume()
+        runProviderAttempt(
+            provider: provider,
+            context: context,
+            mode: provider.firstMode(for: context),
+            originalText: text,
+            trimmedText: trimmed,
+            metrics: metrics,
+            task: task,
+            retriedTransient: false,
+            didFallbackStructured: false,
+            completion: completion
+        )
         return task
     }
 
     func testConnection(completion: @escaping @MainActor @Sendable (Bool, String) -> Void) {
-        guard let request = makeRequest(text: "我想用配森解析杰森文件。", hotwords: ["Python", "JSON"]) else {
+        guard let context = makeRequestContext(text: "我想用配森解析杰森文件。", hotwords: ["Python", "JSON"]) else {
             Task { @MainActor in
                 completion(false, "Missing API settings")
             }
             return
         }
+        let provider = providerClient(for: context.provider)
 
-        URLSession.shared.dataTask(with: request) { data, response, error in
-            if let error {
+        @Sendable
+        func attempt(mode: LLMProviderRequestMode, didFallbackStructured: Bool) {
+            guard let request = provider.makeRequest(context: context, mode: mode) else {
                 Task { @MainActor in
-                    completion(false, error.localizedDescription)
+                    completion(false, "Missing API settings")
                 }
                 return
             }
-            guard let http = response as? HTTPURLResponse,
-                  (200..<300).contains(http.statusCode)
-            else {
-                let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
-                let reason = self.providerErrorReason(from: data) ?? "request failed"
-                Task { @MainActor in
-                    completion(false, "HTTP \(statusCode): \(reason)")
+
+            urlSession.dataTask(with: request) { data, response, error in
+                if let error {
+                    Task { @MainActor in
+                        completion(false, error.localizedDescription)
+                    }
+                    return
                 }
-                return
-            }
-            guard let data,
-                  data.count < 512_000,
-                  let response = try? JSONDecoder().decode(ChatResponse.self, from: data),
-                  response.choices.first?.message.content?.isEmpty == false
-            else {
-                Task { @MainActor in
-                    completion(false, "Empty or invalid response")
+                guard let http = response as? HTTPURLResponse,
+                      (200..<300).contains(http.statusCode)
+                else {
+                    let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+                    if let fallbackMode = provider.fallbackMode(
+                        afterHTTPStatus: statusCode,
+                        data: data,
+                        mode: mode,
+                        context: context
+                    ), !didFallbackStructured {
+                        attempt(mode: fallbackMode, didFallbackStructured: true)
+                        return
+                    }
+                    let reason = self.providerErrorReason(from: data) ?? "request failed"
+                    Task { @MainActor in
+                        completion(false, "HTTP \(statusCode): \(reason)")
+                    }
+                    return
                 }
-                return
-            }
-            Task { @MainActor in
-                completion(true, "Connection OK (\(response.model ?? self.settings.model))")
-            }
-        }.resume()
+                guard let data,
+                      data.count < 512_000,
+                      let parsed = provider.parseResponse(data: data, mode: mode),
+                      !parsed.candidateText.isEmpty
+                else {
+                    Task { @MainActor in
+                        completion(false, "Empty or invalid response")
+                    }
+                    return
+                }
+                Task { @MainActor in
+                    completion(true, "Connection OK (\(parsed.model ?? self.settings.model))")
+                }
+            }.resume()
+        }
+
+        attempt(mode: provider.firstMode(for: context), didFallbackStructured: false)
     }
 
     func makeRequest(text: String, hotwords: [String] = []) -> URLRequest? {
+        guard let context = makeRequestContext(text: text, hotwords: hotwords) else {
+            return nil
+        }
+        let provider = providerClient(for: context.provider)
+        return provider.makeRequest(context: context, mode: provider.firstMode(for: context))
+    }
+
+    func makeRequestContext(text: String, hotwords: [String] = []) -> LLMProviderRequestContext? {
         guard let base = URL(string: settings.apiBaseURL),
               isAllowedBaseURL(base),
               !settings.apiKey.isEmpty
@@ -207,34 +191,25 @@ final class LLMRefiner: Sendable {
             return nil
         }
 
-        let url = completionsURL(from: base)
         let provider = settings.llmProvider
         let stylePack = stylePacks.activePack()
-        let systemPrompt = LLMPromptBuilder.systemPrompt(stylePack: stylePack, hotwords: hotwords)
+        let promptContext = PromptStaticContextCache.context(stylePack: stylePack, hotwords: hotwords)
         let maxOutputTokens = maxTokens(for: text)
-        var request = URLRequest(url: url, timeoutInterval: effectiveTimeout())
-        request.httpMethod = "POST"
-        request.setValue("Bearer \(settings.apiKey)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        provider.applyHeaders(to: &request)
-
-        let body = ChatRequest(
-            model: settings.model,
-            messages: [
-                ChatMessage(role: "system", content: systemPrompt),
-                ChatMessage(role: "user", content: text)
-            ],
-            temperature: 0,
-            maxTokens: maxOutputTokens,
-            reasoning: provider.reasoningPolicy
-        )
 
         // Log counts only. System prompts, transcripts, model output, and API keys can all contain
         // private text, but these numbers are enough to confirm output budgeting uses user text
         // separately from the prompt.
-        DebugLog.event("llmRequestShape:provider=\(provider.rawValue):model=\(settings.model):systemChars=\(systemPrompt.count):userChars=\(text.count):hotwordCount=\(hotwords.count):maxOutputTokens=\(maxOutputTokens)")
-        request.httpBody = try? JSONEncoder().encode(body)
-        return request
+        DebugLog.event("llmRequestShape:provider=\(provider.rawValue):model=\(settings.model):systemChars=\(promptContext.systemPrompt.count):userChars=\(text.count):hotwordCount=\(hotwords.count):maxOutputTokens=\(maxOutputTokens)")
+        return LLMProviderRequestContext(
+            provider: provider,
+            baseURL: base,
+            apiKey: settings.apiKey,
+            model: settings.model,
+            timeout: effectiveTimeout(),
+            maxOutputTokens: maxOutputTokens,
+            promptContext: promptContext,
+            transcript: text
+        )
     }
 
     func acceptsChoice(original: String, choice: ChatResponse.Choice) -> Bool {
@@ -345,31 +320,177 @@ final class LLMRefiner: Sendable {
     }
 
     func providerErrorReason(from data: Data?) -> String? {
-        guard let data,
-              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let error = object["error"] as? [String: Any],
-              let message = error["message"] as? String
-        else {
-            return nil
-        }
-        let lower = message.lowercased()
-        if lower.contains("free-models-per-day") {
-            return "free-models-per-day"
-        }
-        if lower.contains("rate limit") {
-            return "rate-limit"
-        }
-        if lower.contains("invalid") {
-            return "invalid-request"
-        }
-        return "provider-error"
+        LLMProviderErrorReason.classify(data)
     }
 
-    private func completionsURL(from base: URL) -> URL {
-        if base.path.trimmingCharacters(in: .init(charactersIn: "/")).hasSuffix("chat/completions") {
-            return base
+    private func runProviderAttempt(
+        provider: any LLMProviderClient,
+        context: LLMProviderRequestContext,
+        mode: LLMProviderRequestMode,
+        originalText: String,
+        trimmedText: String,
+        metrics: RefinementMetrics,
+        task: LLMRefinementTask,
+        retriedTransient: Bool,
+        didFallbackStructured: Bool,
+        completion: @escaping @MainActor @Sendable (String) -> Void
+    ) {
+        guard !task.isCancelled,
+              let request = provider.makeRequest(context: context, mode: mode)
+        else {
+            complete(originalText, task: task, completion: completion)
+            return
         }
-        return base.appendingPathComponent("chat/completions")
+
+        let delegate = TimedLLMRequestDelegate(metrics: metrics) { [weak self] data, response, error, metrics in
+            guard let self, !task.isCancelled else {
+                return
+            }
+
+            DebugLog.event(metrics.summaryLine())
+            if let error {
+                if self.shouldRetryTransient(error: error, retriedTransient: retriedTransient) {
+                    DebugLog.event("llmRefineRetry:error:\(error._code)")
+                    self.runProviderAttempt(
+                        provider: provider,
+                        context: context,
+                        mode: mode,
+                        originalText: originalText,
+                        trimmedText: trimmedText,
+                        metrics: metrics,
+                        task: task,
+                        retriedTransient: true,
+                        didFallbackStructured: didFallbackStructured,
+                        completion: completion
+                    )
+                    return
+                }
+                DebugLog.event("llmRefineFallback:error:\(error._code)")
+                self.complete(originalText, task: task, completion: completion)
+                return
+            }
+
+            guard let http = response as? HTTPURLResponse else {
+                DebugLog.event("llmRefineFallback:noHTTPResponse")
+                self.complete(originalText, task: task, completion: completion)
+                return
+            }
+
+            guard (200..<300).contains(http.statusCode) else {
+                if let fallbackMode = provider.fallbackMode(
+                    afterHTTPStatus: http.statusCode,
+                    data: data,
+                    mode: mode,
+                    context: context
+                ), !didFallbackStructured {
+                    DebugLog.event("llmRefineFallback:structuredUnsupported")
+                    self.runProviderAttempt(
+                        provider: provider,
+                        context: context,
+                        mode: fallbackMode,
+                        originalText: originalText,
+                        trimmedText: trimmedText,
+                        metrics: metrics,
+                        task: task,
+                        retriedTransient: retriedTransient,
+                        didFallbackStructured: true,
+                        completion: completion
+                    )
+                    return
+                }
+                if self.shouldRetryHTTP(statusCode: http.statusCode, retriedTransient: retriedTransient) {
+                    DebugLog.event("llmRefineRetry:http\(http.statusCode)")
+                    self.runProviderAttempt(
+                        provider: provider,
+                        context: context,
+                        mode: mode,
+                        originalText: originalText,
+                        trimmedText: trimmedText,
+                        metrics: metrics,
+                        task: task,
+                        retriedTransient: true,
+                        didFallbackStructured: didFallbackStructured,
+                        completion: completion
+                    )
+                    return
+                }
+                DebugLog.event("llmRefineFallback:http\(http.statusCode):\(provider.providerErrorReason(from: data) ?? "unknown")")
+                self.complete(originalText, task: task, completion: completion)
+                return
+            }
+
+            guard let data, data.count < 512_000 else {
+                DebugLog.event("llmRefineFallback:badBody")
+                self.complete(originalText, task: task, completion: completion)
+                return
+            }
+            guard let parsed = provider.parseResponse(data: data, mode: mode) else {
+                DebugLog.event("llmRefineFallback:decode")
+                self.complete(originalText, task: task, completion: completion)
+                return
+            }
+            DebugLog.event("llmRefineResponse:\(parsed.provider ?? "unknown"):\(parsed.model ?? "unknown"):\(parsed.finishReason ?? "unknown")")
+
+            let normalized = self.normalizeModelOutput(parsed.candidateText)
+            let rejectionReason = self.rejectionReason(
+                original: trimmedText,
+                corrected: normalized,
+                finishReason: parsed.finishReason
+            )
+            guard rejectionReason == nil else {
+                DebugLog.event("llmRefineFallback:rejected:\(rejectionReason?.rawValue ?? "unknown"):originalChars=\(trimmedText.count):correctedChars=\(normalized.count):finishReason=\(parsed.finishReason ?? "nil")")
+                self.complete(originalText, task: task, completion: completion)
+                return
+            }
+            DebugLog.event("llmRefineCompleted")
+            self.complete(normalized, task: task, completion: completion)
+        }
+        let queue = OperationQueue()
+        queue.maxConcurrentOperationCount = 1
+        let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: queue)
+
+        DebugLog.event("llmHTTPStart")
+        let dataTask = session.dataTask(with: request)
+        task.setCurrentTask(dataTask)
+        dataTask.resume()
+    }
+
+    private func providerClient(for provider: LLMProvider) -> any LLMProviderClient {
+        switch provider {
+        case .openRouterFree:
+            OpenRouterProvider(capabilityCache: capabilityCache)
+        case .openAI, .custom:
+            PlainTextProviderFallback()
+        }
+    }
+
+    private func complete(
+        _ text: String,
+        task: LLMRefinementTask,
+        completion: @escaping @MainActor @Sendable (String) -> Void
+    ) {
+        guard !task.isCancelled else {
+            return
+        }
+        Task { @MainActor in
+            guard !task.isCancelled else {
+                return
+            }
+            completion(text)
+        }
+    }
+
+    private func shouldRetryTransient(error: Error, retriedTransient: Bool) -> Bool {
+        guard !retriedTransient,
+              let urlError = error as? URLError
+        else {
+            return false
+        }
+        return urlError.code == .timedOut
+    }
+
+    private func shouldRetryHTTP(statusCode: Int, retriedTransient: Bool) -> Bool {
+        !retriedTransient && (500..<600).contains(statusCode)
     }
 
     private func isAllowedBaseURL(_ url: URL) -> Bool {
@@ -430,60 +551,5 @@ private final class TimedLLMRequestDelegate: NSObject, URLSessionDataDelegate, @
         DebugLog.event("llmHTTPComplete")
         completion(body, task.response, error, metrics)
         session.finishTasksAndInvalidate()
-    }
-}
-
-private struct ChatRequest: Encodable {
-    let model: String
-    let messages: [ChatMessage]
-    let temperature: Double
-    let maxTokens: Int
-    let reasoning: ChatReasoning?
-
-    enum CodingKeys: String, CodingKey {
-        case model
-        case messages
-        case temperature
-        case maxTokens = "max_tokens"
-        case reasoning
-    }
-}
-
-private struct ChatReasoning: Encodable {
-    let effort: String
-    let exclude: Bool
-}
-
-private extension LLMProvider {
-    var reasoningPolicy: ChatReasoning? {
-        switch self {
-        case .openRouterFree:
-            // OpenRouter Free is a random router, so this is only a best-effort hint. Some routed
-            // models ignore or reject non-thinking mode; fallback validation still protects paste.
-            ChatReasoning(effort: "none", exclude: true)
-        case .openAI, .custom:
-            nil
-        }
-    }
-}
-
-struct ChatMessage: Codable {
-    let role: String
-    let content: String?
-}
-
-struct ChatResponse: Decodable {
-    let model: String?
-    let provider: String?
-    let choices: [Choice]
-
-    struct Choice: Decodable {
-        let message: ChatMessage
-        let finishReason: String?
-
-        enum CodingKeys: String, CodingKey {
-            case message
-            case finishReason = "finish_reason"
-        }
     }
 }

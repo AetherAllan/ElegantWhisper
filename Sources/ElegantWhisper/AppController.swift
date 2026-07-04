@@ -24,7 +24,7 @@ final class AppController {
     private var latestPartial = ""
     private var monitorStarted = false
     private var loggedFirstAudioLevel = false
-    private var refinementTask: URLSessionDataTask?
+    private var refinementTask: LLMRefinementTask?
     private var recordingStoppedAt: ContinuousClock.Instant?
     private var ignoreToggleCancellationUntil: ContinuousClock.Instant?
 
