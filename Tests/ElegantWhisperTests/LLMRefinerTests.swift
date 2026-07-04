@@ -18,29 +18,24 @@ final class LLMRefinerTests: XCTestCase {
     func testAcceptsSmallConservativeCorrection() {
         let refiner = LLMRefiner(settings: .shared)
 
-        XCTAssertTrue(refiner.acceptsCorrection(original: "我在写配森和杰森", corrected: "我在写 Python 和 JSON"))
+        XCTAssertNil(refiner.rejectionReason(original: "我在写配森和杰森", corrected: "我在写 Python 和 JSON", finishReason: nil))
     }
 
     func testAcceptsLightPunctuationCorrection() {
         let refiner = LLMRefiner(settings: .shared)
 
-        XCTAssertTrue(refiner.acceptsCorrection(original: "今天很好我们继续", corrected: "今天很好，我们继续。"))
+        XCTAssertNil(refiner.rejectionReason(original: "今天很好我们继续", corrected: "今天很好，我们继续。", finishReason: nil))
     }
 
     func testRejectsEmptyCorrection() {
         let refiner = LLMRefiner(settings: .shared)
 
-        XCTAssertFalse(refiner.acceptsCorrection(original: "hello world", corrected: ""))
         XCTAssertEqual(refiner.rejectionReason(original: "hello world", corrected: "", finishReason: nil), .empty)
     }
 
     func testRejectsLargeRewrite() {
         let refiner = LLMRefiner(settings: .shared)
 
-        XCTAssertFalse(refiner.acceptsCorrection(
-            original: "打开设置",
-            corrected: "下面是一个完整的操作指南，第一步打开系统设置，第二步找到隐私权限，第三步逐项检查。"
-        ))
         XCTAssertEqual(
             refiner.rejectionReason(
                 original: "打开设置",
@@ -77,8 +72,14 @@ final class LLMRefinerTests: XCTestCase {
             finishReason: "length"
         )
 
-        XCTAssertFalse(refiner.acceptsChoice(original: "这是一个比较长的原始转写，不能因为模型截断就丢掉后半段。", choice: choice))
-        XCTAssertEqual(refiner.rejectionReason(original: "这是一个比较长的原始转写，不能因为模型截断就丢掉后半段。", choice: choice), .finishLength)
+        XCTAssertEqual(
+            refiner.rejectionReason(
+                original: "这是一个比较长的原始转写，不能因为模型截断就丢掉后半段。",
+                corrected: refiner.normalizeModelOutput(choice.message.content ?? ""),
+                finishReason: choice.finishReason
+            ),
+            .finishLength
+        )
     }
 
     func testRejectsNullContentFromReasoningOnlyProviderResponse() throws {
@@ -94,8 +95,16 @@ final class LLMRefinerTests: XCTestCase {
         }
         """
         let response = try JSONDecoder().decode(ChatResponse.self, from: Data(json.utf8))
+        let choice = response.choices[0]
 
-        XCTAssertFalse(LLMRefiner(settings: .shared).acceptsChoice(original: "我想用配森解析杰森", choice: response.choices[0]))
+        XCTAssertEqual(
+            LLMRefiner(settings: .shared).rejectionReason(
+                original: "我想用配森解析杰森",
+                corrected: choice.message.content ?? "",
+                finishReason: choice.finishReason
+            ),
+            .finishLength
+        )
     }
 
     func testProviderErrorReasonClassifiesFreeDailyLimitWithoutLoggingBody() {
@@ -109,7 +118,7 @@ final class LLMRefinerTests: XCTestCase {
         }
         """.utf8)
 
-        XCTAssertEqual(LLMRefiner(settings: .shared).providerErrorReason(from: data), "free-models-per-day")
+        XCTAssertEqual(LLMProviderErrorReason.classify(data), "free-models-per-day")
     }
 
     func testAcceptsWrappedModelCorrection() {
@@ -118,11 +127,10 @@ final class LLMRefinerTests: XCTestCase {
             message: ChatMessage(role: "assistant", content: "Corrected text: “我在写 Python 和 JSON”"),
             finishReason: "stop"
         )
+        let corrected = refiner.normalizeModelOutput(choice.message.content ?? "")
 
-        XCTAssertEqual(
-            refiner.acceptedCorrection(original: "我在写配森和杰森", choice: choice),
-            "我在写 Python 和 JSON"
-        )
+        XCTAssertNil(refiner.rejectionReason(original: "我在写配森和杰森", corrected: corrected, finishReason: choice.finishReason))
+        XCTAssertEqual(corrected, "我在写 Python 和 JSON")
     }
 
     func testProviderInfersOpenRouterFromExistingBaseURL() {
@@ -276,7 +284,7 @@ final class LLMRefinerTests: XCTestCase {
         )
 
         XCTAssertEqual(fallback, .plainText)
-        XCTAssertFalse(cache.capabilities(for: .openRouterFree, model: "test/model:free").supportsStructuredOutput)
+        XCTAssertFalse(cache.supportsStructuredOutput(for: .openRouterFree, model: "test/model:free"))
         XCTAssertEqual(provider.firstMode(for: context), .plainText)
     }
 
@@ -323,7 +331,7 @@ final class LLMRefinerTests: XCTestCase {
         )
 
         XCTAssertNil(fallback)
-        XCTAssertTrue(cache.capabilities(for: .openRouterFree, model: "test/model:free").supportsStructuredOutput)
+        XCTAssertTrue(cache.supportsStructuredOutput(for: .openRouterFree, model: "test/model:free"))
     }
 
     @MainActor
@@ -371,7 +379,7 @@ final class LLMRefinerTests: XCTestCase {
         await fulfillment(of: [finished], timeout: 2)
         XCTAssertEqual(result?.0, true)
         XCTAssertEqual(result?.1, "Connection OK (test/model:free)")
-        XCTAssertFalse(cache.capabilities(for: .openRouterFree, model: "test/model:free").supportsStructuredOutput)
+        XCTAssertFalse(cache.supportsStructuredOutput(for: .openRouterFree, model: "test/model:free"))
         let bodies = protocolClass.requestBodies()
         XCTAssertEqual(bodies.count, 2)
         XCTAssertTrue(bodies[0].contains("\"response_format\""))
@@ -481,24 +489,22 @@ final class LLMRefinerTests: XCTestCase {
     }
 
     func testPromptStaticContextCacheKeyIsStableForSameStyleAndHotwords() {
-        PromptStaticContextCache.clear()
         let pack = StylePackStore.builtinPacks[0]
 
-        let first = PromptStaticContextCache.context(stylePack: pack, hotwords: ["Python", "JSON"])
-        let second = PromptStaticContextCache.context(stylePack: pack, hotwords: ["Python", "JSON"])
+        let first = PromptStaticContextCache.cacheKey(stylePack: pack, hotwords: ["Python", "JSON"])
+        let second = PromptStaticContextCache.cacheKey(stylePack: pack, hotwords: ["Python", "JSON"])
 
-        XCTAssertEqual(first.cacheKey, second.cacheKey)
-        XCTAssertEqual(first.systemPrompt, second.systemPrompt)
+        XCTAssertEqual(first, second)
     }
 
     func testPromptStaticContextCacheKeyChangesWhenStyleChanges() {
         var pack = StylePackStore.builtinPacks[0]
-        let first = PromptStaticContextCache.context(stylePack: pack, hotwords: ["Python"])
+        let first = PromptStaticContextCache.cacheKey(stylePack: pack, hotwords: ["Python"])
         pack.systemPrompt += "\nExtra rule."
 
-        let second = PromptStaticContextCache.context(stylePack: pack, hotwords: ["Python"])
+        let second = PromptStaticContextCache.cacheKey(stylePack: pack, hotwords: ["Python"])
 
-        XCTAssertNotEqual(first.cacheKey, second.cacheKey)
+        XCTAssertNotEqual(first, second)
     }
 
     func testPromptStaticContextKeepsTranscriptDynamicAndLast() {
@@ -509,16 +515,6 @@ final class LLMRefinerTests: XCTestCase {
         XCTAssertFalse(context.systemPrompt.contains(transcript))
         XCTAssertEqual(messages.last?.role, "user")
         XCTAssertEqual(messages.last?.content, transcript)
-    }
-
-    func testEmptyProfileDoesNotInjectProfileSection() {
-        let context = PromptStaticContextCache.context(
-            stylePack: StylePackStore.builtinPacks[0],
-            hotwords: [],
-            profile: "  "
-        )
-
-        XCTAssertFalse(context.systemPrompt.contains("User profile:"))
     }
 
     private func makeSettings() -> SettingsStore {

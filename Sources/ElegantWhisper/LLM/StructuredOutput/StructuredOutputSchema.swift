@@ -1,6 +1,6 @@
 import Foundation
 
-struct ResponseFormat: Encodable, Equatable {
+struct ResponseFormat: Encodable {
     let type: String
     let jsonSchema: JSONSchemaResponseFormat
 
@@ -26,24 +26,24 @@ struct ResponseFormat: Encodable, Equatable {
     )
 }
 
-struct JSONSchemaResponseFormat: Encodable, Equatable {
+struct JSONSchemaResponseFormat: Encodable {
     let name: String
     let strict: Bool
     let schema: JSONSchemaObject
 }
 
-struct JSONSchemaObject: Encodable, Equatable {
+struct JSONSchemaObject: Encodable {
     let type: String
     let additionalProperties: Bool
     let required: [String]
     let properties: [String: JSONSchemaProperty]
 }
 
-struct JSONSchemaProperty: Encodable, Equatable {
+struct JSONSchemaProperty: Encodable {
     let type: String
 }
 
-struct DictationPolishResult: Decodable, Equatable {
+struct DictationPolishResult: Decodable {
     let correctedText: String
 
     enum CodingKeys: String, CodingKey {

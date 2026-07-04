@@ -78,10 +78,6 @@ enum LLMPromptBuilder {
     {{HOTWORDS}}
     """
 
-    static func systemPrompt(stylePack: StylePack, hotwords: [String]) -> String {
-        systemPrompt(template: stylePack.systemPrompt, hotwords: hotwords)
-    }
-
     static func systemPrompt(template rawTemplate: String, hotwords: [String]) -> String {
         let template = rawTemplate.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? conservativeTemplate

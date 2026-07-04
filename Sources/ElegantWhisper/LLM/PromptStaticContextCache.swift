@@ -1,7 +1,6 @@
 import Foundation
 
-struct PromptStaticContext: Equatable, Sendable {
-    let cacheKey: String
+struct PromptStaticContext: Sendable {
     let systemPrompt: String
 
     func messages(transcript: String) -> [ChatMessage] {
@@ -15,37 +14,28 @@ struct PromptStaticContext: Equatable, Sendable {
 enum PromptStaticContextCache {
     private static let storage = PromptStaticContextStorage()
 
-    static func context(stylePack: StylePack, hotwords: [String], profile: String? = nil) -> PromptStaticContext {
-        let key = cacheKey(stylePack: stylePack, hotwords: hotwords, profile: profile)
+    static func context(stylePack: StylePack, hotwords: [String]) -> PromptStaticContext {
+        let key = cacheKey(stylePack: stylePack, hotwords: hotwords)
         if let prompt = storage.prompt(for: key) {
-            return PromptStaticContext(cacheKey: key, systemPrompt: prompt)
+            return PromptStaticContext(systemPrompt: prompt)
         }
 
-        var prompt = LLMPromptBuilder.systemPrompt(stylePack: stylePack, hotwords: hotwords)
-        let profileText = profile?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if !profileText.isEmpty {
-            prompt += "\n\nUser profile:\n\(profileText)"
-        }
-
+        let prompt = LLMPromptBuilder.systemPrompt(template: stylePack.systemPrompt, hotwords: hotwords)
         storage.setPrompt(prompt, for: key)
-        return PromptStaticContext(cacheKey: key, systemPrompt: prompt)
+        return PromptStaticContext(systemPrompt: prompt)
     }
 
-    static func cacheKey(stylePack: StylePack, hotwords: [String], profile: String? = nil) -> String {
+    static func cacheKey(stylePack: StylePack, hotwords: [String]) -> String {
         [
             stylePack.id,
             stylePack.systemPrompt,
             hotwords
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty }
-                .joined(separator: "\u{1f}"),
-            profile?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                .joined(separator: "\u{1f}")
         ].joined(separator: "\u{1e}")
     }
 
-    static func clear() {
-        storage.clear()
-    }
 }
 
 private final class PromptStaticContextStorage: @unchecked Sendable {
@@ -64,9 +54,4 @@ private final class PromptStaticContextStorage: @unchecked Sendable {
         lock.unlock()
     }
 
-    func clear() {
-        lock.lock()
-        cachedPrompts.removeAll()
-        lock.unlock()
-    }
 }

@@ -150,7 +150,7 @@ final class LLMRefiner: Sendable {
                         attempt(mode: fallbackMode, didFallbackStructured: true)
                         return
                     }
-                    let reason = self.providerErrorReason(from: data) ?? "request failed"
+                    let reason = LLMProviderErrorReason.classify(data) ?? "request failed"
                     Task { @MainActor in
                         completion(false, "HTTP \(statusCode): \(reason)")
                     }
@@ -209,33 +209,6 @@ final class LLMRefiner: Sendable {
             maxOutputTokens: maxOutputTokens,
             promptContext: promptContext,
             transcript: text
-        )
-    }
-
-    func acceptsChoice(original: String, choice: ChatResponse.Choice) -> Bool {
-        acceptedCorrection(original: original, choice: choice) != nil
-    }
-
-    func acceptedCorrection(original: String, choice: ChatResponse.Choice) -> String? {
-        // OpenAI-compatible APIs report `finish_reason=length` when max_tokens cuts the response.
-        // A truncated correction is worse than no correction because it can silently drop the end
-        // of a dictation before paste. Fall back to the original transcript instead.
-        let corrected = normalizeModelOutput(choice.message.content ?? "")
-        guard rejectionReason(original: original, corrected: corrected, finishReason: choice.finishReason) == nil else {
-            return nil
-        }
-        return corrected
-    }
-
-    func acceptsCorrection(original: String, corrected: String) -> Bool {
-        rejectionReason(original: original, corrected: corrected, finishReason: nil) == nil
-    }
-
-    func rejectionReason(original: String, choice: ChatResponse.Choice) -> CorrectionRejectionReason? {
-        rejectionReason(
-            original: original,
-            corrected: normalizeModelOutput(choice.message.content ?? ""),
-            finishReason: choice.finishReason
         )
     }
 
@@ -317,10 +290,6 @@ final class LLMRefiner: Sendable {
             value = String(value.dropFirst().dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
         }
         return value
-    }
-
-    func providerErrorReason(from data: Data?) -> String? {
-        LLMProviderErrorReason.classify(data)
     }
 
     private func runProviderAttempt(
@@ -414,7 +383,7 @@ final class LLMRefiner: Sendable {
                     )
                     return
                 }
-                DebugLog.event("llmRefineFallback:http\(http.statusCode):\(provider.providerErrorReason(from: data) ?? "unknown")")
+                DebugLog.event("llmRefineFallback:http\(http.statusCode):\(LLMProviderErrorReason.classify(data) ?? "unknown")")
                 self.complete(originalText, task: task, completion: completion)
                 return
             }

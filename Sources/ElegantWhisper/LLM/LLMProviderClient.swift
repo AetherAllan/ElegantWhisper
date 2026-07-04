@@ -33,7 +33,6 @@ protocol LLMProviderClient: Sendable {
         context: LLMProviderRequestContext
     ) -> LLMProviderRequestMode?
     func parseResponse(data: Data, mode: LLMProviderRequestMode) -> LLMProviderParsedResponse?
-    func providerErrorReason(from data: Data?) -> String?
 }
 
 extension LLMProviderClient {
@@ -44,10 +43,6 @@ extension LLMProviderClient {
         context: LLMProviderRequestContext
     ) -> LLMProviderRequestMode? {
         nil
-    }
-
-    func providerErrorReason(from data: Data?) -> String? {
-        LLMProviderErrorReason.classify(data)
     }
 
     func completionsURL(from base: URL) -> URL {

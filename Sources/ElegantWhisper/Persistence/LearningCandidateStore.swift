@@ -1,6 +1,6 @@
 import Foundation
 
-struct LearningCandidate: Codable, Identifiable, Equatable {
+struct LearningCandidate: Codable, Identifiable {
     let id: UUID
     let key: String
     var original: String

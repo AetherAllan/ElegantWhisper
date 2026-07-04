@@ -2,7 +2,7 @@ import AppKit
 import ApplicationServices
 import Foundation
 
-enum LearningEligibility: Equatable {
+enum LearningEligibility {
     case eligible
     case disabled
     case secureField

@@ -1,6 +1,6 @@
 import Foundation
 
-enum AppMode: String {
+enum AppMode {
     case idle
     case recording
     case transcribing
@@ -23,19 +23,17 @@ final class AppState {
     private(set) var mode: AppMode = .idle
 
     func transition(to next: AppMode) -> Bool {
-        // Keep state transitions explicit. Dictation has several async producers
-        // (hotkeys, Speech callbacks, LLM callbacks, paste completion), and allowing arbitrary
-        // transitions is how duplicate recordings or late paste operations happen.
+        // Keep forward transitions explicit. Idle is the universal cancellation/reset exit.
+        // Dictation has several async producers (hotkeys, Speech callbacks, LLM callbacks,
+        // paste completion), and allowing arbitrary forward jumps is how duplicate recordings
+        // or late paste operations happen.
         switch (mode, next) {
         case (.idle, .recording),
              (.recording, .transcribing),
              (.transcribing, .refining),
              (.transcribing, .injecting),
              (.refining, .injecting),
-             (.injecting, .idle),
-             (.recording, .idle),
-             (.transcribing, .idle),
-             (.refining, .idle):
+             (.injecting, .idle):
             mode = next
             return true
         case (_, .idle):

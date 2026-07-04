@@ -8,7 +8,7 @@ struct OpenRouterProvider: LLMProviderClient {
     }
 
     func firstMode(for context: LLMProviderRequestContext) -> LLMProviderRequestMode {
-        capabilityCache.capabilities(for: context.provider, model: context.model).supportsStructuredOutput
+        capabilityCache.supportsStructuredOutput(for: context.provider, model: context.model)
             ? .structuredOutput
             : .plainText
     }

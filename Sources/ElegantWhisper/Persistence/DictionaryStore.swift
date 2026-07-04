@@ -1,6 +1,6 @@
 import Foundation
 
-struct DictionaryEntry: Codable, Identifiable, Equatable {
+struct DictionaryEntry: Codable, Identifiable {
     let id: UUID
     var term: String
     var aliases: [String]
