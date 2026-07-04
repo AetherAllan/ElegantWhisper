@@ -234,6 +234,27 @@ final class LLMRefinerTests: XCTestCase {
         XCTAssertFalse(prompt.contains("Common ASR hints"))
     }
 
+    func testProgrammerStylePackIsDefaultInRequest() throws {
+        let settings = makeSettings()
+        let stylePacks = try makeStylePackStore()
+        settings.apiKey = "test-key"
+        defer { settings.apiKey = "" }
+
+        let request = try XCTUnwrap(LLMRefiner(settings: settings, stylePacks: stylePacks).makeRequest(text: "我是外部三程序员"))
+        let body = try XCTUnwrap(request.httpBody)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        let messages = try XCTUnwrap(json["messages"] as? [[String: Any]])
+        let systemPrompt = try XCTUnwrap(messages.first?["content"] as? String)
+
+        XCTAssertTrue(systemPrompt.contains("developer dictation"))
+        XCTAssertTrue(systemPrompt.contains("Web3"))
+        XCTAssertTrue(systemPrompt.contains("TypeScript"))
+        XCTAssertTrue(systemPrompt.contains("SQL"))
+        XCTAssertTrue(systemPrompt.contains("PostgreSQL"))
+        XCTAssertTrue(systemPrompt.contains("我是一个 Web3 程序员"))
+        XCTAssertTrue(systemPrompt.contains("我同事还会写 SQL"))
+    }
+
     func testActiveStylePackPromptIsUsedInRequest() throws {
         let settings = makeSettings()
         let stylePacks = try makeStylePackStore()
@@ -256,6 +277,7 @@ final class LLMRefinerTests: XCTestCase {
 
         XCTAssertTrue(systemPrompt.contains("Custom prompt."))
         XCTAssertTrue(systemPrompt.contains("Python"))
+        XCTAssertFalse(systemPrompt.contains("developer dictation"))
         XCTAssertFalse(systemPrompt.contains(LLMPromptBuilder.hotwordPlaceholder))
     }
 

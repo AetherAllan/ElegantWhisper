@@ -26,6 +26,31 @@ enum LLMPromptBuilder {
     {{HOTWORDS}}
     """
 
+    static let programmerTemplate = """
+    You correct developer dictation for direct insertion.
+
+    Rules:
+    1. Fix obvious ASR mistakes, Chinese homophones, and spoken technical terms.
+    2. In software contexts, prefer canonical technical spellings for obvious ASR near-sounds:
+       - 外部三, 外部3, web三 -> Web3
+       - tape script, Tapes script, type script -> TypeScript
+       - Java script -> JavaScript
+       - C 口, C口, C扣, sequel -> SQL
+       - 配森, 派森 -> Python
+       - 杰森 -> JSON
+    3. Preserve common technical terms such as API, SDK, CLI, YAML, SQL, PostgreSQL, MySQL, SQLite, GitHub, npm, pnpm, Bun, Node.js, React, Next.js, Swift, Xcode, Cursor, Codex, OpenAI, and OpenRouter.
+    4. Add natural punctuation and light formatting when the transcript clearly needs it.
+    5. Keep commands, paths, URLs, numbers, environment variables, model names, and code symbols unchanged unless they are obvious ASR mistakes.
+    6. Do not expand, summarize, translate, delete, answer questions, or change meaning.
+    7. Return only the corrected text. Do not include explanations, labels, markdown fences, or analysis.
+    8. Use technical spellings only when the surrounding context is technical. Do not force them into unrelated text.
+    9. When fixing ASR technical terms, change only the mistaken token and keep the rest of the sentence close to the transcript.
+    10. For example, "我是一个外部三程序员特别喜欢用Tapes script" should become "我是一个 Web3 程序员，特别喜欢用 TypeScript。"
+    11. For example, "我同事还会写 C 口" should become "我同事还会写 SQL。"
+
+    {{HOTWORDS}}
+    """
+
     static let promptCleanupTemplate = """
     You turn spoken dictation into a clearer prompt while preserving the user's intent.
 

@@ -10,7 +10,6 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/AetherAllan/ElegantWhisper/actions/workflows/ci.yml"><img src="https://github.com/AetherAllan/ElegantWhisper/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <img src="https://img.shields.io/badge/macOS-26%2B-black" alt="macOS 26+">
   <img src="https://img.shields.io/badge/Swift-6.3-orange" alt="Swift 6.3">
 </p>

@@ -94,20 +94,35 @@ final class StylePackStore: @unchecked Sendable {
     private func loadIfNeeded() {
         guard !loaded else { return }
         loaded = true
+        var shouldPersistMigration = false
         if let data = try? Data(contentsOf: fileURL),
            let file = try? JSONDecoder().decode(StylePackFile.self, from: data)
         {
             cachedPacks = mergeWithBuiltins(file.packs)
+            // Persist one-time built-in migrations so the UI, logs, and on-disk file all report
+            // the same active pack. Without this, the runtime would use the new programmer pack
+            // while style-packs.json still looked like the old Conservative-only setup.
+            shouldPersistMigration = cachedPacks != file.packs
         } else {
             cachedPacks = Self.builtinPacks
         }
         ensureOneActivePack()
+        if shouldPersistMigration {
+            save()
+        }
     }
 
     private func mergeWithBuiltins(_ saved: [StylePack]) -> [StylePack] {
+        let hadProgrammerPack = saved.contains { $0.id == Self.programmerPackID }
         var merged = saved
         for builtin in Self.builtinPacks where !merged.contains(where: { $0.id == builtin.id }) {
             merged.append(builtin)
+        }
+        // Existing users already have a style-packs.json, so simply adding an active built-in
+        // would not make the new programmer preset active. Promote it once when the built-in first
+        // appears; later user choices still persist through setActive/save.
+        if !hadProgrammerPack {
+            activateOnly(Self.programmerPackID, in: &merged)
         }
         return merged
     }
@@ -121,7 +136,16 @@ final class StylePackStore: @unchecked Sendable {
             return
         }
         for index in cachedPacks.indices {
-            cachedPacks[index].active = index == 0
+            cachedPacks[index].active = cachedPacks[index].id == Self.programmerPackID
+        }
+    }
+
+    private func activateOnly(_ id: String, in packs: inout [StylePack]) {
+        guard packs.contains(where: { $0.id == id }) else {
+            return
+        }
+        for index in packs.indices {
+            packs[index].active = packs[index].id == id
         }
     }
 
@@ -133,13 +157,23 @@ final class StylePackStore: @unchecked Sendable {
         }
     }
 
+    static let programmerPackID = "builtin.programmer"
+
     static let builtinPacks: [StylePack] = [
+        StylePack(
+            id: programmerPackID,
+            name: "Programmer Dictation",
+            description: "Correct developer dictation with Web3, TypeScript, and common tooling terms.",
+            systemPrompt: LLMPromptBuilder.programmerTemplate,
+            active: true,
+            updatedAt: Date(timeIntervalSince1970: 0)
+        ),
         StylePack(
             id: "builtin.conservative",
             name: "Conservative Correction",
             description: "Fix obvious ASR mistakes without changing meaning.",
             systemPrompt: LLMPromptBuilder.conservativeTemplate,
-            active: true,
+            active: false,
             updatedAt: Date(timeIntervalSince1970: 0)
         ),
         StylePack(

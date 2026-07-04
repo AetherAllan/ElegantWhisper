@@ -130,7 +130,13 @@ final class LLMRefiner: Sendable {
             }
             DebugLog.event("llmRefineResponse:\(response.provider ?? "unknown"):\(response.model ?? "unknown"):\(choice.finishReason ?? "unknown")")
             guard let correction = self.acceptedCorrection(original: trimmed, choice: choice) else {
-                DebugLog.event("llmRefineFallback:rejected:\(self.rejectionReason(original: trimmed, choice: choice)?.rawValue ?? "unknown")")
+                let normalized = self.normalizeModelOutput(choice.message.content ?? "")
+                let reason = self.rejectionReason(
+                    original: trimmed,
+                    corrected: normalized,
+                    finishReason: choice.finishReason
+                )?.rawValue ?? "unknown"
+                DebugLog.event("llmRefineFallback:rejected:\(reason):originalChars=\(trimmed.count):correctedChars=\(normalized.count):finishReason=\(choice.finishReason ?? "nil")")
                 Task { @MainActor in
                     completion(text)
                 }
