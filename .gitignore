@@ -62,7 +62,7 @@ downloads/
 
 # Local audio and transcription test data
 recordings/
-audio/
+/audio/
 samples/private/
 *.wav
 *.m4a
