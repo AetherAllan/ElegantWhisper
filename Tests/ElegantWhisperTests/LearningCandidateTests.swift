@@ -93,6 +93,45 @@ final class LearningCandidateTests: XCTestCase {
         XCTAssertFalse(settings.postEditLearningEnabled)
     }
 
+    @MainActor
+    func testPostEditLearnerStopCanBeRepeated() {
+        let learner = PostEditLearner()
+
+        learner.stop()
+        learner.stop()
+    }
+
+    @MainActor
+    func testCallbackBoxWithNilSessionDoesNotScheduleRead() async throws {
+        let spy = CallbackSchedulingSpy()
+        let box = AXObserverCallbackBox(session: spy)
+        let refcon = Unmanaged.passRetained(box).toOpaque()
+        box.session = nil
+        defer {
+            Unmanaged<AXObserverCallbackBox>.fromOpaque(refcon).release()
+        }
+
+        AXObserverCallbackBox.scheduleRead(from: refcon)
+        try await Task.sleep(nanoseconds: 20_000_000)
+
+        XCTAssertEqual(spy.scheduleReadCount, 0)
+    }
+
+    @MainActor
+    func testCallbackBoxSchedulesLiveSessionWeakly() async throws {
+        let spy = CallbackSchedulingSpy()
+        let box = AXObserverCallbackBox(session: spy)
+        let refcon = Unmanaged.passRetained(box).toOpaque()
+        defer {
+            Unmanaged<AXObserverCallbackBox>.fromOpaque(refcon).release()
+        }
+
+        AXObserverCallbackBox.scheduleRead(from: refcon)
+        try await Task.sleep(nanoseconds: 20_000_000)
+
+        XCTAssertEqual(spy.scheduleReadCount, 1)
+    }
+
     private func snapshot(insertedText: String) -> LearningTextSnapshot {
         LearningTextSnapshot(
             beforeValue: "",
@@ -109,5 +148,14 @@ final class LearningCandidateTests: XCTestCase {
             .appendingPathComponent("ElegantWhisperTests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         return directory.appendingPathComponent(name)
+    }
+}
+
+@MainActor
+private final class CallbackSchedulingSpy: AXObserverCallbackScheduling {
+    var scheduleReadCount = 0
+
+    func scheduleReadFromObserver() {
+        scheduleReadCount += 1
     }
 }

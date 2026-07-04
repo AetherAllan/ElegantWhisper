@@ -252,10 +252,37 @@ final class PostEditLearner {
 }
 
 @MainActor
-private final class EditObservationSession {
+protocol AXObserverCallbackScheduling: AnyObject {
+    func scheduleReadFromObserver()
+}
+
+final class AXObserverCallbackBox: @unchecked Sendable {
+    weak var session: AXObserverCallbackScheduling?
+
+    init(session: AXObserverCallbackScheduling?) {
+        self.session = session
+    }
+
+    // AX callbacks receive an opaque refcon on AppKit's callback path. The refcon owns this box,
+    // not the observation session itself, so a late callback after stop() can safely become a no-op.
+    static func scheduleRead(from refcon: UnsafeMutableRawPointer?) {
+        guard let refcon else {
+            return
+        }
+        let box = Unmanaged<AXObserverCallbackBox>.fromOpaque(refcon).takeUnretainedValue()
+        Task { @MainActor [weak box] in
+            box?.session?.scheduleReadFromObserver()
+        }
+    }
+}
+
+@MainActor
+private final class EditObservationSession: AXObserverCallbackScheduling {
     private let context: PostEditLearningContext
     private let store: LearningCandidateStore
     private var observer: AXObserver?
+    private var callbackBox: AXObserverCallbackBox?
+    private var retainedRefcon: UnsafeMutableRawPointer?
     private var debounceWorkItem: DispatchWorkItem?
     private var stopWorkItem: DispatchWorkItem?
     private var stopped = false
@@ -275,7 +302,8 @@ private final class EditObservationSession {
         }
 
         observer = observerRef
-        let refcon = Unmanaged.passUnretained(self).toOpaque()
+        let box = AXObserverCallbackBox(session: self)
+        let refcon = Unmanaged.passRetained(box).toOpaque()
         guard AXObserverAddNotification(
             observerRef,
             context.target.element,
@@ -283,10 +311,13 @@ private final class EditObservationSession {
             refcon
         ) == .success else {
             DebugLog.event("postEditObserverAddFailed")
+            Unmanaged<AXObserverCallbackBox>.fromOpaque(refcon).release()
             observer = nil
             return
         }
 
+        callbackBox = box
+        retainedRefcon = refcon
         CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observerRef), .commonModes)
         let stop = DispatchWorkItem { [weak self] in
             self?.stop()
@@ -301,6 +332,7 @@ private final class EditObservationSession {
             return
         }
         stopped = true
+        callbackBox?.session = nil
         debounceWorkItem?.cancel()
         stopWorkItem?.cancel()
         if let observer {
@@ -308,6 +340,21 @@ private final class EditObservationSession {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .commonModes)
         }
         observer = nil
+        if let retainedRefcon {
+            self.retainedRefcon = nil
+            Unmanaged<AXObserverCallbackBox>.fromOpaque(retainedRefcon).release()
+        }
+        callbackBox = nil
+    }
+
+    deinit {
+        MainActor.assumeIsolated {
+            stop()
+        }
+    }
+
+    func scheduleReadFromObserver() {
+        scheduleRead()
     }
 
     private func scheduleRead() {
@@ -352,12 +399,6 @@ private final class EditObservationSession {
     }
 
     private static let callback: AXObserverCallback = { _, _, _, refcon in
-        guard let refcon else {
-            return
-        }
-        let session = Unmanaged<EditObservationSession>.fromOpaque(refcon).takeUnretainedValue()
-        Task { @MainActor in
-            session.scheduleRead()
-        }
+        AXObserverCallbackBox.scheduleRead(from: refcon)
     }
 }

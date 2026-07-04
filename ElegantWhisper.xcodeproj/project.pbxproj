@@ -43,6 +43,8 @@
 		010000000000000000000023 /* PolishingPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000023 /* PolishingPage.swift */; };
 		010000000000000000000024 /* SettingsPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000024 /* SettingsPage.swift */; };
 		010000000000000000000025 /* StylePackStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000025 /* StylePackStore.swift */; };
+		010000000000000000000026 /* LearningCandidateStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000026 /* LearningCandidateStore.swift */; };
+		010000000000000000000027 /* PostEditLearner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000027 /* PostEditLearner.swift */; };
 		010000000000000000000101 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000101 /* AppIcon.icns */; };
 		010000000000000000000102 /* ElegantWhisperLogo.png in Resources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000102 /* ElegantWhisperLogo.png */; };
 		010000000000000000000201 /* AppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 020000000000000000000201 /* AppKit.framework */; };
@@ -92,6 +94,8 @@
 		020000000000000000000023 /* PolishingPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PolishingPage.swift; sourceTree = "<group>"; };
 		020000000000000000000024 /* SettingsPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsPage.swift; sourceTree = "<group>"; };
 		020000000000000000000025 /* StylePackStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StylePackStore.swift; sourceTree = "<group>"; };
+		020000000000000000000026 /* LearningCandidateStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LearningCandidateStore.swift; sourceTree = "<group>"; };
+		020000000000000000000027 /* PostEditLearner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostEditLearner.swift; sourceTree = "<group>"; };
 		020000000000000000000101 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
 		020000000000000000000102 /* ElegantWhisperLogo.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ElegantWhisperLogo.png; sourceTree = "<group>"; };
 		020000000000000000000103 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -156,12 +160,14 @@
 				02000000000000000000000A /* HistoryStore.swift */,
 				02000000000000000000000B /* InputSourceManager.swift */,
 				02000000000000000000000C /* KeychainStore.swift */,
+				020000000000000000000026 /* LearningCandidateStore.swift */,
 				02000000000000000000001B /* LLMPromptBuilder.swift */,
 				02000000000000000000001A /* LLMProviderPreset.swift */,
 				02000000000000000000000D /* LLMRefiner.swift */,
 				02000000000000000000000E /* OptionKeyMonitor.swift */,
 				02000000000000000000000F /* PermissionManager.swift */,
 				020000000000000000000010 /* PermissionOnboardingWindow.swift */,
+				020000000000000000000027 /* PostEditLearner.swift */,
 				020000000000000000000011 /* SettingsStore.swift */,
 				020000000000000000000016 /* ShortcutDetector.swift */,
 				020000000000000000000013 /* SpeechTranscriber.swift */,
@@ -316,10 +322,12 @@
 				01000000000000000000000A /* HistoryStore.swift in Sources */,
 				01000000000000000000000B /* InputSourceManager.swift in Sources */,
 				01000000000000000000000C /* KeychainStore.swift in Sources */,
+				010000000000000000000026 /* LearningCandidateStore.swift in Sources */,
 				01000000000000000000000D /* LLMRefiner.swift in Sources */,
 				01000000000000000000000E /* OptionKeyMonitor.swift in Sources */,
 				01000000000000000000000F /* PermissionManager.swift in Sources */,
 				010000000000000000000010 /* PermissionOnboardingWindow.swift in Sources */,
+				010000000000000000000027 /* PostEditLearner.swift in Sources */,
 				010000000000000000000011 /* SettingsStore.swift in Sources */,
 				010000000000000000000016 /* ShortcutDetector.swift in Sources */,
 				010000000000000000000013 /* SpeechTranscriber.swift in Sources */,
