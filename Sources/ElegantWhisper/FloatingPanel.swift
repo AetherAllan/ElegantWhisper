@@ -10,9 +10,9 @@ final class FloatingPanel {
     private let waveform = WaveformView()
     private let label = NSTextField(labelWithString: "Listening...")
     private var widthConstraint: NSLayoutConstraint?
+    private var labelWidthConstraint: NSLayoutConstraint?
     private var presentationID = UUID()
     private var pendingHide: DispatchWorkItem?
-    private var lastLevelUpdateTime: TimeInterval = 0
 
     init() {
         panel = NSPanel(
@@ -64,6 +64,7 @@ final class FloatingPanel {
         panel.contentView = rootView
 
         widthConstraint = panel.contentView?.widthAnchor.constraint(equalToConstant: 176)
+        labelWidthConstraint = label.widthAnchor.constraint(equalToConstant: 92)
         NSLayoutConstraint.activate([
             container.leadingAnchor.constraint(equalTo: rootView.leadingAnchor),
             container.trailingAnchor.constraint(equalTo: rootView.trailingAnchor),
@@ -74,10 +75,9 @@ final class FloatingPanel {
             stack.trailingAnchor.constraint(equalTo: container.trailingAnchor),
             stack.topAnchor.constraint(equalTo: container.topAnchor),
             stack.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-            waveform.widthAnchor.constraint(equalToConstant: 28),
-            waveform.heightAnchor.constraint(equalToConstant: 18),
-            label.widthAnchor.constraint(greaterThanOrEqualToConstant: 72),
-            label.widthAnchor.constraint(lessThanOrEqualToConstant: 260),
+            waveform.widthAnchor.constraint(equalToConstant: 34),
+            waveform.heightAnchor.constraint(equalToConstant: 22),
+            labelWidthConstraint!,
             widthConstraint!
         ])
     }
@@ -86,9 +86,8 @@ final class FloatingPanel {
         beginPresentation()
         waveform.isHidden = false
         waveform.level = 0
-        lastLevelUpdateTime = 0
         waveform.needsDisplay = true
-        setText(text.isEmpty ? "Listening..." : text, animated: false)
+        setText(text.isEmpty ? "Listening..." : shortPreview(text), animated: false)
         show()
     }
 
@@ -111,20 +110,12 @@ final class FloatingPanel {
     }
 
     func updatePartial(_ text: String) {
-        // Partial recognition can arrive in bursts. Do not animate every token:
-        // the label should track Speech immediately while only status/success
-        // transitions keep the slower visual polish.
-        setText(text.isEmpty ? "Listening..." : text, animated: false)
+        // Keep recording width bounded. Partial text is only a rolling tail preview; letting the
+        // full transcript resize this panel makes the text appear to push outside the capsule.
+        setText(text.isEmpty ? "Listening..." : shortPreview(text), animated: false)
     }
 
     func updateLevel(_ level: Float) {
-        let now = ProcessInfo.processInfo.systemUptime
-        // Audio callbacks can arrive 40+ times per second. Drawing the waveform
-        // at roughly display cadence keeps MainActor free for transcript text.
-        if level > 0, now - lastLevelUpdateTime < 1.0 / 30.0 {
-            return
-        }
-        lastLevelUpdateTime = now
         waveform.level = CGFloat(level)
     }
 
@@ -185,7 +176,7 @@ final class FloatingPanel {
             return
         }
         NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.22
+            context.duration = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : 0.22
             panel.animator().alphaValue = 0
         } completionHandler: { [weak self] in
             Task { @MainActor in
@@ -209,7 +200,7 @@ final class FloatingPanel {
         panel.orderFrontRegardless()
         DebugLog.event("panelShowState:visible=\(wasVisible):alpha=\(panel.alphaValue)")
         NSAnimationContext.runAnimationGroup { context in
-            context.duration = wasVisible && panel.alphaValue >= 0.99 ? 0 : 0.12
+            context.duration = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion || (wasVisible && panel.alphaValue >= 0.99) ? 0 : 0.12
             context.timingFunction = CAMediaTimingFunction(name: .easeOut)
             panel.animator().alphaValue = 1
         }
@@ -217,10 +208,7 @@ final class FloatingPanel {
 
     private func setText(_ text: String, animated: Bool = true) {
         label.stringValue = text
-        let textWidth = min(260, max(72, ceil(label.intrinsicContentSize.width)))
-        let totalWidth = textWidth + (waveform.isHidden ? 32 : 64)
-        widthConstraint?.constant = totalWidth
-
+        updateWidthForCurrentText()
         guard animated else {
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = 0
@@ -232,10 +220,31 @@ final class FloatingPanel {
         }
 
         NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.18
+            context.duration = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : 0.18
             panel.contentView?.layoutSubtreeIfNeeded()
             position()
         }
+    }
+
+    private func shortPreview(_ text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count > 8 else {
+            return trimmed
+        }
+        // Show the newest recognition tail, not the first few characters forever. Keeping the
+        // preview to eight visible characters prevents long partials from pushing the capsule
+        // around while still making the text feel live as speech recognition updates.
+        return String(trimmed.suffix(8))
+    }
+
+    private func updateWidthForCurrentText() {
+        let fittingWidth = ceil(label.intrinsicContentSize.width)
+        let labelWidth = min(132, max(72, fittingWidth))
+        labelWidthConstraint?.constant = labelWidth
+
+        let horizontalPadding: CGFloat = 26
+        let waveformSpace: CGFloat = waveform.isHidden ? 0 : 42
+        widthConstraint?.constant = min(220, max(150, horizontalPadding + waveformSpace + labelWidth))
     }
 
     private func position() {
@@ -281,9 +290,8 @@ private final class WaveformView: NSView {
         let startX = bounds.midX - totalWidth / 2
 
         for (index, weight) in weights.enumerated() {
-            let jitter = CGFloat.random(in: -0.04...0.04)
-            let normalized = max(0.08, min(1, level * weight + jitter))
-            let height = 4 + normalized * 14
+            let normalized = max(0.08, min(1, level * weight))
+            let height = 5 + normalized * 19
             let x = startX + CGFloat(index) * (barWidth + gap)
             let rect = NSRect(x: x, y: bounds.midY - height / 2, width: barWidth, height: height)
             NSBezierPath(roundedRect: rect, xRadius: barWidth / 2, yRadius: barWidth / 2).fill()

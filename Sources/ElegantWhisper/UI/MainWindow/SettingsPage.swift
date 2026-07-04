@@ -9,6 +9,8 @@ extension MainWindowController {
         clipboardCheckbox.action = #selector(markGeneralDirty)
         historyCheckbox.target = self
         historyCheckbox.action = #selector(markGeneralDirty)
+        learningCheckbox.target = self
+        learningCheckbox.action = #selector(markGeneralDirty)
 
         let general = MainWindowUI.form([
             ("Language", languagePopup)
@@ -25,6 +27,7 @@ extension MainWindowController {
                     general,
                     clipboardCheckbox,
                     historyCheckbox,
+                    learningCheckbox,
                     save
                 ]),
                 MainWindowUI.card([

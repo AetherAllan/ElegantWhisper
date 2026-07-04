@@ -44,6 +44,7 @@ final class SettingsStore: @unchecked Sendable {
         static let requestTimeout = "requestTimeout"
         static let keepClipboardWithoutTarget = "keepClipboardWithoutTarget"
         static let saveHistory = "saveHistory"
+        static let postEditLearningEnabled = "postEditLearningEnabled"
     }
 
     var language: RecognitionLanguage {
@@ -140,6 +141,15 @@ final class SettingsStore: @unchecked Sendable {
         }
         set {
             defaults.set(newValue, forKey: Key.saveHistory)
+        }
+    }
+
+    var postEditLearningEnabled: Bool {
+        get {
+            defaults.object(forKey: Key.postEditLearningEnabled) as? Bool ?? false
+        }
+        set {
+            defaults.set(newValue, forKey: Key.postEditLearningEnabled)
         }
     }
 }

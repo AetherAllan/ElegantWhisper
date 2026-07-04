@@ -18,6 +18,7 @@ extension MainWindowController {
         let add = MainWindowUI.button("Add Term", target: self, action: #selector(addDictionaryTerm), primary: true)
 
         let entries = dictionary.entries(matching: dictionarySearchField.stringValue)
+        let suggestions = LearningCandidateStore.shared.items()
         let rows: [NSView]
         if entries.isEmpty {
             rows = [MainWindowUI.empty("No dictionary terms yet.")]
@@ -34,6 +35,9 @@ extension MainWindowController {
                     form,
                     add
                 ]),
+                MainWindowUI.card([
+                    MainWindowUI.sectionHeader("Suggestions", "\(suggestions.count) pending")
+                ] + suggestionRows(suggestions)),
                 MainWindowUI.card([
                     MainWindowUI.sectionHeader("Terms", "\(entries.count) saved")
                 ] + rows)
@@ -64,5 +68,37 @@ extension MainWindowController {
         row.alignment = .centerY
         row.spacing = 12
         return row
+    }
+
+    func suggestionRows(_ suggestions: [LearningCandidate]) -> [NSView] {
+        guard !suggestions.isEmpty else {
+            return [MainWindowUI.empty("No learning suggestions yet.")]
+        }
+        return suggestions.prefix(50).map { candidate in
+            let title = NSTextField(labelWithString: "\(candidate.original) → \(candidate.replacement)")
+            title.font = .systemFont(ofSize: 14, weight: .semibold)
+            title.textColor = .labelColor
+
+            let app = candidate.bundleIdentifier ?? "all apps"
+            let detail = MainWindowUI.body("\(candidate.language.menuTitle) · \(app) · \(candidate.occurrenceCount)x")
+            detail.lineBreakMode = .byTruncatingTail
+
+            let text = NSStackView(views: [title, detail])
+            text.orientation = .vertical
+            text.alignment = .leading
+            text.spacing = 3
+            text.setContentHuggingPriority(.defaultLow, for: .horizontal)
+
+            let accept = NSButton(title: "Accept", target: self, action: #selector(acceptLearningCandidate(_:)))
+            accept.identifier = NSUserInterfaceItemIdentifier(candidate.id.uuidString)
+            let dismiss = NSButton(title: "Dismiss", target: self, action: #selector(dismissLearningCandidate(_:)))
+            dismiss.identifier = NSUserInterfaceItemIdentifier(candidate.id.uuidString)
+
+            let row = NSStackView(views: [text, accept, dismiss])
+            row.orientation = .horizontal
+            row.alignment = .centerY
+            row.spacing = 10
+            return row
+        }
     }
 }

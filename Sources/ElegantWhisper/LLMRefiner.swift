@@ -34,6 +34,13 @@ struct RefinementMetrics: Sendable {
     }
 }
 
+enum CorrectionRejectionReason: String {
+    case empty
+    case tooLong
+    case editRatio
+    case finishLength
+}
+
 final class LLMRefiner: Sendable {
     private let settings: SettingsStore
     private let stylePacks: StylePackStore
@@ -123,7 +130,7 @@ final class LLMRefiner: Sendable {
             }
             DebugLog.event("llmRefineResponse:\(response.provider ?? "unknown"):\(response.model ?? "unknown"):\(choice.finishReason ?? "unknown")")
             guard let correction = self.acceptedCorrection(original: trimmed, choice: choice) else {
-                DebugLog.event("llmRefineFallback:rejected")
+                DebugLog.event("llmRefineFallback:rejected:\(self.rejectionReason(original: trimmed, choice: choice)?.rawValue ?? "unknown")")
                 Task { @MainActor in
                     completion(text)
                 }
@@ -197,6 +204,8 @@ final class LLMRefiner: Sendable {
         let url = completionsURL(from: base)
         let provider = settings.llmProvider
         let stylePack = stylePacks.activePack()
+        let systemPrompt = LLMPromptBuilder.systemPrompt(stylePack: stylePack, hotwords: hotwords)
+        let maxOutputTokens = maxTokens(for: text)
         var request = URLRequest(url: url, timeoutInterval: effectiveTimeout())
         request.httpMethod = "POST"
         request.setValue("Bearer \(settings.apiKey)", forHTTPHeaderField: "Authorization")
@@ -206,14 +215,18 @@ final class LLMRefiner: Sendable {
         let body = ChatRequest(
             model: settings.model,
             messages: [
-                ChatMessage(role: "system", content: LLMPromptBuilder.systemPrompt(stylePack: stylePack, hotwords: hotwords)),
+                ChatMessage(role: "system", content: systemPrompt),
                 ChatMessage(role: "user", content: text)
             ],
             temperature: 0,
-            maxTokens: maxTokens(for: text),
+            maxTokens: maxOutputTokens,
             reasoning: provider.reasoningPolicy
         )
 
+        // Log counts only. System prompts, transcripts, model output, and API keys can all contain
+        // private text, but these numbers are enough to confirm output budgeting uses user text
+        // separately from the prompt.
+        DebugLog.event("llmRequestShape:provider=\(provider.rawValue):model=\(settings.model):systemChars=\(systemPrompt.count):userChars=\(text.count):hotwordCount=\(hotwords.count):maxOutputTokens=\(maxOutputTokens)")
         request.httpBody = try? JSONEncoder().encode(body)
         return request
     }
@@ -226,44 +239,58 @@ final class LLMRefiner: Sendable {
         // OpenAI-compatible APIs report `finish_reason=length` when max_tokens cuts the response.
         // A truncated correction is worse than no correction because it can silently drop the end
         // of a dictation before paste. Fall back to the original transcript instead.
-        guard choice.finishReason != "length" else {
-            return nil
-        }
         let corrected = normalizeModelOutput(choice.message.content ?? "")
-        guard acceptsCorrection(original: original, corrected: corrected) else {
+        guard rejectionReason(original: original, corrected: corrected, finishReason: choice.finishReason) == nil else {
             return nil
         }
         return corrected
     }
 
     func acceptsCorrection(original: String, corrected: String) -> Bool {
-        let corrected = corrected.trimmingCharacters(in: .whitespacesAndNewlines)
+        rejectionReason(original: original, corrected: corrected, finishReason: nil) == nil
+    }
+
+    func rejectionReason(original: String, choice: ChatResponse.Choice) -> CorrectionRejectionReason? {
+        rejectionReason(
+            original: original,
+            corrected: normalizeModelOutput(choice.message.content ?? ""),
+            finishReason: choice.finishReason
+        )
+    }
+
+    func rejectionReason(
+        original: String,
+        corrected rawCorrected: String,
+        finishReason: String?
+    ) -> CorrectionRejectionReason? {
+        guard finishReason != "length" else {
+            return .finishLength
+        }
+        let corrected = rawCorrected.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !corrected.isEmpty else {
-            return false
+            return .empty
         }
 
         let originalCount = original.count
         let correctedCount = corrected.count
         guard correctedCount <= max(32, Int(Double(originalCount) * 1.8)) else {
-            return false
-        }
-        if originalCount > 10, correctedCount < Int(Double(originalCount) * 0.5) {
-            return false
+            return .tooLong
         }
 
         // ponytail: exact edit-ratio check only for normal dictation snippets; very long text
         // falls back to length bounds so correction never becomes an O(n^2) surprise.
         guard max(originalCount, correctedCount) <= 300 else {
-            return true
+            return nil
         }
-        return editDistanceRatio(original, corrected) <= 0.8
+        return editDistanceRatio(original, corrected) <= 0.8 ? nil : .editRatio
     }
 
     func maxTokens(for text: String) -> Int {
-        // Polishing should return text close to the transcript length. A 256-token floor gives
-        // free/router models too much room to emit reasoning or explanations before any usable
-        // correction. Keep the short-text floor small, but still scale for long dictations.
-        min(4096, max(96, text.count * 2))
+        // This is an output budget, so it intentionally depends only on the user transcript.
+        // The system prompt has its own context cost and must not inflate completion tokens.
+        // OpenRouter Free can still route to models that spend output tokens on preamble; the
+        // acceptance checks below reject rambling or meaning-changing output.
+        min(4096, max(192, text.count * 4))
     }
 
     func effectiveTimeout() -> TimeInterval {

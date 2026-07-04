@@ -27,13 +27,13 @@ final class AudioRecorder {
         tapInstalled = false
 
         do {
-            let levelMeter = AudioLevelMeter(onLevel: onLevel)
+            let levelSmoother = AudioLevelSmoother(onLevel: onLevel)
             let bufferCallback = onBuffer
             input.installTap(
                 onBus: 0,
                 bufferSize: 1024,
                 format: format,
-                block: Self.makeTapBlock(levelMeter: levelMeter, bufferCallback: bufferCallback)
+                block: Self.makeTapBlock(levelSmoother: levelSmoother, bufferCallback: bufferCallback)
             )
             tapInstalled = true
 
@@ -68,25 +68,28 @@ final class AudioRecorder {
     }
 
     nonisolated private static func makeTapBlock(
-        levelMeter: AudioLevelMeter,
+        levelSmoother: AudioLevelSmoother,
         bufferCallback: (@Sendable (AVAudioPCMBuffer) -> Void)?
     ) -> AVAudioNodeTapBlock {
         // Build this closure outside MainActor isolation. AVAudioEngine invokes
         // tap blocks on its realtime audio queue; a MainActor-isolated closure
         // traps at runtime under Swift 6 executor checks.
         { buffer, _ in
-            levelMeter.update(with: buffer)
+            levelSmoother.update(with: buffer)
             bufferCallback?(buffer)
         }
     }
 }
 
-// ponytail: one meter per installed tap. AVAudioEngine delivers a tap serially,
+// ponytail: one smoother per installed tap. AVAudioEngine delivers a tap serially,
 // so the smoothing envelope is owned by that callback path and is never reset
 // from MainActor. If Apple ever documents concurrent tap delivery, replace this
 // with a lock-free atomic Float or move level smoothing to MainActor.
-private final class AudioLevelMeter: @unchecked Sendable {
+private final class AudioLevelSmoother: @unchecked Sendable {
     private var smoothedLevel: Float = 0
+    private var latestLevel: Float = 0
+    private var lastPublishedLevel: Float = 0
+    private var lastPublishedAt: TimeInterval = 0
     private let onLevel: (@MainActor @Sendable (Float) -> Void)?
 
     init(onLevel: (@MainActor @Sendable (Float) -> Void)?) {
@@ -108,8 +111,16 @@ private final class AudioLevelMeter: @unchecked Sendable {
         let rms = min(1, sqrt(sum / Float(count)) * 18)
         let coefficient: Float = rms > smoothedLevel ? 0.40 : 0.15
         smoothedLevel += (rms - smoothedLevel) * coefficient
+        latestLevel = smoothedLevel
 
-        let level = smoothedLevel
+        let now = ProcessInfo.processInfo.systemUptime
+        guard now - lastPublishedAt >= 1.0 / 30.0 || abs(latestLevel - lastPublishedLevel) >= 0.02 else {
+            return
+        }
+        lastPublishedAt = now
+        lastPublishedLevel = latestLevel
+
+        let level = latestLevel
         let callback = onLevel
         Task { @MainActor in
             callback?(level)

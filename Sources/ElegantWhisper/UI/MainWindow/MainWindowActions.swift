@@ -71,6 +71,7 @@ extension MainWindowController {
         settings.language = selectedLanguage(in: languagePopup)
         settings.keepClipboardWithoutTarget = clipboardCheckbox.state == .on
         settings.saveHistory = historyCheckbox.state == .on
+        settings.postEditLearningEnabled = learningCheckbox.state == .on
         generalDirty = false
         showNotice("Settings saved")
         renderCurrentPage()
@@ -185,5 +186,31 @@ extension MainWindowController {
             return nil
         }
         return UUID(uuidString: rawValue)
+    }
+
+    @objc func acceptLearningCandidate(_ sender: NSButton) {
+        guard let candidate = learningCandidate(from: sender) else {
+            return
+        }
+        _ = dictionary.add(term: candidate.replacement, aliases: [candidate.original], language: candidate.language)
+        LearningCandidateStore.shared.remove(id: candidate.id)
+        showNotice("Added")
+        renderCurrentPage()
+    }
+
+    @objc func dismissLearningCandidate(_ sender: NSButton) {
+        guard let candidate = learningCandidate(from: sender) else {
+            return
+        }
+        LearningCandidateStore.shared.remove(id: candidate.id)
+        showNotice("Dismissed")
+        renderCurrentPage()
+    }
+
+    func learningCandidate(from sender: NSButton) -> LearningCandidate? {
+        guard let id = uuid(from: sender) else {
+            return nil
+        }
+        return LearningCandidateStore.shared.items().first { $0.id == id }
     }
 }

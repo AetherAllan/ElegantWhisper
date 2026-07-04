@@ -14,6 +14,7 @@ final class AppController {
     private let correctionEngine = CorrectionEngine()
     private let focusDetector = FocusDetector()
     private let inputSourceManager = InputSourceManager()
+    private let postEditLearner = PostEditLearner()
     private let panel = FloatingPanel()
     private let clock = ContinuousClock()
     private lazy var refiner = LLMRefiner(settings: settings)
@@ -137,6 +138,7 @@ final class AppController {
             originalTarget: focusDetector.currentEditableTarget(),
             originalApplication: NSWorkspace.shared.frontmostApplication
         )
+        postEditLearner.stop()
         latestPartial = ""
         refinementTask?.cancel()
         refinementTask = nil
@@ -193,6 +195,7 @@ final class AppController {
         recordingStoppedAt = nil
         ignoreToggleCancellationUntil = nil
         currentSession = nil
+        postEditLearner.stop()
         latestPartial = ""
         _ = state.transition(to: .idle)
         panel.hide()
@@ -212,6 +215,7 @@ final class AppController {
             recordingStoppedAt = nil
             ignoreToggleCancellationUntil = nil
             currentSession = nil
+            postEditLearner.stop()
             latestPartial = ""
             _ = state.transition(to: .idle)
             panel.hide()
@@ -320,12 +324,19 @@ final class AppController {
         }
 
         let historyApp = target?.app ?? fallbackApp ?? originalTarget?.app ?? originalApplication
+        let learningContext = postEditLearner.prepare(
+            target: target,
+            insertedText: text,
+            language: settings.language,
+            enabled: settings.postEditLearningEnabled
+        ).1
         injector.inject(text, target: target, fallbackApp: fallbackApp) { [weak self] result in
             guard let self, self.isCurrentSession(sessionID) else {
                 return
             }
             switch result {
             case .pasteAttempted:
+                self.postEditLearner.start(learningContext)
                 self.panel.hide()
                 DebugLog.event("panelHide")
                 self.saveHistory(text, result: HistoryResult.pasteAttempted, app: historyApp)
@@ -352,6 +363,7 @@ final class AppController {
         recordingStoppedAt = nil
         ignoreToggleCancellationUntil = nil
         currentSession = nil
+        postEditLearner.stop()
         latestPartial = ""
         _ = state.transition(to: .idle)
         panel.showError(message)

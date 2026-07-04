@@ -8,15 +8,20 @@ enum LLMPromptBuilder {
 
     Rules:
     1. Fix obvious ASR mistakes, Chinese homophones, and spoken technical terms.
-    2. Do not polish, expand, summarize, translate, delete, answer questions, or change meaning.
-    3. Keep commands, paths, URLs, numbers, environment variables, model names, and code symbols unchanged unless they are obvious ASR mistakes.
-    4. If the text already looks correct, return it unchanged.
-    5. Return only the corrected text.
+    2. Add natural punctuation and light formatting when the transcript clearly needs it.
+    3. For short sentences, add commas, periods, question marks, or line breaks as appropriate.
+    4. Do not expand, summarize, translate, delete, answer questions, or change meaning.
+    5. Keep commands, paths, URLs, numbers, environment variables, model names, and code symbols unchanged unless they are obvious ASR mistakes.
+    6. If the text already looks correct, return it unchanged.
+    7. Return only the corrected text. Do not include explanations, labels, markdown fences, or analysis.
+    8. Keep the output close to the input length; punctuation and line breaks are allowed, new content is not.
+    9. Even for very short input, return the complete corrected text, not a summary or keyword.
 
     Examples:
     - 配森 -> Python
     - 杰森 -> JSON
     - 跟目录 -> 根目录
+    - 今天很好我们继续 -> 今天很好，我们继续。
 
     {{HOTWORDS}}
     """
@@ -27,9 +32,10 @@ enum LLMPromptBuilder {
     Rules:
     1. Keep the user's request, constraints, names, code symbols, URLs, and numbers.
     2. Remove filler words and repeated self-corrections only when the intended final wording is clear.
-    3. Do not answer the prompt. Do not add facts, examples, or requirements the user did not say.
-    4. Prefer concise structure when the transcript is long.
-    5. Return only the cleaned prompt text.
+    3. Add natural punctuation and light formatting, including short line breaks for steps or lists.
+    4. Do not answer the prompt. Do not add facts, examples, or requirements the user did not say.
+    5. Prefer concise structure when the transcript is long.
+    6. Return only the cleaned prompt text. Do not include explanations, labels, markdown fences, or analysis.
 
     {{HOTWORDS}}
     """
@@ -40,8 +46,9 @@ enum LLMPromptBuilder {
     Rules:
     1. Preserve commands, paths, filenames, APIs, model names, code identifiers, punctuation that matters, and version numbers.
     2. Fix obvious ASR mistakes in technical terms.
-    3. Do not explain, summarize, translate, or invent missing steps.
-    4. Return only the cleaned technical text.
+    3. Add natural punctuation and light formatting without changing commands or code-like spans.
+    4. Do not explain, summarize, translate, or invent missing steps.
+    5. Return only the cleaned technical text. Do not include explanations, labels, markdown fences, or analysis.
 
     {{HOTWORDS}}
     """

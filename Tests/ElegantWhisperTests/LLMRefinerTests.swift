@@ -21,10 +21,17 @@ final class LLMRefinerTests: XCTestCase {
         XCTAssertTrue(refiner.acceptsCorrection(original: "我在写配森和杰森", corrected: "我在写 Python 和 JSON"))
     }
 
+    func testAcceptsLightPunctuationCorrection() {
+        let refiner = LLMRefiner(settings: .shared)
+
+        XCTAssertTrue(refiner.acceptsCorrection(original: "今天很好我们继续", corrected: "今天很好，我们继续。"))
+    }
+
     func testRejectsEmptyCorrection() {
         let refiner = LLMRefiner(settings: .shared)
 
         XCTAssertFalse(refiner.acceptsCorrection(original: "hello world", corrected: ""))
+        XCTAssertEqual(refiner.rejectionReason(original: "hello world", corrected: "", finishReason: nil), .empty)
     }
 
     func testRejectsLargeRewrite() {
@@ -34,6 +41,33 @@ final class LLMRefinerTests: XCTestCase {
             original: "打开设置",
             corrected: "下面是一个完整的操作指南，第一步打开系统设置，第二步找到隐私权限，第三步逐项检查。"
         ))
+        XCTAssertEqual(
+            refiner.rejectionReason(
+                original: "打开设置",
+                corrected: "下面是一个完整的操作指南，第一步打开系统设置，第二步找到隐私权限，第三步逐项检查。",
+                finishReason: nil
+            ),
+            .tooLong
+        )
+    }
+
+    func testAllowsShorterCorrectionWhenEditIsStillConservative() {
+        let refiner = LLMRefiner(settings: .shared)
+
+        XCTAssertNil(refiner.rejectionReason(
+            original: "abcdefghijklmnopqrst",
+            corrected: "abcdefghi",
+            finishReason: nil
+        ))
+    }
+
+    func testRejectsHighEditRatioWithReason() {
+        let refiner = LLMRefiner(settings: .shared)
+
+        XCTAssertEqual(
+            refiner.rejectionReason(original: "请打开设置页面", corrected: "明天去买咖啡豆", finishReason: nil),
+            .editRatio
+        )
     }
 
     func testRejectsTruncatedLLMChoice() {
@@ -44,6 +78,7 @@ final class LLMRefinerTests: XCTestCase {
         )
 
         XCTAssertFalse(refiner.acceptsChoice(original: "这是一个比较长的原始转写，不能因为模型截断就丢掉后半段。", choice: choice))
+        XCTAssertEqual(refiner.rejectionReason(original: "这是一个比较长的原始转写，不能因为模型截断就丢掉后半段。", choice: choice), .finishLength)
     }
 
     func testRejectsNullContentFromReasoningOnlyProviderResponse() throws {
@@ -118,7 +153,7 @@ final class LLMRefinerTests: XCTestCase {
         let body = try XCTUnwrap(request.httpBody)
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
         XCTAssertEqual(json["model"] as? String, "nvidia/nemotron-3-nano-30b-a3b:free")
-        XCTAssertEqual(json["max_tokens"] as? Int, 96)
+        XCTAssertEqual(json["max_tokens"] as? Int, 192)
         let reasoning = try XCTUnwrap(json["reasoning"] as? [String: Any])
         XCTAssertEqual(reasoning["effort"] as? String, "none")
         XCTAssertEqual(reasoning["exclude"] as? Bool, true)
@@ -151,10 +186,50 @@ final class LLMRefinerTests: XCTestCase {
         XCTAssertGreaterThan(json["max_tokens"] as? Int ?? 0, 256)
     }
 
+    func testShortInputStillBuildsRefinementRequest() throws {
+        let settings = makeSettings()
+        let stylePacks = try makeStylePackStore()
+        settings.apiKey = "test-key"
+        defer { settings.apiKey = "" }
+
+        let request = try XCTUnwrap(LLMRefiner(settings: settings, stylePacks: stylePacks).makeRequest(text: "好"))
+        let body = try XCTUnwrap(request.httpBody)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+
+        XCTAssertEqual(json["max_tokens"] as? Int, 192)
+    }
+
+    func testOutputBudgetIgnoresSystemPromptLength() throws {
+        let settings = makeSettings()
+        let stylePacks = try makeStylePackStore()
+        settings.apiKey = "test-key"
+        defer { settings.apiKey = "" }
+
+        var pack = StylePackStore.builtinPacks[0]
+        pack.active = true
+        pack.systemPrompt = "\(String(repeating: "System prompt sentence. ", count: 500))\n\n\(LLMPromptBuilder.hotwordPlaceholder)"
+        stylePacks.save(pack)
+
+        let userText = String(repeating: "a", count: 80)
+        let request = try XCTUnwrap(LLMRefiner(settings: settings, stylePacks: stylePacks).makeRequest(text: userText))
+        let body = try XCTUnwrap(request.httpBody)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+
+        XCTAssertEqual(json["max_tokens"] as? Int, 320)
+    }
+
     func testPromptKeepsConservativeBoundary() {
         let prompt = LLMPromptBuilder.systemPrompt(template: LLMPromptBuilder.conservativeTemplate, hotwords: ["MCP"])
 
-        XCTAssertTrue(prompt.contains("Do not polish"))
+        XCTAssertTrue(prompt.contains("punctuation"))
+        XCTAssertTrue(prompt.contains("light formatting"))
+        XCTAssertTrue(prompt.contains("Do not expand"))
+        XCTAssertTrue(prompt.contains("summarize"))
+        XCTAssertTrue(prompt.contains("translate"))
+        XCTAssertTrue(prompt.contains("answer questions"))
+        XCTAssertTrue(prompt.contains("change meaning"))
+        XCTAssertTrue(prompt.contains("Do not include explanations"))
+        XCTAssertTrue(prompt.contains("very short input"))
         XCTAssertTrue(prompt.contains("MCP"))
         XCTAssertFalse(prompt.contains("Common ASR hints"))
     }
