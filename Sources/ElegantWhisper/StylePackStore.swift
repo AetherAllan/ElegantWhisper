@@ -33,7 +33,8 @@ final class StylePackStore: @unchecked Sendable {
     func activePack() -> StylePack {
         queue.sync {
             loadIfNeeded()
-            return cachedPacks.first { $0.active } ?? Self.builtinPacks[0]
+            ensureExactlyOneActivePack()
+            return cachedPacks.first { $0.active } ?? cachedPacks[0]
         }
     }
 
@@ -65,7 +66,7 @@ final class StylePackStore: @unchecked Sendable {
                     cachedPacks[index].active = cachedPacks[index].id == next.id
                 }
             }
-            ensureOneActivePack()
+            ensureExactlyOneActivePack()
             save()
         }
     }
@@ -85,7 +86,7 @@ final class StylePackStore: @unchecked Sendable {
             } else {
                 cachedPacks.append(builtin)
             }
-            ensureOneActivePack()
+            ensureExactlyOneActivePack()
             save()
             return true
         }
@@ -106,7 +107,9 @@ final class StylePackStore: @unchecked Sendable {
         } else {
             cachedPacks = Self.builtinPacks
         }
-        ensureOneActivePack()
+        if ensureExactlyOneActivePack() {
+            shouldPersistMigration = true
+        }
         if shouldPersistMigration {
             save()
         }
@@ -127,17 +130,30 @@ final class StylePackStore: @unchecked Sendable {
         return merged
     }
 
-    private func ensureOneActivePack() {
+    @discardableResult
+    private func ensureExactlyOneActivePack() -> Bool {
         guard !cachedPacks.isEmpty else {
             cachedPacks = Self.builtinPacks
-            return
+            return true
         }
-        if cachedPacks.contains(where: { $0.active }) {
-            return
+
+        if let activeIndex = cachedPacks.firstIndex(where: { $0.active }) {
+            var changed = false
+            for index in cachedPacks.indices {
+                let shouldBeActive = index == activeIndex
+                if cachedPacks[index].active != shouldBeActive {
+                    cachedPacks[index].active = shouldBeActive
+                    changed = true
+                }
+            }
+            return changed
         }
+
+        let preferredIndex = cachedPacks.firstIndex { $0.id == Self.programmerPackID } ?? cachedPacks.startIndex
         for index in cachedPacks.indices {
-            cachedPacks[index].active = cachedPacks[index].id == Self.programmerPackID
+            cachedPacks[index].active = index == preferredIndex
         }
+        return true
     }
 
     private func activateOnly(_ id: String, in packs: inout [StylePack]) {

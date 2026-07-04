@@ -65,6 +65,59 @@ final class StylePackStoreTests: XCTestCase {
         XCTAssertEqual(migratedFile.packs.first { $0.active }?.id, StylePackStore.programmerPackID)
     }
 
+    func testEmptySavedPacksRestoreBuiltins() throws {
+        let file = try temporaryFile()
+        let data = try JSONEncoder().encode(TestStylePackFile(version: 1, packs: []))
+        try data.write(to: file)
+
+        let store = StylePackStore(fileURL: file)
+
+        XCTAssertFalse(store.packs().isEmpty)
+        XCTAssertEqual(store.packs().filter(\.active).count, 1)
+        XCTAssertEqual(store.activePack().id, StylePackStore.programmerPackID)
+        XCTAssertEqual(try savedPacks(at: file).filter(\.active).count, 1)
+    }
+
+    func testNoActivePackActivatesProgrammerPack() throws {
+        let file = try temporaryFile()
+        let packs = StylePackStore.builtinPacks.map { pack -> StylePack in
+            var copy = pack
+            copy.active = false
+            return copy
+        }
+        let data = try JSONEncoder().encode(TestStylePackFile(version: 1, packs: packs))
+        try data.write(to: file)
+
+        let store = StylePackStore(fileURL: file)
+
+        XCTAssertEqual(store.activePack().id, StylePackStore.programmerPackID)
+        XCTAssertEqual(store.packs().filter(\.active).count, 1)
+        XCTAssertEqual(try savedPacks(at: file).first { $0.active }?.id, StylePackStore.programmerPackID)
+    }
+
+    func testMultipleActivePacksKeepFirstActiveOnly() throws {
+        let file = try temporaryFile()
+        let packs = StylePackStore.builtinPacks.map { pack -> StylePack in
+            var copy = pack
+            copy.active = true
+            return copy
+        }
+        let firstActive = try XCTUnwrap(packs.first?.id)
+        let data = try JSONEncoder().encode(TestStylePackFile(version: 1, packs: packs))
+        try data.write(to: file)
+
+        let store = StylePackStore(fileURL: file)
+
+        XCTAssertEqual(store.activePack().id, firstActive)
+        XCTAssertEqual(store.packs().filter(\.active).count, 1)
+        XCTAssertEqual(try savedPacks(at: file).filter(\.active).count, 1)
+    }
+
+    private func savedPacks(at file: URL) throws -> [StylePack] {
+        let data = try Data(contentsOf: file)
+        return try JSONDecoder().decode(TestStylePackFile.self, from: data).packs
+    }
+
     private func temporaryFile() throws -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("ElegantWhisperTests-\(UUID().uuidString)", isDirectory: true)
