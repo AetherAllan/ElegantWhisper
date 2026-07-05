@@ -91,11 +91,25 @@ final class SettingsStore: @unchecked Sendable {
                 // model without requiring users to rediscover the setting manually.
                 return LLMProvider.openRouterFree.defaultModel ?? "nvidia/nemotron-3-nano-30b-a3b:free"
             }
+            if llmProvider == .inferenceNet,
+               let stored,
+               Self.isStaleInferenceCatalogModel(stored) {
+                return LLMProvider.inferenceNet.defaultModel ?? "nvidia/nemotron3-super"
+            }
             return stored ?? llmProvider.defaultModel ?? LLMProvider.openAI.defaultModel ?? "gpt-4o-mini"
         }
         set {
             defaults.set(newValue.trimmingCharacters(in: .whitespacesAndNewlines), forKey: Key.model)
         }
+    }
+
+    private static func isStaleInferenceCatalogModel(_ model: String) -> Bool {
+        let lower = model.lowercased()
+        if lower == "nvidia/nemotron3-super" || lower == "glm-5.2" || lower.hasPrefix("inference-net/") {
+            return false
+        }
+        let stalePrefixes = ["google/", "meta-llama/", "mistralai/", "qwen/", "deepseek/", "openai/gpt-oss", "openai:"]
+        return stalePrefixes.contains { lower.hasPrefix($0) } || lower == "gpt-5-mini"
     }
 
     var requestTimeout: TimeInterval {

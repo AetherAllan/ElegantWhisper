@@ -3,7 +3,7 @@ import Foundation
 struct InferenceNetCodec: LLMProviderCodec {
     private let plainBase = OpenAICompatibleCodec()
     private let structuredBase = OpenAICompatibleCodec(
-        correctedTextDescription: "Corrected direct-insertion text in the same language as the user transcript. Chinese input must stay Chinese. Do not include instructions, labels, JSON reminders, or explanations."
+        correctedTextDescription: "The final corrected ASR transcript for direct insertion. Fix obvious homophones and missing punctuation. Do not copy the transcript verbatim when corrections are needed."
     )
 
     func makeRequest(
@@ -22,7 +22,7 @@ struct InferenceNetCodec: LLMProviderCodec {
         let schematronRequest = LLMTextRequest(
             model: request.model,
             systemPrompt: Self.structuredSystemPrompt(from: request.systemPrompt),
-            userText: request.userText,
+            userText: Self.transcriptUserMessage(request.userText),
             temperature: request.temperature,
             maxOutputTokens: request.maxOutputTokens,
             outputFormat: .correctedTextJSON
@@ -59,29 +59,61 @@ struct InferenceNetCodec: LLMProviderCodec {
 
     private static func structuredSystemPrompt(from systemPrompt: String) -> String {
         var prompt = """
-        You are a dictation post-processor for a macOS voice input app.
-        Extract the corrected dictation text from the user's raw speech transcript.
-        Respond in JSON format.
+        You are an ASR correction engine for a macOS voice input app.
+
+        Task:
+        Rewrite the raw speech transcript into the final direct-insertion text.
+        The user message is one line: transcript: followed by the ASR text to correct.
 
         Rules:
-        - Put only the final direct-insertion text in corrected_text.
-        - Preserve the user's intended meaning and original language, including mixed Chinese-English input.
-        - Never translate. If the transcript is Chinese, corrected_text must be Chinese. If it is mixed Chinese-English, keep the same mix.
-        - Fix obvious ASR mistakes, Chinese homophones, punctuation, spacing, and spoken technical terms.
-        - Clean obvious speech disfluencies when they do not change meaning: collapse repeated fillers such as 这个这个, 因为因为, 我觉得我觉得, and remove filler words such as 就是, 然后, 这个 when they only mark hesitation.
-        - Do not answer questions, add facts, translate, summarize, or explain.
-        - Do not include instructions, labels, markdown, schema reminders, or validation text in corrected_text.
-        - Prefer canonical technical spellings for obvious ASR near-sounds: Web3, TypeScript, JavaScript, SQL, Python, JSON, API, SDK, CLI, GitHub, npm, Node.js, React, Swift, SwiftUI, AppKit, Xcode, Cursor, Codex, OpenAI, OpenRouter.
 
-        Example:
-        transcript: 一个喜欢健身的人，但是平时不太喜欢吃蔬菜，因为因为我觉得我觉得还是蛋白质更好吃
-        corrected_text: 一个喜欢健身的人，但是平时不太喜欢吃蔬菜，因为我觉得蛋白质更好吃。
+        Put only the final corrected text in corrected_text.
+        Preserve the user's intended meaning.
+        Keep the original language. Never translate.
+        Chinese input must stay Chinese. Mixed Chinese-English input must stay mixed.
+        Do not answer questions, add facts, summarize, explain, or expand.
+        Do not include labels, markdown, schema reminders, or validation text.
+        Fix obvious ASR mistakes, homophones, punctuation, spacing, and spoken technical terms.
+        Add natural Chinese punctuation and commas when the spoken text clearly needs pauses or sentence breaks.
+        Remove obvious hesitation only when it does not change meaning, such as repeated filler words: 这个这个, 因为因为, 我觉得我觉得.
+        Do not aggressively rewrite style. Prefer minimal correction suitable for direct insertion.
+        Do not return corrected_text identical to the transcript unless every homophone, spacing mark, and punctuation mark is already correct.
+
+        Required technical corrections when context makes them obvious:
+
+        外部三 / web三 / web 三 -> Web3
+        Top script / Tape script / Type script / 台普 script -> TypeScript
+        Java script -> JavaScript
+        杰森 -> JSON
+        配森 / 派森 -> Python
+        C口 / sequel -> SQL
+        open router -> OpenRouter
+        open ai -> OpenAI
+        swift UI -> SwiftUI
+        APP kit / app kit -> AppKit
+
+        Examples:
+        transcript: 我是一个外部三程序员，特别喜欢用Top script代码
+        corrected_text: 我是一个 Web3 程序员，特别喜欢用 TypeScript 代码。
+
+        transcript: 我用杰森解析配森脚本里的API返回
+        corrected_text: 我用 JSON 解析 Python 脚本里的 API 返回。
+
+        transcript: 这个这个我觉得我觉得用swift UI做这个功能比较好
+        corrected_text: 我觉得用 SwiftUI 做这个功能比较好。
+
+        transcript: 就我现在发给你这句话就是我用它润色之后的基本没效果呀
+        corrected_text: 就我现在发给你，这句话就是我用它润色之后，基本上没效果呀。
         """
 
         if let localContext = localContextSection(from: systemPrompt) {
             prompt += "\n\n\(localContext)"
         }
         return prompt
+    }
+
+    private static func transcriptUserMessage(_ transcript: String) -> String {
+        "transcript: \(transcript)"
     }
 
     private static func localContextSection(from systemPrompt: String) -> String? {

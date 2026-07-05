@@ -176,6 +176,7 @@ final class LLMRefinerTests: XCTestCase {
         let stylePacks = try makeStylePackStore()
         settings.llmProvider = .inferenceNet
         settings.apiBaseURL = "https://api.inference.net/v1"
+        settings.model = "inference-net/schematron-v2-turbo"
         settings.apiKey = "test-key"
         defer { settings.apiKey = "" }
 
@@ -200,19 +201,44 @@ final class LLMRefinerTests: XCTestCase {
         let schema = try XCTUnwrap(jsonSchema["schema"] as? [String: Any])
         let properties = try XCTUnwrap(schema["properties"] as? [String: Any])
         let correctedText = try XCTUnwrap(properties["corrected_text"] as? [String: Any])
-        XCTAssertTrue((correctedText["description"] as? String)?.contains("same language as the user transcript") == true)
+        XCTAssertTrue((correctedText["description"] as? String)?.contains("Do not copy the transcript verbatim") == true)
         let messages = try XCTUnwrap(json["messages"] as? [[String: Any]])
         let systemPrompt = try XCTUnwrap(messages.first?["content"] as? String)
-        XCTAssertTrue(systemPrompt.contains("Respond in JSON format"))
-        XCTAssertTrue(systemPrompt.contains("Put only the final direct-insertion text in corrected_text"))
+        XCTAssertTrue(systemPrompt.contains("You are an ASR correction engine"))
+        XCTAssertTrue(systemPrompt.contains("Put only the final corrected text in corrected_text"))
         XCTAssertTrue(systemPrompt.contains("Never translate"))
-        XCTAssertTrue(systemPrompt.contains("Chinese, corrected_text must be Chinese"))
-        XCTAssertTrue(systemPrompt.contains("Clean obvious speech disfluencies"))
-        XCTAssertTrue(systemPrompt.contains("因为因为我觉得我觉得"))
+        XCTAssertTrue(systemPrompt.contains("Chinese input must stay Chinese"))
+        XCTAssertTrue(systemPrompt.contains("Remove obvious hesitation only when it does not change meaning"))
+        XCTAssertTrue(systemPrompt.contains("这个这个, 因为因为, 我觉得我觉得"))
+        XCTAssertTrue(systemPrompt.contains("外部三 / web三 / web 三 -> Web3"))
         XCTAssertTrue(systemPrompt.contains("App: Cursor"))
         XCTAssertTrue(systemPrompt.contains("Vocabulary hints: SwiftUI, AXObserver"))
         XCTAssertFalse(systemPrompt.contains("Structured output override"))
         XCTAssertEqual(messages.last?["role"] as? String, "user")
+        XCTAssertEqual(messages.last?["content"] as? String, "transcript: 我想用配森解析杰森")
+    }
+
+    func testInferenceNetNemotronDefaultUsesPlainTextPolishPrompt() throws {
+        let settings = makeSettings()
+        let stylePacks = try makeStylePackStore()
+        settings.llmProvider = .inferenceNet
+        settings.apiBaseURL = "https://api.inference.net/v1"
+        settings.apiKey = "test-key"
+        defer { settings.apiKey = "" }
+
+        let request = try XCTUnwrap(LLMRefiner(
+            settings: settings,
+            stylePacks: stylePacks
+        ).makeRequest(text: "我想用配森解析杰森"))
+
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(
+            with: try XCTUnwrap(request.httpBody)
+        ) as? [String: Any])
+        XCTAssertEqual(json["model"] as? String, "nvidia/nemotron3-super")
+        XCTAssertNil(json["response_format"])
+        let messages = try XCTUnwrap(json["messages"] as? [[String: Any]])
+        let systemPrompt = try XCTUnwrap(messages.first?["content"] as? String)
+        XCTAssertFalse(systemPrompt.contains("You are an ASR correction engine"))
         XCTAssertEqual(messages.last?["content"] as? String, "我想用配森解析杰森")
     }
 

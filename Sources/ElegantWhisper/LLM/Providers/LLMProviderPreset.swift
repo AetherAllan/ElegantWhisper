@@ -28,7 +28,7 @@ enum LLMProvider: String, CaseIterable, Codable, Sendable {
         switch self {
         case .openAI: "gpt-4o-mini"
         case .openRouterFree: "nvidia/nemotron-3-nano-30b-a3b:free"
-        case .inferenceNet: "inference-net/schematron-v2-turbo"
+        case .inferenceNet: "nvidia/nemotron3-super"
         case .custom: nil
         }
     }
@@ -41,10 +41,10 @@ enum LLMProvider: String, CaseIterable, Codable, Sendable {
             ["nvidia/nemotron-3-nano-30b-a3b:free"]
         case .inferenceNet:
             [
+                "nvidia/nemotron3-super",
+                "glm-5.2",
                 "inference-net/schematron-v2-turbo",
-                "inference-net/schematron-v2-small",
-                "google/gemma-3-27b-instruct/bf-16",
-                "nvidia/nemotron3-super"
+                "inference-net/schematron-v2-small"
             ]
         case .custom:
             []
@@ -58,7 +58,7 @@ enum LLMProvider: String, CaseIterable, Codable, Sendable {
         case .openRouterFree:
             "Routes to random free OpenRouter models. Good for testing, not guaranteed stable."
         case .inferenceNet:
-            "OpenAI-compatible Inference.net API. Default uses their low-cost Schematron structured-output model."
+            "OpenAI-compatible Inference.net API. Default uses Nemotron 3 Super for ASR polishing."
         case .custom:
             "Use any OpenAI-compatible endpoint."
         }
