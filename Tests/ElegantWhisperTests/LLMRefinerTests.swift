@@ -80,16 +80,12 @@ final class LLMRefinerTests: XCTestCase {
 
     func testRejectsTruncatedLLMChoice() {
         let refiner = LLMRefiner(settings: .shared)
-        let choice = ChatResponse.Choice(
-            message: ChatMessage(role: "assistant", content: "这是被截断的前半段"),
-            finishReason: "length"
-        )
 
         XCTAssertEqual(
             refiner.rejectionReason(
                 original: "这是一个比较长的原始转写，不能因为模型截断就丢掉后半段。",
-                corrected: refiner.normalizeModelOutput(choice.message.content ?? ""),
-                finishReason: choice.finishReason
+                corrected: refiner.normalizeModelOutput("这是被截断的前半段"),
+                finishReason: "length"
             ),
             .finishLength
         )
@@ -107,20 +103,23 @@ final class LLMRefinerTests: XCTestCase {
           ]
         }
         """
-        let response = try JSONDecoder().decode(ChatResponse.self, from: Data(json.utf8))
-        let choice = response.choices[0]
+        let response = try OpenAICompatibleCodec().parseResponse(
+            data: Data(json.utf8),
+            httpResponse: dummyHTTPResponse(),
+            outputFormat: .plainText
+        )
 
         XCTAssertEqual(
             LLMRefiner(settings: .shared).rejectionReason(
                 original: "我想用配森解析杰森",
-                corrected: choice.message.content ?? "",
-                finishReason: choice.finishReason
+                corrected: response.text,
+                finishReason: response.finishReason
             ),
             .finishLength
         )
     }
 
-    func testProviderErrorReasonClassifiesFreeDailyLimitWithoutLoggingBody() {
+    func testProviderErrorClassifiesFreeDailyLimitWithoutLoggingBody() {
         let data = Data("""
         {
           "error": {
@@ -131,10 +130,10 @@ final class LLMRefinerTests: XCTestCase {
         }
         """.utf8)
 
-        XCTAssertEqual(LLMProviderErrorReason.classify(data), "free-models-per-day")
+        XCTAssertEqual(OpenAICompatibleCodec().classifyError(statusCode: 429, data: data).displayMessage, "free-models-per-day")
     }
 
-    func testProviderErrorReasonShowsSanitizedProviderMessage() {
+    func testProviderErrorShowsSanitizedProviderMessage() {
         let data = Data("""
         {
           "error": {
@@ -145,20 +144,16 @@ final class LLMRefinerTests: XCTestCase {
         """.utf8)
 
         XCTAssertEqual(
-            LLMProviderErrorReason.classify(data),
+            OpenAICompatibleCodec().classifyError(statusCode: 403, data: data).displayMessage,
             "Access denied for model inference-net/schematron-v2-turbo."
         )
     }
 
     func testAcceptsWrappedModelCorrection() {
         let refiner = LLMRefiner(settings: .shared)
-        let choice = ChatResponse.Choice(
-            message: ChatMessage(role: "assistant", content: "Corrected text: “我在写 Python 和 JSON”"),
-            finishReason: "stop"
-        )
-        let corrected = refiner.normalizeModelOutput(choice.message.content ?? "")
+        let corrected = refiner.normalizeModelOutput("Corrected text: “我在写 Python 和 JSON”")
 
-        XCTAssertNil(refiner.rejectionReason(original: "我在写配森和杰森", corrected: corrected, finishReason: choice.finishReason))
+        XCTAssertNil(refiner.rejectionReason(original: "我在写配森和杰森", corrected: corrected, finishReason: "stop"))
         XCTAssertEqual(corrected, "我在写 Python 和 JSON")
     }
 
@@ -179,7 +174,6 @@ final class LLMRefinerTests: XCTestCase {
     func testInferenceNetRequestUsesStructuredOutputWithoutOpenRouterReasoning() throws {
         let settings = makeSettings()
         let stylePacks = try makeStylePackStore()
-        let cache = makeCapabilityCache()
         settings.llmProvider = .inferenceNet
         settings.apiBaseURL = "https://api.inference.net/v1"
         settings.apiKey = "test-key"
@@ -188,12 +182,11 @@ final class LLMRefinerTests: XCTestCase {
         let speechContext = SpeechFocusContext(appName: "Cursor", terms: ["SwiftUI", "AXObserver"])
         let request = try XCTUnwrap(LLMRefiner(
             settings: settings,
-            stylePacks: stylePacks,
-            capabilityCache: cache
+            stylePacks: stylePacks
         ).makeRequest(text: "我想用配森解析杰森", speechContext: speechContext))
 
         XCTAssertEqual(request.url?.absoluteString, "https://api.inference.net/v1/chat/completions")
-        XCTAssertNil(request.value(forHTTPHeaderField: "X-OpenRouter-Title"))
+        XCTAssertNil(request.value(forHTTPHeaderField: "X-Title"))
 
         let body = try XCTUnwrap(request.httpBody)
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
@@ -219,7 +212,6 @@ final class LLMRefinerTests: XCTestCase {
         XCTAssertTrue(systemPrompt.contains("App: Cursor"))
         XCTAssertTrue(systemPrompt.contains("Vocabulary hints: SwiftUI, AXObserver"))
         XCTAssertFalse(systemPrompt.contains("Structured output override"))
-        XCTAssertFalse(systemPrompt.contains("For example"))
         XCTAssertEqual(messages.last?["role"] as? String, "user")
         XCTAssertEqual(messages.last?["content"] as? String, "我想用配森解析杰森")
     }
@@ -237,16 +229,15 @@ final class LLMRefinerTests: XCTestCase {
 
         XCTAssertEqual(request.url?.absoluteString, "https://openrouter.ai/api/v1/chat/completions")
         XCTAssertEqual(request.timeoutInterval, 25)
-        XCTAssertEqual(request.value(forHTTPHeaderField: "X-OpenRouter-Title"), AppConstants.productName)
+        XCTAssertEqual(request.value(forHTTPHeaderField: "HTTP-Referer"), "https://github.com/AetherAllan/ElegantWhisper")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "X-Title"), AppConstants.productName)
 
         let body = try XCTUnwrap(request.httpBody)
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
         XCTAssertEqual(json["model"] as? String, "nvidia/nemotron-3-nano-30b-a3b:free")
         XCTAssertEqual(json["max_tokens"] as? Int, 192)
         XCTAssertNil(json["temperature"])
-        let reasoning = try XCTUnwrap(json["reasoning"] as? [String: Any])
-        XCTAssertEqual(reasoning["effort"] as? String, "none")
-        XCTAssertEqual(reasoning["exclude"] as? Bool, true)
+        XCTAssertNil(json["reasoning"])
         let responseFormat = try XCTUnwrap(json["response_format"] as? [String: Any])
         XCTAssertEqual(responseFormat["type"] as? String, "json_schema")
         let jsonSchema = try XCTUnwrap(responseFormat["json_schema"] as? [String: Any])
@@ -314,10 +305,12 @@ final class LLMRefinerTests: XCTestCase {
         XCTAssertGreaterThan(json["max_tokens"] as? Int ?? 0, 256)
     }
 
-    func testPlainTextProviderDoesNotSendStructuredResponseFormat() throws {
+    func testCustomProviderDoesNotSendStructuredResponseFormat() throws {
         let settings = makeSettings()
         let stylePacks = try makeStylePackStore()
-        settings.llmProvider = .openAI
+        settings.llmProvider = .custom
+        settings.apiBaseURL = "http://localhost:11434/v1"
+        settings.model = "local-model"
         settings.apiKey = "test-key"
         defer { settings.apiKey = "" }
 
@@ -331,55 +324,93 @@ final class LLMRefinerTests: XCTestCase {
     }
 
     func testStructuredOutputExtractsCorrectedText() throws {
-        let provider = OpenRouterProvider()
+        let codec = OpenAICompatibleCodec()
         let data = try chatResponseData(content: #"{"corrected_text":"我用 Python 解析 JSON。"}"#)
 
-        let parsed = try XCTUnwrap(provider.parseResponse(data: data, mode: .structuredOutput))
+        let parsed = try codec.parseResponse(
+            data: data,
+            httpResponse: dummyHTTPResponse(),
+            outputFormat: .correctedTextJSON
+        )
 
-        XCTAssertEqual(parsed.candidateText, "我用 Python 解析 JSON。")
+        XCTAssertEqual(parsed.text, "我用 Python 解析 JSON。")
     }
 
-    func testStructuredOutputDecodeFailureFallsBackToRawContent() throws {
-        let provider = OpenRouterProvider()
-        let refiner = LLMRefiner(settings: .shared)
+    func testOpenAICompatibleCodecMapsUsage() throws {
+        let data = Data("""
+        {
+          "model": "test-model",
+          "choices": [
+            {
+              "message": { "role": "assistant", "content": "我用 Python。" },
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 11,
+            "completion_tokens": 3,
+            "total_tokens": 14
+          }
+        }
+        """.utf8)
+
+        let parsed = try OpenAICompatibleCodec().parseResponse(
+            data: data,
+            httpResponse: dummyHTTPResponse(),
+            outputFormat: .plainText
+        )
+
+        XCTAssertEqual(parsed.usage, LLMUsage(promptTokens: 11, completionTokens: 3, totalTokens: 14))
+    }
+
+    func testStructuredOutputDecodeFailureThrowsParseError() throws {
+        let codec = OpenAICompatibleCodec()
         let data = try chatResponseData(content: "Corrected text: “我用 Python 解析 JSON。”")
 
-        let parsed = try XCTUnwrap(provider.parseResponse(data: data, mode: .structuredOutput))
-
-        XCTAssertEqual(refiner.normalizeModelOutput(parsed.candidateText), "我用 Python 解析 JSON。")
+        XCTAssertThrowsError(try codec.parseResponse(
+            data: data,
+            httpResponse: dummyHTTPResponse(),
+            outputFormat: .correctedTextJSON
+        ))
     }
 
     func testStructuredOutputStillRejectsTooLongCorrection() throws {
-        let provider = OpenRouterProvider()
+        let codec = OpenAICompatibleCodec()
         let refiner = LLMRefiner(settings: .shared)
         let longCorrection = String(repeating: "很长", count: 80)
         let data = try chatResponseData(content: #"{"corrected_text":"\#(longCorrection)"}"#)
 
-        let parsed = try XCTUnwrap(provider.parseResponse(data: data, mode: .structuredOutput))
+        let parsed = try codec.parseResponse(
+            data: data,
+            httpResponse: dummyHTTPResponse(),
+            outputFormat: .correctedTextJSON
+        )
 
         XCTAssertEqual(
-            refiner.rejectionReason(original: "短句", corrected: parsed.candidateText, finishReason: parsed.finishReason),
+            refiner.rejectionReason(original: "短句", corrected: parsed.text, finishReason: parsed.finishReason),
             .tooLong
         )
     }
 
     func testStructuredOutputFinishLengthStillRejected() throws {
-        let provider = OpenRouterProvider()
+        let codec = OpenAICompatibleCodec()
         let refiner = LLMRefiner(settings: .shared)
         let data = try chatResponseData(content: #"{"corrected_text":"我用 Python"}"#, finishReason: "length")
 
-        let parsed = try XCTUnwrap(provider.parseResponse(data: data, mode: .structuredOutput))
+        let parsed = try codec.parseResponse(
+            data: data,
+            httpResponse: dummyHTTPResponse(),
+            outputFormat: .correctedTextJSON
+        )
 
         XCTAssertEqual(
-            refiner.rejectionReason(original: "我用配森", corrected: parsed.candidateText, finishReason: parsed.finishReason),
+            refiner.rejectionReason(original: "我用配森", corrected: parsed.text, finishReason: parsed.finishReason),
             .finishLength
         )
     }
 
-    func testStructuredUnsupportedFallsBackAndCachesModel() throws {
-        let cache = makeCapabilityCache()
-        let provider = OpenRouterProvider(capabilityCache: cache)
-        let context = providerContext(model: "test/model:free")
+    func testStructuredUnsupportedIsClassifiedForPlainFallback() throws {
+        let codec = OpenAICompatibleCodec()
         let data = Data("""
         {
           "error": {
@@ -389,33 +420,21 @@ final class LLMRefinerTests: XCTestCase {
         }
         """.utf8)
 
-        let fallback = provider.fallbackMode(
-            afterHTTPStatus: 400,
-            data: data,
-            mode: .structuredOutput,
-            context: context
-        )
-
-        XCTAssertEqual(fallback, .plainText)
-        XCTAssertFalse(cache.supportsStructuredOutput(for: .openRouterFree, model: "test/model:free"))
-        XCTAssertEqual(provider.firstMode(for: context), .plainText)
+        XCTAssertTrue(codec.classifyError(statusCode: 400, data: data).isStructuredOutputUnsupported)
     }
 
-    func testStructuredUnsupportedCacheSkipsResponseFormatInRequest() throws {
+    func testOpenRouterAllowlistControlsStructuredResponseFormat() throws {
         let settings = makeSettings()
         let stylePacks = try makeStylePackStore()
-        let cache = makeCapabilityCache()
         settings.llmProvider = .openRouterFree
         settings.apiBaseURL = "https://openrouter.ai/api/v1"
         settings.model = "test/model:free"
         settings.apiKey = "test-key"
         defer { settings.apiKey = "" }
-        cache.markStructuredOutputUnsupported(provider: .openRouterFree, model: "test/model:free")
 
         let request = try XCTUnwrap(LLMRefiner(
             settings: settings,
-            stylePacks: stylePacks,
-            capabilityCache: cache
+            stylePacks: stylePacks
         ).makeRequest(text: "我想用配森解析杰森"))
         let body = try XCTUnwrap(request.httpBody)
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
@@ -424,9 +443,7 @@ final class LLMRefinerTests: XCTestCase {
     }
 
     func testGenericUnsupportedParameterDoesNotDisableStructuredOutput() throws {
-        let cache = makeCapabilityCache()
-        let provider = OpenRouterProvider(capabilityCache: cache)
-        let context = providerContext(model: "test/model:free")
+        let codec = OpenAICompatibleCodec()
         let data = Data("""
         {
           "error": {
@@ -436,22 +453,13 @@ final class LLMRefinerTests: XCTestCase {
         }
         """.utf8)
 
-        let fallback = provider.fallbackMode(
-            afterHTTPStatus: 400,
-            data: data,
-            mode: .structuredOutput,
-            context: context
-        )
-
-        XCTAssertNil(fallback)
-        XCTAssertTrue(cache.supportsStructuredOutput(for: .openRouterFree, model: "test/model:free"))
+        XCTAssertFalse(codec.classifyError(statusCode: 400, data: data).isStructuredOutputUnsupported)
     }
 
     @MainActor
     func testConnectionFallsBackToPlainWhenStructuredOutputIsUnsupported() async throws {
         let settings = makeSettings()
         let stylePacks = try makeStylePackStore()
-        let cache = makeCapabilityCache()
         let protocolClass = TestConnectionURLProtocol.self
         protocolClass.reset(responses: [
             (
@@ -473,18 +481,18 @@ final class LLMRefinerTests: XCTestCase {
         let session = URLSession(configuration: configuration)
         settings.llmProvider = .openRouterFree
         settings.apiBaseURL = "https://openrouter.ai/api/v1"
-        settings.model = "test/model:free"
+        settings.model = "nvidia/nemotron-3-nano-30b-a3b:free"
         settings.apiKey = "test-key"
         defer { settings.apiKey = "" }
 
         let finished = expectation(description: "test connection")
         var result: (Bool, String)?
-        LLMRefiner(
+        let refiner = LLMRefiner(
             settings: settings,
             stylePacks: stylePacks,
-            capabilityCache: cache,
             urlSession: session
-        ).testConnection { ok, message in
+        )
+        refiner.testConnection { ok, message in
             result = (ok, message)
             finished.fulfill()
         }
@@ -492,11 +500,15 @@ final class LLMRefinerTests: XCTestCase {
         await fulfillment(of: [finished], timeout: 2)
         XCTAssertEqual(result?.0, true)
         XCTAssertEqual(result?.1, "Connection OK (test/model:free)")
-        XCTAssertFalse(cache.supportsStructuredOutput(for: .openRouterFree, model: "test/model:free"))
         let bodies = protocolClass.requestBodies()
         XCTAssertEqual(bodies.count, 2)
         XCTAssertTrue(bodies[0].contains("\"response_format\""))
         XCTAssertFalse(bodies[1].contains("\"response_format\""))
+
+        let request = try XCTUnwrap(refiner.makeRequest(text: "我想用配森解析杰森"))
+        let body = try XCTUnwrap(request.httpBody)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        XCTAssertNil(json["response_format"])
     }
 
     func testShortInputStillBuildsRefinementRequest() throws {
@@ -640,27 +652,6 @@ final class LLMRefinerTests: XCTestCase {
         StylePackStore(fileURL: try temporaryFile(named: "style-packs.json"))
     }
 
-    private func makeCapabilityCache() -> ProviderCapabilityCache {
-        let suiteName = "com.aetherallan.ElegantWhisper.capability.tests.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-        return ProviderCapabilityCache(defaults: defaults)
-    }
-
-    private func providerContext(model: String) -> LLMProviderRequestContext {
-        LLMProviderRequestContext(
-            provider: .openRouterFree,
-            baseURL: URL(string: "https://openrouter.ai/api/v1")!,
-            apiKey: "test-key",
-            model: model,
-            timeout: 25,
-            maxOutputTokens: 192,
-            promptContext: PromptStaticContextCache.context(stylePack: StylePackStore.builtinPacks[0]),
-            speechContext: nil,
-            transcript: "我想用配森解析杰森"
-        )
-    }
-
     private func chatResponseData(content: String, finishReason: String = "stop") throws -> Data {
         try JSONSerialization.data(withJSONObject: [
             "model": "test-model",
@@ -675,6 +666,15 @@ final class LLMRefinerTests: XCTestCase {
                 ]
             ]
         ])
+    }
+
+    private func dummyHTTPResponse() -> HTTPURLResponse {
+        HTTPURLResponse(
+            url: URL(string: "https://example.com/v1/chat/completions")!,
+            statusCode: 200,
+            httpVersion: nil,
+            headerFields: nil
+        )!
     }
 
     private func temporaryFile(named name: String) throws -> URL {

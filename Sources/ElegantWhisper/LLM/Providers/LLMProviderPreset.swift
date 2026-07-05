@@ -1,6 +1,6 @@
 import Foundation
 
-enum LLMProvider: String, CaseIterable, Codable {
+enum LLMProvider: String, CaseIterable, Codable, Sendable {
     case openAI = "openai"
     case openRouterFree = "openrouterFree"
     case inferenceNet = "inferenceNet"
@@ -78,16 +78,5 @@ enum LLMProvider: String, CaseIterable, Codable {
             return .openAI
         }
         return .custom
-    }
-
-    func applyHeaders(to request: inout URLRequest) {
-        switch self {
-        case .openRouterFree:
-            // OpenRouter's app attribution headers are optional. Send only the title so the app is
-            // identifiable without forcing users to provide a public website/HTTP-Referer.
-            request.setValue(AppConstants.productName, forHTTPHeaderField: "X-OpenRouter-Title")
-        case .openAI, .inferenceNet, .custom:
-            break
-        }
     }
 }
