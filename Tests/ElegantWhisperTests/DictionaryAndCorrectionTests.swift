@@ -41,6 +41,78 @@ final class DictionaryAndCorrectionTests: XCTestCase {
         XCTAssertLessThanOrEqual(terms.count, SpeechVocabulary.defaultLimit)
     }
 
+    func testSpeechVocabularyAddsFocusedTermsAfterStaticTerms() throws {
+        let file = try temporaryFile()
+        let store = DictionaryStore(fileURL: file)
+        XCTAssertTrue(store.add(term: "SwiftUI", language: .simplifiedChinese))
+
+        let terms = SpeechVocabulary.terms(
+            stylePack: StylePackStore.builtinPacks[0],
+            userDictionary: store,
+            language: .simplifiedChinese,
+            focusedTerms: ["AXObserver", "SwiftUI"]
+        )
+
+        XCTAssertTrue(terms.contains("AXObserver"))
+        XCTAssertEqual(terms.filter { $0.lowercased() == "swiftui" }.count, 1)
+        XCTAssertLessThan(
+            terms.firstIndex(of: "SwiftUI") ?? Int.max,
+            terms.firstIndex(of: "AXObserver") ?? Int.max
+        )
+    }
+
+    func testFocusedTextSnapshotRespectsPrivacyLimits() {
+        XCTAssertEqual(
+            AXFocusedTextContextReader.snippets(from: AXFocusedTextSnapshot(
+                isSecure: true,
+                selectedText: "SwiftUI",
+                visibleText: "AXObserver"
+            )),
+            []
+        )
+
+        let longSelected = String(repeating: "A", count: 2_001)
+        let snippets = AXFocusedTextContextReader.snippets(from: AXFocusedTextSnapshot(
+            isSecure: false,
+            selectedText: longSelected,
+            visibleText: "OpenRouter and AppKit"
+        ))
+
+        XCTAssertEqual(snippets, ["OpenRouter and AppKit"])
+
+        let longVisible = String(repeating: "B", count: 4_001)
+        XCTAssertEqual(
+            AXFocusedTextContextReader.snippets(from: AXFocusedTextSnapshot(
+                isSecure: false,
+                selectedText: nil,
+                visibleText: longVisible
+            )),
+            []
+        )
+    }
+
+    func testFocusedTermExtractorKeepsTechnicalTermsOnly() {
+        let terms = SpeechContextTermExtractor.terms(from: [
+            "the button 然后 SwiftUI AppKit AXObserver OpenRouter GPT-5.5 dbf5d503 2026-07-05 3.14 1/2 https://example.com/path sk-test ghp_secret user"
+        ])
+
+        XCTAssertTrue(terms.contains("SwiftUI"))
+        XCTAssertTrue(terms.contains("AppKit"))
+        XCTAssertTrue(terms.contains("AXObserver"))
+        XCTAssertTrue(terms.contains("OpenRouter"))
+        XCTAssertTrue(terms.contains("GPT-5.5"))
+        XCTAssertTrue(terms.contains("dbf5d503"))
+        XCTAssertFalse(terms.contains("the"))
+        XCTAssertFalse(terms.contains("button"))
+        XCTAssertFalse(terms.contains("user"))
+        XCTAssertFalse(terms.contains { $0.hasPrefix("sk-") })
+        XCTAssertFalse(terms.contains { $0.hasPrefix("ghp_") })
+        XCTAssertFalse(terms.contains("example.com/path"))
+        XCTAssertFalse(terms.contains("2026-07-05"))
+        XCTAssertFalse(terms.contains("3.14"))
+        XCTAssertFalse(terms.contains("1/2"))
+    }
+
     func testSpeechVocabularyLimitKeepsSeedTermsFirst() throws {
         let file = try temporaryFile()
         let store = DictionaryStore(fileURL: file)

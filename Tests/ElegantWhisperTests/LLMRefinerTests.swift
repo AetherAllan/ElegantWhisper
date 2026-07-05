@@ -177,6 +177,35 @@ final class LLMRefinerTests: XCTestCase {
         XCTAssertFalse(systemPrompt.contains(LLMPromptBuilder.hotwordPlaceholder))
     }
 
+    func testRequestAddsFocusedContextWithoutRawSnippets() throws {
+        let settings = makeSettings()
+        let stylePacks = try makeStylePackStore()
+        settings.llmProvider = .openAI
+        settings.apiKey = "test-key"
+        defer { settings.apiKey = "" }
+
+        let speechContext = SpeechFocusContext(
+            appName: "Cursor",
+            terms: ["SwiftUI", "AXObserver", "OpenRouter"]
+        )
+        let request = try XCTUnwrap(LLMRefiner(settings: settings, stylePacks: stylePacks).makeRequest(
+            text: "最喜欢用 ID 是 Cos",
+            speechContext: speechContext
+        ))
+        let body = try XCTUnwrap(request.httpBody)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        let messages = try XCTUnwrap(json["messages"] as? [[String: Any]])
+        let systemPrompt = try XCTUnwrap(messages.first?["content"] as? String)
+
+        XCTAssertTrue(systemPrompt.contains("Local context"))
+        XCTAssertTrue(systemPrompt.contains("Cursor"))
+        XCTAssertTrue(systemPrompt.contains("SwiftUI"))
+        XCTAssertTrue(systemPrompt.contains("AXObserver"))
+        XCTAssertFalse(systemPrompt.contains("selected text"))
+        XCTAssertEqual(messages.last?["role"] as? String, "user")
+        XCTAssertEqual(messages.last?["content"] as? String, "最喜欢用 ID 是 Cos")
+    }
+
     func testOldOpenRouterFreeRouterSettingUsesStableFreeModel() {
         let settings = makeSettings()
         settings.llmProvider = .openRouterFree
@@ -539,6 +568,7 @@ final class LLMRefinerTests: XCTestCase {
             timeout: 25,
             maxOutputTokens: 192,
             promptContext: PromptStaticContextCache.context(stylePack: StylePackStore.builtinPacks[0]),
+            speechContext: nil,
             transcript: "我想用配森解析杰森"
         )
     }

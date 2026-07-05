@@ -62,6 +62,7 @@ final class LLMRefiner: Sendable {
     @discardableResult
     func refine(
         _ text: String,
+        speechContext: SpeechFocusContext? = nil,
         asrFinalizedIn: Duration? = nil,
         completion: @escaping @MainActor @Sendable (String) -> Void
     ) -> LLMRefinementTask? {
@@ -81,7 +82,7 @@ final class LLMRefiner: Sendable {
             return nil
         }
         guard !settings.apiKey.isEmpty,
-              let context = makeRequestContext(text: trimmed)
+              let context = makeRequestContext(text: trimmed, speechContext: speechContext)
         else {
             DebugLog.event("llmRefineSkippedMissingSettings")
             Task { @MainActor in
@@ -174,15 +175,15 @@ final class LLMRefiner: Sendable {
         attempt(mode: provider.firstMode(for: context), didFallbackStructured: false)
     }
 
-    func makeRequest(text: String) -> URLRequest? {
-        guard let context = makeRequestContext(text: text) else {
+    func makeRequest(text: String, speechContext: SpeechFocusContext? = nil) -> URLRequest? {
+        guard let context = makeRequestContext(text: text, speechContext: speechContext) else {
             return nil
         }
         let provider = providerClient(for: context.provider)
         return provider.makeRequest(context: context, mode: provider.firstMode(for: context))
     }
 
-    func makeRequestContext(text: String) -> LLMProviderRequestContext? {
+    func makeRequestContext(text: String, speechContext: SpeechFocusContext? = nil) -> LLMProviderRequestContext? {
         guard let base = URL(string: settings.apiBaseURL),
               isAllowedBaseURL(base),
               !settings.apiKey.isEmpty
@@ -207,6 +208,7 @@ final class LLMRefiner: Sendable {
             timeout: effectiveTimeout(),
             maxOutputTokens: maxOutputTokens,
             promptContext: promptContext,
+            speechContext: speechContext,
             transcript: text
         )
     }

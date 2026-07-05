@@ -3,9 +3,10 @@ import Foundation
 struct PromptStaticContext: Sendable {
     let systemPrompt: String
 
-    func messages(transcript: String) -> [ChatMessage] {
-        [
-            ChatMessage(role: "system", content: systemPrompt),
+    func messages(transcript: String, speechContext: SpeechFocusContext? = nil) -> [ChatMessage] {
+        let prompt = speechContext?.promptSection.map { "\(systemPrompt)\n\n\($0)" } ?? systemPrompt
+        return [
+            ChatMessage(role: "system", content: prompt),
             ChatMessage(role: "user", content: transcript)
         ]
     }

@@ -7,6 +7,7 @@ enum SpeechVocabulary {
         stylePack: StylePack,
         userDictionary: DictionaryStore,
         language: RecognitionLanguage,
+        focusedTerms: [String] = [],
         limit: Int = defaultLimit
     ) -> [String] {
         var seen = Set<String>()
@@ -23,6 +24,7 @@ enum SpeechVocabulary {
 
         StylePackStore.seedTerms(for: stylePack.id).forEach(append)
         userDictionary.terms(for: language, limit: 500).forEach(append)
+        focusedTerms.forEach(append)
         return values
     }
 }

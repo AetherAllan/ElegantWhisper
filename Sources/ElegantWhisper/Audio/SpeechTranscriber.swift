@@ -339,16 +339,16 @@ final class SpeechTranscriber: @unchecked Sendable {
             return nil
         }
 
-        var didProvideInput = false
+        let inputState = ConverterInputState(buffer: buffer)
         var conversionError: NSError?
         let status = converter.convert(to: output, error: &conversionError) { _, outStatus in
-            if didProvideInput {
+            if inputState.didProvideInput {
                 outStatus.pointee = .noDataNow
                 return nil
             }
-            didProvideInput = true
+            inputState.didProvideInput = true
             outStatus.pointee = .haveData
-            return buffer
+            return inputState.buffer
         }
 
         switch status {
@@ -367,5 +367,14 @@ final class SpeechTranscriber: @unchecked Sendable {
             lhs.channelCount == rhs.channelCount &&
             lhs.commonFormat == rhs.commonFormat &&
             lhs.isInterleaved == rhs.isInterleaved
+    }
+}
+
+private final class ConverterInputState: @unchecked Sendable {
+    let buffer: AVAudioPCMBuffer
+    var didProvideInput = false
+
+    init(buffer: AVAudioPCMBuffer) {
+        self.buffer = buffer
     }
 }

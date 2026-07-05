@@ -52,6 +52,7 @@
 		01000000000000000000002D /* PromptStaticContextCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02000000000000000000002D /* PromptStaticContextCache.swift */; };
 		01000000000000000000002E /* RecognitionLanguage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02000000000000000000002E /* RecognitionLanguage.swift */; };
 		01000000000000000000002F /* SpeechVocabulary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02000000000000000000002F /* SpeechVocabulary.swift */; };
+		010000000000000000000030 /* SpeechContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000030 /* SpeechContext.swift */; };
 		010000000000000000000101 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000101 /* AppIcon.icns */; };
 		010000000000000000000102 /* ElegantWhisperLogo.png in Resources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000102 /* ElegantWhisperLogo.png */; };
 		010000000000000000000201 /* AppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 020000000000000000000201 /* AppKit.framework */; };
@@ -110,6 +111,7 @@
 		02000000000000000000002D /* PromptStaticContextCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptStaticContextCache.swift; sourceTree = "<group>"; };
 		02000000000000000000002E /* RecognitionLanguage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecognitionLanguage.swift; sourceTree = "<group>"; };
 		02000000000000000000002F /* SpeechVocabulary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechVocabulary.swift; sourceTree = "<group>"; };
+		020000000000000000000030 /* SpeechContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechContext.swift; sourceTree = "<group>"; };
 		020000000000000000000101 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
 		020000000000000000000102 /* ElegantWhisperLogo.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ElegantWhisperLogo.png; sourceTree = "<group>"; };
 		020000000000000000000103 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -209,6 +211,7 @@
 			children = (
 				020000000000000000000006 /* AudioRecorder.swift */,
 				02000000000000000000002E /* RecognitionLanguage.swift */,
+				020000000000000000000030 /* SpeechContext.swift */,
 				02000000000000000000002F /* SpeechVocabulary.swift */,
 				020000000000000000000013 /* SpeechTranscriber.swift */,
 			);
@@ -452,6 +455,7 @@
 				01000000000000000000002E /* RecognitionLanguage.swift in Sources */,
 				010000000000000000000011 /* SettingsStore.swift in Sources */,
 				010000000000000000000016 /* ShortcutDetector.swift in Sources */,
+				010000000000000000000030 /* SpeechContext.swift in Sources */,
 				01000000000000000000002F /* SpeechVocabulary.swift in Sources */,
 				010000000000000000000013 /* SpeechTranscriber.swift in Sources */,
 				010000000000000000000025 /* StylePackStore.swift in Sources */,

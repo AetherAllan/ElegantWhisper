@@ -12,7 +12,7 @@ struct PlainTextProviderFallback: LLMProviderClient {
         var request = baseRequest(context: context)
         let body = ChatRequest(
             model: context.model,
-            messages: context.promptContext.messages(transcript: context.transcript),
+            messages: context.promptContext.messages(transcript: context.transcript, speechContext: context.speechContext),
             temperature: 0,
             maxTokens: context.maxOutputTokens,
             reasoning: nil,

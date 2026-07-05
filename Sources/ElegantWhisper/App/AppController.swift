@@ -27,6 +27,7 @@ final class AppController {
     private var refinementTask: LLMRefinementTask?
     private var recordingStoppedAt: ContinuousClock.Instant?
     private var ignoreToggleCancellationUntil: ContinuousClock.Instant?
+    private var speechContext: SpeechFocusContext?
 
     var onChange: (@MainActor () -> Void)?
     var onUserMessage: (@MainActor (String) -> Void)?
@@ -134,9 +135,11 @@ final class AppController {
             return
         }
 
+        let target = focusDetector.currentEditableTarget()
+        let originalApplication = NSWorkspace.shared.frontmostApplication
         currentSession = DictationSession(
-            originalTarget: focusDetector.currentEditableTarget(),
-            originalApplication: NSWorkspace.shared.frontmostApplication
+            originalTarget: target,
+            originalApplication: originalApplication
         )
         postEditLearner.stop()
         latestPartial = ""
@@ -150,11 +153,20 @@ final class AppController {
             return
         }
         let language = settings.language
+        let snippets = AXFocusedTextContextReader.snippets(from: target)
+        let focusedTerms = SpeechContextTermExtractor.terms(from: snippets)
+        let context = SpeechFocusContext(
+            appName: contextAppName(target: target, application: originalApplication),
+            terms: focusedTerms
+        )
+        speechContext = context
         let vocabulary = SpeechVocabulary.terms(
             stylePack: stylePacks.activePack(),
             userDictionary: dictionary,
-            language: language
+            language: language,
+            focusedTerms: focusedTerms
         )
+        DebugLog.event("asrContextBuilt total=\(vocabulary.count) focused=\(focusedTerms.count) llmTerms=\(context.terms.count) usedAX=\(!snippets.isEmpty)")
         panel.showStatus("Preparing...")
         panel.retryShowIfNeeded()
         DebugLog.event("panelShow")
@@ -227,6 +239,7 @@ final class AppController {
         currentSession = nil
         postEditLearner.stop()
         latestPartial = ""
+        speechContext = nil
         _ = state.transition(to: .idle)
         panel.hide()
         DebugLog.event("panelHide")
@@ -247,6 +260,7 @@ final class AppController {
             currentSession = nil
             postEditLearner.stop()
             latestPartial = ""
+            speechContext = nil
             _ = state.transition(to: .idle)
             panel.hide()
             DebugLog.event("panelHide")
@@ -311,6 +325,7 @@ final class AppController {
             onChange?()
             refinementTask = refiner.refine(
                 raw,
+                speechContext: speechContext,
                 asrFinalizedIn: asrFinalizedIn
             ) { [weak self] refined in
                 guard let self, self.isCurrentSession(sessionID) else {
@@ -377,6 +392,7 @@ final class AppController {
             self.ignoreToggleCancellationUntil = nil
             self.currentSession = nil
             self.latestPartial = ""
+            self.speechContext = nil
             _ = self.state.transition(to: .idle)
             self.onChange?()
         }
@@ -392,6 +408,7 @@ final class AppController {
         currentSession = nil
         postEditLearner.stop()
         latestPartial = ""
+        speechContext = nil
         _ = state.transition(to: .idle)
         panel.showError(message)
         DebugLog.event("panelHide")
@@ -425,6 +442,14 @@ final class AppController {
         }
 
         return nil
+    }
+
+    private func contextAppName(target: FocusTarget?, application: NSRunningApplication?) -> String? {
+        let app = target?.app ?? application
+        guard app?.bundleIdentifier != AppConstants.bundleIdentifier else {
+            return nil
+        }
+        return app?.localizedName ?? app?.bundleIdentifier
     }
 
     private func isCurrentSession(_ id: UUID) -> Bool {

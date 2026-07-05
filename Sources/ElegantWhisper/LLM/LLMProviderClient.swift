@@ -13,6 +13,7 @@ struct LLMProviderRequestContext: Sendable {
     let timeout: TimeInterval
     let maxOutputTokens: Int
     let promptContext: PromptStaticContext
+    let speechContext: SpeechFocusContext?
     let transcript: String
 }
 
