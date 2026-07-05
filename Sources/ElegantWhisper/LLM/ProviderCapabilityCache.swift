@@ -15,7 +15,7 @@ final class ProviderCapabilityCache: @unchecked Sendable {
     }
 
     func supportsStructuredOutput(for provider: LLMProvider, model: String) -> Bool {
-        guard provider == .openRouterFree else {
+        guard provider == .openRouterFree || provider == .inferenceNet else {
             return false
         }
         guard let unsupportedUntil = defaults.object(forKey: key(provider: provider, model: model)) as? Date else {

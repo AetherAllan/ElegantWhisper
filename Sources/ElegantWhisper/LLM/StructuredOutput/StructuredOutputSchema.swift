@@ -41,6 +41,12 @@ struct JSONSchemaObject: Encodable {
 
 struct JSONSchemaProperty: Encodable {
     let type: String
+    let description: String?
+
+    init(type: String, description: String? = nil) {
+        self.type = type
+        self.description = description
+    }
 }
 
 struct DictationPolishResult: Decodable {

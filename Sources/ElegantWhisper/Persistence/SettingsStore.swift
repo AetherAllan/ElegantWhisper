@@ -91,7 +91,7 @@ final class SettingsStore: @unchecked Sendable {
                 // model without requiring users to rediscover the setting manually.
                 return LLMProvider.openRouterFree.defaultModel ?? "nvidia/nemotron-3-nano-30b-a3b:free"
             }
-            return stored ?? LLMProvider.openAI.defaultModel ?? "gpt-4o-mini"
+            return stored ?? llmProvider.defaultModel ?? LLMProvider.openAI.defaultModel ?? "gpt-4o-mini"
         }
         set {
             defaults.set(newValue.trimmingCharacters(in: .whitespacesAndNewlines), forKey: Key.model)

@@ -65,6 +65,19 @@ final class LLMRefinerTests: XCTestCase {
         )
     }
 
+    func testRejectsUnexpectedEnglishTranslationOfChineseTranscript() {
+        let refiner = LLMRefiner(settings: .shared)
+
+        XCTAssertEqual(
+            refiner.rejectionReason(
+                original: "我今天没有去健身，因为工作太忙了。",
+                corrected: "I did not exercise today because work was too busy.",
+                finishReason: nil
+            ),
+            .languageChanged
+        )
+    }
+
     func testRejectsTruncatedLLMChoice() {
         let refiner = LLMRefiner(settings: .shared)
         let choice = ChatResponse.Choice(
@@ -121,6 +134,22 @@ final class LLMRefinerTests: XCTestCase {
         XCTAssertEqual(LLMProviderErrorReason.classify(data), "free-models-per-day")
     }
 
+    func testProviderErrorReasonShowsSanitizedProviderMessage() {
+        let data = Data("""
+        {
+          "error": {
+            "message": "Access denied for model inference-net/schematron-v2-turbo.",
+            "code": 403
+          }
+        }
+        """.utf8)
+
+        XCTAssertEqual(
+            LLMProviderErrorReason.classify(data),
+            "Access denied for model inference-net/schematron-v2-turbo."
+        )
+    }
+
     func testAcceptsWrappedModelCorrection() {
         let refiner = LLMRefiner(settings: .shared)
         let choice = ChatResponse.Choice(
@@ -138,6 +167,61 @@ final class LLMRefinerTests: XCTestCase {
         settings.apiBaseURL = "https://openrouter.ai/api/v1"
 
         XCTAssertEqual(settings.llmProvider, .openRouterFree)
+    }
+
+    func testProviderInfersInferenceNetFromExistingBaseURL() {
+        let settings = makeSettings()
+        settings.apiBaseURL = "https://api.inference.net/v1"
+
+        XCTAssertEqual(settings.llmProvider, .inferenceNet)
+    }
+
+    func testInferenceNetRequestUsesStructuredOutputWithoutOpenRouterReasoning() throws {
+        let settings = makeSettings()
+        let stylePacks = try makeStylePackStore()
+        let cache = makeCapabilityCache()
+        settings.llmProvider = .inferenceNet
+        settings.apiBaseURL = "https://api.inference.net/v1"
+        settings.apiKey = "test-key"
+        defer { settings.apiKey = "" }
+
+        let speechContext = SpeechFocusContext(appName: "Cursor", terms: ["SwiftUI", "AXObserver"])
+        let request = try XCTUnwrap(LLMRefiner(
+            settings: settings,
+            stylePacks: stylePacks,
+            capabilityCache: cache
+        ).makeRequest(text: "我想用配森解析杰森", speechContext: speechContext))
+
+        XCTAssertEqual(request.url?.absoluteString, "https://api.inference.net/v1/chat/completions")
+        XCTAssertNil(request.value(forHTTPHeaderField: "X-OpenRouter-Title"))
+
+        let body = try XCTUnwrap(request.httpBody)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        XCTAssertEqual(json["model"] as? String, "inference-net/schematron-v2-turbo")
+        XCTAssertNil(json["temperature"])
+        XCTAssertNil(json["reasoning"])
+        let responseFormat = try XCTUnwrap(json["response_format"] as? [String: Any])
+        XCTAssertEqual(responseFormat["type"] as? String, "json_schema")
+        let jsonSchema = try XCTUnwrap(responseFormat["json_schema"] as? [String: Any])
+        XCTAssertEqual(jsonSchema["name"] as? String, "dictation_polish_result")
+        let schema = try XCTUnwrap(jsonSchema["schema"] as? [String: Any])
+        let properties = try XCTUnwrap(schema["properties"] as? [String: Any])
+        let correctedText = try XCTUnwrap(properties["corrected_text"] as? [String: Any])
+        XCTAssertTrue((correctedText["description"] as? String)?.contains("same language as the user transcript") == true)
+        let messages = try XCTUnwrap(json["messages"] as? [[String: Any]])
+        let systemPrompt = try XCTUnwrap(messages.first?["content"] as? String)
+        XCTAssertTrue(systemPrompt.contains("Respond in JSON format"))
+        XCTAssertTrue(systemPrompt.contains("Put only the final direct-insertion text in corrected_text"))
+        XCTAssertTrue(systemPrompt.contains("Never translate"))
+        XCTAssertTrue(systemPrompt.contains("Chinese, corrected_text must be Chinese"))
+        XCTAssertTrue(systemPrompt.contains("Clean obvious speech disfluencies"))
+        XCTAssertTrue(systemPrompt.contains("因为因为我觉得我觉得"))
+        XCTAssertTrue(systemPrompt.contains("App: Cursor"))
+        XCTAssertTrue(systemPrompt.contains("Vocabulary hints: SwiftUI, AXObserver"))
+        XCTAssertFalse(systemPrompt.contains("Structured output override"))
+        XCTAssertFalse(systemPrompt.contains("For example"))
+        XCTAssertEqual(messages.last?["role"] as? String, "user")
+        XCTAssertEqual(messages.last?["content"] as? String, "我想用配森解析杰森")
     }
 
     func testOpenRouterRequestAddsAttributionHeaderWithoutDictionaryHotwords() throws {

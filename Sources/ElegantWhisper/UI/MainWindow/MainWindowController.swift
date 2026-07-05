@@ -1,7 +1,7 @@
 import AppKit
 
 @MainActor
-final class MainWindowController: NSWindowController, NSTextViewDelegate, NSTextFieldDelegate {
+final class MainWindowController: NSWindowController, NSTextViewDelegate, NSTextFieldDelegate, NSComboBoxDelegate {
     let controller: AppController
     let settings: SettingsStore
     let refiner: LLMRefiner
@@ -17,7 +17,7 @@ final class MainWindowController: NSWindowController, NSTextViewDelegate, NSText
     let providerPopup = NSPopUpButton()
     let baseURLField = NSTextField()
     let apiKeyField = NSSecureTextField()
-    let modelField = NSTextField()
+    let modelField = NSComboBox()
     let timeoutField = NSTextField()
     let stylePackPopup = NSPopUpButton()
     let stylePromptScroll = NSScrollView()
@@ -206,7 +206,7 @@ final class MainWindowController: NSWindowController, NSTextViewDelegate, NSText
     func syncPolishingControlsFromSettings() {
         baseURLField.stringValue = settings.apiBaseURL
         apiKeyField.stringValue = settings.apiKey
-        modelField.stringValue = settings.model
+        populateModelField(for: settings.llmProvider, selected: settings.model)
         timeoutField.stringValue = String(Int(settings.requestTimeout))
         llmCheckbox.state = settings.llmEnabled ? .on : .off
     }
@@ -227,6 +227,18 @@ final class MainWindowController: NSWindowController, NSTextViewDelegate, NSText
         }
         if let index = LLMProvider.allCases.firstIndex(of: settings.llmProvider) {
             providerPopup.selectItem(at: index)
+        }
+    }
+
+    func populateModelField(for provider: LLMProvider, selected: String? = nil) {
+        modelField.removeAllItems()
+        modelField.addItems(withObjectValues: provider.modelPresets)
+        if let selected, !selected.isEmpty {
+            modelField.stringValue = selected
+        } else if let model = provider.defaultModel {
+            modelField.stringValue = model
+        } else {
+            modelField.stringValue = ""
         }
     }
 

@@ -79,10 +79,7 @@ enum LLMProviderErrorReason {
         if lower.contains("rate limit") {
             return "rate-limit"
         }
-        if lower.contains("invalid") {
-            return "invalid-request"
-        }
-        return "provider-error"
+        return String(message.prefix(180))
     }
 
     static func message(_ data: Data?) -> String {

@@ -9,6 +9,8 @@ extension MainWindowController {
         stylePackPopup.action = #selector(stylePackChanged)
         llmCheckbox.target = self
         llmCheckbox.action = #selector(markPolishingDirty)
+        modelField.target = self
+        modelField.action = #selector(markPolishingDirty)
         baseURLField.delegate = self
         apiKeyField.delegate = self
         modelField.delegate = self

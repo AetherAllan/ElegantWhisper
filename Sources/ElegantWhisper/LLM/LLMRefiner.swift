@@ -37,6 +37,7 @@ struct RefinementMetrics: Sendable {
 enum CorrectionRejectionReason: String {
     case empty
     case tooLong
+    case languageChanged
     case editRatio
     case finishLength
 }
@@ -228,6 +229,9 @@ final class LLMRefiner: Sendable {
 
         let originalCount = original.count
         let correctedCount = corrected.count
+        guard !Self.lostChineseLanguage(original: original, corrected: corrected) else {
+            return .languageChanged
+        }
         guard correctedCount <= max(32, Int(Double(originalCount) * 1.8)) else {
             return .tooLong
         }
@@ -238,6 +242,17 @@ final class LLMRefiner: Sendable {
             return nil
         }
         return editDistanceRatio(original, corrected) <= 0.8 ? nil : .editRatio
+    }
+
+    private static func lostChineseLanguage(original: String, corrected: String) -> Bool {
+        containsCJK(original)
+            && !containsCJK(corrected)
+    }
+
+    private static func containsCJK(_ text: String) -> Bool {
+        text.unicodeScalars.contains { scalar in
+            (0x4E00...0x9FFF).contains(Int(scalar.value))
+        }
     }
 
     func maxTokens(for text: String) -> Int {
@@ -429,6 +444,8 @@ final class LLMRefiner: Sendable {
         switch provider {
         case .openRouterFree:
             OpenRouterProvider(capabilityCache: capabilityCache)
+        case .inferenceNet:
+            InferenceNetProvider(capabilityCache: capabilityCache)
         case .openAI, .custom:
             PlainTextProviderFallback()
         }

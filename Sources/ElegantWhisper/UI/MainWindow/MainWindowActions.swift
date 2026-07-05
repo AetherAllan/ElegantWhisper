@@ -8,9 +8,7 @@ extension MainWindowController {
         if let baseURL = provider.defaultBaseURL {
             baseURLField.stringValue = baseURL
         }
-        if let model = provider.defaultModel {
-            modelField.stringValue = model
-        }
+        populateModelField(for: provider)
         showNotice(provider.note)
         renderCurrentPage()
     }
