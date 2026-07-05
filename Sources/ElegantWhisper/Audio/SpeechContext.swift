@@ -19,13 +19,16 @@ struct SpeechFocusContext: Equatable, Sendable {
             return nil
         }
         var lines = [
-            "Local context: use only to resolve ambiguous ASR spellings; do not add new facts."
+            "Local context:",
+            "Use the following app and vocabulary hints to help resolve ambiguous ASR spellings.",
+            "Do not add facts from local context.",
+            "Do not mention local context."
         ]
         if let appName {
             lines.append("App: \(appName)")
         }
         if !terms.isEmpty {
-            lines.append("Terms: \(terms.joined(separator: ", "))")
+            lines.append("Vocabulary hints: \(terms.joined(separator: ", "))")
         }
         return lines.joined(separator: "\n")
     }

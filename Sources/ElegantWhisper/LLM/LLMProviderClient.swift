@@ -139,7 +139,6 @@ struct ChatMessage: Codable {
 struct ChatRequest: Encodable {
     let model: String
     let messages: [ChatMessage]
-    let temperature: Double
     let maxTokens: Int
     let reasoning: ChatReasoning?
     let responseFormat: ResponseFormat?
@@ -147,7 +146,6 @@ struct ChatRequest: Encodable {
     enum CodingKeys: String, CodingKey {
         case model
         case messages
-        case temperature
         case maxTokens = "max_tokens"
         case reasoning
         case responseFormat = "response_format"

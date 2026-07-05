@@ -159,6 +159,7 @@ final class LLMRefinerTests: XCTestCase {
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
         XCTAssertEqual(json["model"] as? String, "nvidia/nemotron-3-nano-30b-a3b:free")
         XCTAssertEqual(json["max_tokens"] as? Int, 192)
+        XCTAssertNil(json["temperature"])
         let reasoning = try XCTUnwrap(json["reasoning"] as? [String: Any])
         XCTAssertEqual(reasoning["effort"] as? String, "none")
         XCTAssertEqual(reasoning["exclude"] as? Bool, true)
@@ -198,6 +199,7 @@ final class LLMRefinerTests: XCTestCase {
         let systemPrompt = try XCTUnwrap(messages.first?["content"] as? String)
 
         XCTAssertTrue(systemPrompt.contains("Local context"))
+        XCTAssertTrue(systemPrompt.contains("Vocabulary hints"))
         XCTAssertTrue(systemPrompt.contains("Cursor"))
         XCTAssertTrue(systemPrompt.contains("SwiftUI"))
         XCTAssertTrue(systemPrompt.contains("AXObserver"))
@@ -241,6 +243,7 @@ final class LLMRefinerTests: XCTestCase {
 
         XCTAssertNil(json["response_format"])
         XCTAssertNil(json["reasoning"])
+        XCTAssertNil(json["temperature"])
     }
 
     func testStructuredOutputExtractsCorrectedText() throws {
@@ -472,7 +475,8 @@ final class LLMRefinerTests: XCTestCase {
         let messages = try XCTUnwrap(json["messages"] as? [[String: Any]])
         let systemPrompt = try XCTUnwrap(messages.first?["content"] as? String)
 
-        XCTAssertTrue(systemPrompt.contains("developer dictation"))
+        XCTAssertTrue(systemPrompt.contains("Programmer Dictation"))
+        XCTAssertTrue(systemPrompt.contains("mixed Chinese-English"))
         XCTAssertTrue(systemPrompt.contains("Web3"))
         XCTAssertTrue(systemPrompt.contains("TypeScript"))
         XCTAssertTrue(systemPrompt.contains("SQL"))

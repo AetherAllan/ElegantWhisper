@@ -166,7 +166,7 @@ final class AppController {
             language: language,
             focusedTerms: focusedTerms
         )
-        DebugLog.event("asrContextBuilt total=\(vocabulary.count) focused=\(focusedTerms.count) llmTerms=\(context.terms.count) usedAX=\(!snippets.isEmpty)")
+        DebugLog.event("asrContextBuilt total=\(vocabulary.count) focused=\(focusedTerms.count) llmTerms=\(context.terms.count) usedAX=\(!snippets.isEmpty) target=\(target != nil) appContext=\(context.appName != nil)")
         panel.showStatus("Preparing...")
         panel.retryShowIfNeeded()
         DebugLog.event("panelShow")
