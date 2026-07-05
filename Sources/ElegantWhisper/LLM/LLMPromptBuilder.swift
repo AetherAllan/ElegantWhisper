@@ -78,47 +78,14 @@ enum LLMPromptBuilder {
     {{HOTWORDS}}
     """
 
-    static func systemPrompt(template rawTemplate: String, hotwords: [String]) -> String {
+    static func systemPrompt(template rawTemplate: String) -> String {
         let template = rawTemplate.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? conservativeTemplate
             : rawTemplate
-        let block = hotwordBlock(hotwords)
-        if template.contains(hotwordPlaceholder) {
-            return template.replacingOccurrences(of: hotwordPlaceholder, with: block)
-        }
-        // If users remove the placeholder, keep dictionary hints as a safety footer instead of
-        // silently dropping them. This mirrors OpenLess' "move or delete placeholder" behavior
-        // without needing a full style-pack runtime.
-        return "\(template)\n\n\(block)"
-    }
-
-    private static func hotwordBlock(_ hotwords: [String]) -> String {
-        let values = hotwords
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-            .prefix(80)
-            .map(sanitizedHotword)
-
-        guard !values.isEmpty else {
-            return """
-            User dictionary:
-            No user dictionary terms are configured. Use context to fix only obvious recognition errors.
-            """
-        }
-
-        // Dictionary terms are semantic hints, not mechanical replacements. This matches OpenLess'
-        // hotword idea while keeping ElegantWhisper's stronger "do not change meaning" boundary.
-        let bullets = values.map { "- \($0)" }.joined(separator: "\n")
-        return """
-        User dictionary:
-        Prefer these spellings when the transcript contains a clear homophone, near-sound, or ASR typo for them. Do not force them into unrelated text.
-        \(bullets)
-        """
-    }
-
-    private static func sanitizedHotword(_ value: String) -> String {
-        // Dictionary terms are local user data, but they still enter a system prompt. Keep each
-        // term one-line and short so an accidental pasted paragraph cannot become prompt control.
-        String(value.filter { $0 != "\n" && $0 != "\r" }.prefix(80))
+        // Dictionary terms now bias only Apple's ASR. Strip the legacy placeholder instead of
+        // sending user vocabulary to a remote polishing model.
+        return template
+            .replacingOccurrences(of: hotwordPlaceholder, with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

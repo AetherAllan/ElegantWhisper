@@ -31,7 +31,6 @@ final class MainWindowController: NSWindowController, NSTextViewDelegate, NSText
     let languagePopup = NSPopUpButton()
     let dictionaryLanguagePopup = NSPopUpButton()
     let dictionaryTermField = NSTextField()
-    let dictionaryAliasesField = NSTextField()
     let dictionarySearchField = NSSearchField()
     var polishingDirty = false
     var generalDirty = false
@@ -338,10 +337,7 @@ final class MainWindowController: NSWindowController, NSTextViewDelegate, NSText
     }
 
     func updateEffectivePromptPreview() {
-        effectivePromptView.string = LLMPromptBuilder.systemPrompt(
-            template: stylePromptView.string,
-            hotwords: dictionary.contextualStrings(for: settings.language)
-        )
+        effectivePromptView.string = LLMPromptBuilder.systemPrompt(template: stylePromptView.string)
     }
 
     func displayName(for result: HistoryResult) -> String {

@@ -6,57 +6,99 @@ final class DictionaryAndCorrectionTests: XCTestCase {
         let file = try temporaryFile()
         let store = DictionaryStore(fileURL: file)
 
-        XCTAssertTrue(store.add(term: "Python", aliases: ["配森", "派森"], language: .simplifiedChinese))
+        XCTAssertTrue(store.add(term: "Python", language: .simplifiedChinese))
 
         let reloaded = DictionaryStore(fileURL: file)
         let entries = reloaded.entries(for: .simplifiedChinese)
         XCTAssertEqual(entries.count, 1)
         XCTAssertEqual(entries[0].term, "Python")
-        XCTAssertEqual(Set(entries[0].aliases), ["配森", "派森"])
     }
 
-    func testContextualStringsUseCorrectTermsOnly() throws {
+    func testDictionaryTermsUseTerms() throws {
         let file = try temporaryFile()
         let store = DictionaryStore(fileURL: file)
-        XCTAssertTrue(store.add(term: "JSON", aliases: ["杰森"], language: .simplifiedChinese))
+        XCTAssertTrue(store.add(term: "JSON", language: .simplifiedChinese))
 
-        XCTAssertEqual(store.contextualStrings(for: .simplifiedChinese), ["JSON"])
+        XCTAssertEqual(store.terms(for: .simplifiedChinese), ["JSON"])
     }
 
-    func testCorrectionUsesAliasesConservatively() {
-        let entry = DictionaryEntry(term: "Python", aliases: ["配森"], language: .simplifiedChinese)
-        let result = CorrectionEngine().correct("我在写配森脚本", entries: [entry])
+    func testSpeechVocabularyMergesStyleSeedsAndUserTerms() throws {
+        let file = try temporaryFile()
+        let store = DictionaryStore(fileURL: file)
+        XCTAssertTrue(store.add(term: "python", language: .simplifiedChinese))
+        XCTAssertTrue(store.add(term: "ElegantWhisper", language: .simplifiedChinese))
 
-        XCTAssertEqual(result, "我在写Python脚本")
-    }
-
-    func testASCIIAliasDoesNotReplaceInsideAnotherWord() {
-        let entry = DictionaryEntry(term: "JavaScript", aliases: ["js"], language: .englishUS)
-        let result = CorrectionEngine().correct("json and js", entries: [entry])
-
-        XCTAssertEqual(result, "json and JavaScript")
-    }
-
-    func testASCIIAliasWorksNextToChineseText() {
-        let entries = [
-            DictionaryEntry(term: "refine", aliases: ["HryFine"], language: .simplifiedChinese),
-            DictionaryEntry(term: "TypeScript", aliases: ["Tapes script"], language: .simplifiedChinese)
-        ]
-        let result = CorrectionEngine().correct(
-            "让我看现在这个HryFine工作了吗，我喜欢Tapes script。",
-            entries: entries
+        let terms = SpeechVocabulary.terms(
+            stylePack: StylePackStore.builtinPacks[0],
+            userDictionary: store,
+            language: .simplifiedChinese
         )
 
-        XCTAssertEqual(
-            result,
-            "让我看现在这个refine工作了吗，我喜欢TypeScript。"
-        )
+        XCTAssertTrue(terms.contains("Python"))
+        XCTAssertTrue(terms.contains("IDE"))
+        XCTAssertTrue(terms.contains("ElegantWhisper"))
+        XCTAssertEqual(terms.filter { $0.lowercased() == "python" }.count, 1)
+        XCTAssertLessThanOrEqual(terms.count, SpeechVocabulary.defaultLimit)
     }
 
-    func testNoBuiltInCorrectionRewritesUSBDriveMention() {
-        let result = CorrectionEngine().correct("这个U盘需要格式化", entries: [])
+    func testSpeechVocabularyLimitKeepsSeedTermsFirst() throws {
+        let file = try temporaryFile()
+        let store = DictionaryStore(fileURL: file)
+        XCTAssertTrue(store.add(term: "UserOnly", language: .simplifiedChinese))
 
-        XCTAssertEqual(result, "这个U盘需要格式化")
+        let terms = SpeechVocabulary.terms(
+            stylePack: StylePackStore.builtinPacks[0],
+            userDictionary: store,
+            language: .simplifiedChinese,
+            limit: 2
+        )
+
+        XCTAssertEqual(terms, Array(StylePackStore.seedTerms(for: StylePackStore.programmerPackID).prefix(2)))
+    }
+
+    func testSpeechVocabularyChangesWithStylePack() throws {
+        let file = try temporaryFile()
+        let store = DictionaryStore(fileURL: file)
+
+        let programmer = SpeechVocabulary.terms(
+            stylePack: StylePackStore.builtinPacks[0],
+            userDictionary: store,
+            language: .simplifiedChinese
+        )
+        let technical = SpeechVocabulary.terms(
+            stylePack: StylePackStore.builtinPacks[3],
+            userDictionary: store,
+            language: .simplifiedChinese
+        )
+
+        XCTAssertNotEqual(programmer, technical)
+    }
+
+    func testLegacyDictionaryMigratesAliasesAway() throws {
+        let file = try temporaryFile()
+        let legacy = """
+        [{"id":"\(UUID().uuidString)","term":"Python","aliases":["配森","派森"],"language":"zh-CN"}]
+        """
+        try legacy.write(to: file, atomically: true, encoding: .utf8)
+
+        let store = DictionaryStore(fileURL: file)
+        let entries = store.entries(for: .simplifiedChinese)
+        XCTAssertEqual(entries.count, 1)
+        XCTAssertEqual(entries[0].term, "Python")
+
+        let saved = try String(contentsOf: file, encoding: .utf8)
+        XCTAssertFalse(saved.contains("aliases"))
+    }
+
+    func testDuplicateTermUpdatesInPlace() throws {
+        let file = try temporaryFile()
+        let store = DictionaryStore(fileURL: file)
+
+        XCTAssertTrue(store.add(term: "python", language: .englishUS))
+        XCTAssertTrue(store.add(term: "Python", language: .englishUS))
+
+        XCTAssertEqual(store.entries(for: .englishUS).count, 1)
+        XCTAssertEqual(store.entries(for: .englishUS)[0].term, "Python")
     }
 
     func testHistoryDefaultsToEnabled() {

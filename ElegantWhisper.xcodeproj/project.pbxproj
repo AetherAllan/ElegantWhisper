@@ -30,7 +30,6 @@
 		010000000000000000000016 /* ShortcutDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000016 /* ShortcutDetector.swift */; };
 		010000000000000000000017 /* DictationSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000017 /* DictationSession.swift */; };
 		010000000000000000000018 /* DictionaryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000018 /* DictionaryStore.swift */; };
-		010000000000000000000019 /* CorrectionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000019 /* CorrectionEngine.swift */; };
 		01000000000000000000001A /* LLMProviderPreset.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02000000000000000000001A /* LLMProviderPreset.swift */; };
 		01000000000000000000001B /* LLMPromptBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02000000000000000000001B /* LLMPromptBuilder.swift */; };
 		01000000000000000000001C /* DictionaryPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02000000000000000000001C /* DictionaryPage.swift */; };
@@ -52,6 +51,7 @@
 		01000000000000000000002C /* StructuredOutputSchema.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02000000000000000000002C /* StructuredOutputSchema.swift */; };
 		01000000000000000000002D /* PromptStaticContextCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02000000000000000000002D /* PromptStaticContextCache.swift */; };
 		01000000000000000000002E /* RecognitionLanguage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02000000000000000000002E /* RecognitionLanguage.swift */; };
+		01000000000000000000002F /* SpeechVocabulary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02000000000000000000002F /* SpeechVocabulary.swift */; };
 		010000000000000000000101 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000101 /* AppIcon.icns */; };
 		010000000000000000000102 /* ElegantWhisperLogo.png in Resources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000102 /* ElegantWhisperLogo.png */; };
 		010000000000000000000201 /* AppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 020000000000000000000201 /* AppKit.framework */; };
@@ -88,7 +88,6 @@
 		020000000000000000000016 /* ShortcutDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutDetector.swift; sourceTree = "<group>"; };
 		020000000000000000000017 /* DictationSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationSession.swift; sourceTree = "<group>"; };
 		020000000000000000000018 /* DictionaryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictionaryStore.swift; sourceTree = "<group>"; };
-		020000000000000000000019 /* CorrectionEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CorrectionEngine.swift; sourceTree = "<group>"; };
 		02000000000000000000001A /* LLMProviderPreset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMProviderPreset.swift; sourceTree = "<group>"; };
 		02000000000000000000001B /* LLMPromptBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMPromptBuilder.swift; sourceTree = "<group>"; };
 		02000000000000000000001C /* DictionaryPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictionaryPage.swift; sourceTree = "<group>"; };
@@ -110,6 +109,7 @@
 		02000000000000000000002C /* StructuredOutputSchema.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StructuredOutputSchema.swift; sourceTree = "<group>"; };
 		02000000000000000000002D /* PromptStaticContextCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptStaticContextCache.swift; sourceTree = "<group>"; };
 		02000000000000000000002E /* RecognitionLanguage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecognitionLanguage.swift; sourceTree = "<group>"; };
+		02000000000000000000002F /* SpeechVocabulary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechVocabulary.swift; sourceTree = "<group>"; };
 		020000000000000000000101 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
 		020000000000000000000102 /* ElegantWhisperLogo.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ElegantWhisperLogo.png; sourceTree = "<group>"; };
 		020000000000000000000103 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -209,6 +209,7 @@
 			children = (
 				020000000000000000000006 /* AudioRecorder.swift */,
 				02000000000000000000002E /* RecognitionLanguage.swift */,
+				02000000000000000000002F /* SpeechVocabulary.swift */,
 				020000000000000000000013 /* SpeechTranscriber.swift */,
 			);
 			path = Audio;
@@ -217,7 +218,6 @@
 		04000000000000000000000C /* Dictation */ = {
 			isa = PBXGroup;
 			children = (
-				020000000000000000000019 /* CorrectionEngine.swift */,
 				020000000000000000000017 /* DictationSession.swift */,
 				020000000000000000000027 /* PostEditLearner.swift */,
 			);
@@ -430,7 +430,6 @@
 				010000000000000000000004 /* AppError.swift in Sources */,
 				010000000000000000000005 /* AppState.swift in Sources */,
 				010000000000000000000006 /* AudioRecorder.swift in Sources */,
-				010000000000000000000019 /* CorrectionEngine.swift in Sources */,
 				010000000000000000000007 /* DebugLog.swift in Sources */,
 				010000000000000000000018 /* DictionaryStore.swift in Sources */,
 				010000000000000000000017 /* DictationSession.swift in Sources */,
@@ -453,6 +452,7 @@
 				01000000000000000000002E /* RecognitionLanguage.swift in Sources */,
 				010000000000000000000011 /* SettingsStore.swift in Sources */,
 				010000000000000000000016 /* ShortcutDetector.swift in Sources */,
+				01000000000000000000002F /* SpeechVocabulary.swift in Sources */,
 				010000000000000000000013 /* SpeechTranscriber.swift in Sources */,
 				010000000000000000000025 /* StylePackStore.swift in Sources */,
 				01000000000000000000002C /* StructuredOutputSchema.swift in Sources */,

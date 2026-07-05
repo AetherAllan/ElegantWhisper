@@ -67,7 +67,7 @@ final class LearningCandidateTests: XCTestCase {
         XCTAssertEqual(store.items().count, 1)
     }
 
-    func testAcceptCandidateCanFeedDictionaryCorrection() throws {
+    func testAcceptCandidateAddsDictionaryTerm() throws {
         let dictionaryFile = try temporaryFile(named: "dictionary.json")
         let dictionary = DictionaryStore(fileURL: dictionaryFile)
         let candidate = LearningCandidate(
@@ -77,10 +77,8 @@ final class LearningCandidateTests: XCTestCase {
             bundleIdentifier: "com.apple.TextEdit"
         )
 
-        XCTAssertTrue(dictionary.add(term: candidate.replacement, aliases: [candidate.original], language: candidate.language))
-        let corrected = CorrectionEngine().correct("我用派森写脚本", entries: dictionary.entries(for: .simplifiedChinese))
-
-        XCTAssertEqual(corrected, "我用Python写脚本")
+        XCTAssertTrue(dictionary.add(term: candidate.replacement, language: candidate.language))
+        XCTAssertEqual(dictionary.terms(for: .simplifiedChinese), ["Python"])
     }
 
     func testLearningSettingDefaultsOff() {

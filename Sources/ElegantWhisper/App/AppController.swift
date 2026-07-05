@@ -11,7 +11,7 @@ final class AppController {
     private let recorder = AudioRecorder()
     private let transcriber = SpeechTranscriber()
     private let dictionary = DictionaryStore.shared
-    private let correctionEngine = CorrectionEngine()
+    private let stylePacks = StylePackStore.shared
     private let focusDetector = FocusDetector()
     private let inputSourceManager = InputSourceManager()
     private let postEditLearner = PostEditLearner()
@@ -101,7 +101,7 @@ final class AppController {
             startRecording()
         case .recording:
             stopAndTranscribe()
-        case .transcribing, .refining:
+        case .preparing, .transcribing, .refining:
             if let until = ignoreToggleCancellationUntil, clock.now < until {
                 // The same physical Right Option release can occasionally surface as a second
                 // toggle just after we leave recording. Do not let that stale hotkey cancel ASR/LLM
@@ -146,19 +146,49 @@ final class AppController {
         recordingStoppedAt = nil
         ignoreToggleCancellationUntil = nil
 
+        guard state.transition(to: .preparing), let sessionID = currentSession?.id else {
+            return
+        }
+        let language = settings.language
+        let vocabulary = SpeechVocabulary.terms(
+            stylePack: stylePacks.activePack(),
+            userDictionary: dictionary,
+            language: language
+        )
+        panel.showStatus("Preparing...")
+        panel.retryShowIfNeeded()
+        DebugLog.event("panelShow")
+        onChange?()
+
+        Task { [weak self] in
+            await self?.prepareRecording(language: language, contextualStrings: vocabulary, sessionID: sessionID)
+        }
+    }
+
+    private func prepareRecording(
+        language: RecognitionLanguage,
+        contextualStrings: [String],
+        sessionID: UUID
+    ) async {
         do {
-            try transcriber.start(
-                language: settings.language,
-                contextualStrings: dictionary.contextualStrings(for: settings.language)
-            )
+            try await transcriber.start(language: language, contextualStrings: contextualStrings)
+            guard isCurrentSession(sessionID), state.mode == .preparing else {
+                transcriber.cancel()
+                return
+            }
             try recorder.start()
             DebugLog.event("recordingStart")
-            _ = state.transition(to: .recording)
+            guard state.transition(to: .recording) else {
+                recorder.stop()
+                transcriber.cancel()
+                return
+            }
             panel.showRecording(text: "")
-            panel.retryShowIfNeeded()
-            DebugLog.event("panelShow")
             onChange?()
         } catch {
+            guard isCurrentSession(sessionID) else {
+                return
+            }
             showError(error.localizedDescription)
         }
     }
@@ -207,7 +237,7 @@ final class AppController {
         switch state.mode {
         case .recording:
             cancelRecording()
-        case .transcribing, .refining:
+        case .preparing, .transcribing, .refining:
             recorder.stop()
             transcriber.cancel()
             refinementTask?.cancel()
@@ -271,7 +301,6 @@ final class AppController {
             return
         }
 
-        let locallyCorrected = correctionEngine.correct(raw, entries: dictionary.entries(for: settings.language))
         let asrFinalizedIn = recordingStoppedAt.map { $0.duration(to: clock.now) }
 
         if settings.llmEnabled {
@@ -280,20 +309,18 @@ final class AppController {
             _ = state.transition(to: .refining)
             panel.showStatus("Refining...")
             onChange?()
-            let hotwords = dictionary.contextualStrings(for: settings.language)
             refinementTask = refiner.refine(
-                locallyCorrected,
-                hotwords: hotwords,
+                raw,
                 asrFinalizedIn: asrFinalizedIn
             ) { [weak self] refined in
                 guard let self, self.isCurrentSession(sessionID) else {
                     return
                 }
                 self.refinementTask = nil
-                self.inject(refined.isEmpty ? locallyCorrected : refined, sessionID: sessionID)
+                self.inject(refined.isEmpty ? raw : refined, sessionID: sessionID)
             }
         } else {
-            inject(locallyCorrected, sessionID: sessionID)
+            inject(raw, sessionID: sessionID)
         }
     }
 

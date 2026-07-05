@@ -140,7 +140,7 @@ final class LLMRefinerTests: XCTestCase {
         XCTAssertEqual(settings.llmProvider, .openRouterFree)
     }
 
-    func testOpenRouterRequestAddsAttributionHeaderAndHotwords() throws {
+    func testOpenRouterRequestAddsAttributionHeaderWithoutDictionaryHotwords() throws {
         let settings = makeSettings()
         let stylePacks = try makeStylePackStore()
         settings.llmProvider = .openRouterFree
@@ -149,10 +149,7 @@ final class LLMRefinerTests: XCTestCase {
         settings.apiKey = "test-key"
         defer { settings.apiKey = "" }
 
-        let request = try XCTUnwrap(LLMRefiner(settings: settings, stylePacks: stylePacks).makeRequest(
-            text: "我想用配森解析杰森",
-            hotwords: ["Python", "JSON"]
-        ))
+        let request = try XCTUnwrap(LLMRefiner(settings: settings, stylePacks: stylePacks).makeRequest(text: "我想用配森解析杰森"))
 
         XCTAssertEqual(request.url?.absoluteString, "https://openrouter.ai/api/v1/chat/completions")
         XCTAssertEqual(request.timeoutInterval, 25)
@@ -176,8 +173,8 @@ final class LLMRefinerTests: XCTestCase {
 
         let messages = try XCTUnwrap(json["messages"] as? [[String: Any]])
         let systemPrompt = try XCTUnwrap(messages.first?["content"] as? String)
-        XCTAssertTrue(systemPrompt.contains("Python"))
-        XCTAssertTrue(systemPrompt.contains("JSON"))
+        XCTAssertFalse(systemPrompt.contains("User dictionary"))
+        XCTAssertFalse(systemPrompt.contains(LLMPromptBuilder.hotwordPlaceholder))
     }
 
     func testOldOpenRouterFreeRouterSettingUsesStableFreeModel() {
@@ -419,7 +416,7 @@ final class LLMRefinerTests: XCTestCase {
     }
 
     func testPromptKeepsConservativeBoundary() {
-        let prompt = LLMPromptBuilder.systemPrompt(template: LLMPromptBuilder.conservativeTemplate, hotwords: ["MCP"])
+        let prompt = LLMPromptBuilder.systemPrompt(template: LLMPromptBuilder.conservativeTemplate)
 
         XCTAssertTrue(prompt.contains("punctuation"))
         XCTAssertTrue(prompt.contains("light formatting"))
@@ -430,8 +427,8 @@ final class LLMRefinerTests: XCTestCase {
         XCTAssertTrue(prompt.contains("change meaning"))
         XCTAssertTrue(prompt.contains("Do not include explanations"))
         XCTAssertTrue(prompt.contains("very short input"))
-        XCTAssertTrue(prompt.contains("MCP"))
-        XCTAssertFalse(prompt.contains("Common ASR hints"))
+        XCTAssertFalse(prompt.contains("User dictionary"))
+        XCTAssertFalse(prompt.contains(LLMPromptBuilder.hotwordPlaceholder))
     }
 
     func testProgrammerStylePackIsDefaultInRequest() throws {
@@ -466,53 +463,51 @@ final class LLMRefinerTests: XCTestCase {
         pack.systemPrompt = "Custom prompt.\n\n\(LLMPromptBuilder.hotwordPlaceholder)"
         stylePacks.save(pack)
 
-        let request = try XCTUnwrap(LLMRefiner(settings: settings, stylePacks: stylePacks).makeRequest(
-            text: "配森",
-            hotwords: ["Python"]
-        ))
+        let request = try XCTUnwrap(LLMRefiner(settings: settings, stylePacks: stylePacks).makeRequest(text: "配森"))
         let body = try XCTUnwrap(request.httpBody)
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
         let messages = try XCTUnwrap(json["messages"] as? [[String: Any]])
         let systemPrompt = try XCTUnwrap(messages.first?["content"] as? String)
 
         XCTAssertTrue(systemPrompt.contains("Custom prompt."))
-        XCTAssertTrue(systemPrompt.contains("Python"))
+        XCTAssertFalse(systemPrompt.contains("Python"))
         XCTAssertFalse(systemPrompt.contains("developer dictation"))
         XCTAssertFalse(systemPrompt.contains(LLMPromptBuilder.hotwordPlaceholder))
     }
 
-    func testPromptAppendsHotwordsWhenPlaceholderIsMissing() {
-        let prompt = LLMPromptBuilder.systemPrompt(template: "Custom prompt only.", hotwords: ["JSON"])
+    func testPromptDoesNotAppendDictionaryBlockWhenPlaceholderIsMissing() {
+        let prompt = LLMPromptBuilder.systemPrompt(template: "Custom prompt only.")
 
-        XCTAssertTrue(prompt.contains("Custom prompt only."))
-        XCTAssertTrue(prompt.contains("JSON"))
+        XCTAssertEqual(prompt, "Custom prompt only.")
+        XCTAssertFalse(prompt.contains("User dictionary"))
     }
 
-    func testPromptStaticContextCacheKeyIsStableForSameStyleAndHotwords() {
+    func testPromptStaticContextCacheKeyIsStableForSameStyle() {
         let pack = StylePackStore.builtinPacks[0]
 
-        let first = PromptStaticContextCache.cacheKey(stylePack: pack, hotwords: ["Python", "JSON"])
-        let second = PromptStaticContextCache.cacheKey(stylePack: pack, hotwords: ["Python", "JSON"])
+        let first = PromptStaticContextCache.cacheKey(stylePack: pack)
+        let second = PromptStaticContextCache.cacheKey(stylePack: pack)
 
         XCTAssertEqual(first, second)
     }
 
     func testPromptStaticContextCacheKeyChangesWhenStyleChanges() {
         var pack = StylePackStore.builtinPacks[0]
-        let first = PromptStaticContextCache.cacheKey(stylePack: pack, hotwords: ["Python"])
+        let first = PromptStaticContextCache.cacheKey(stylePack: pack)
         pack.systemPrompt += "\nExtra rule."
 
-        let second = PromptStaticContextCache.cacheKey(stylePack: pack, hotwords: ["Python"])
+        let second = PromptStaticContextCache.cacheKey(stylePack: pack)
 
         XCTAssertNotEqual(first, second)
     }
 
     func testPromptStaticContextKeepsTranscriptDynamicAndLast() {
         let transcript = "我想用配森解析杰森"
-        let context = PromptStaticContextCache.context(stylePack: StylePackStore.builtinPacks[0], hotwords: ["Python", "JSON"])
+        let context = PromptStaticContextCache.context(stylePack: StylePackStore.builtinPacks[0])
         let messages = context.messages(transcript: transcript)
 
         XCTAssertFalse(context.systemPrompt.contains(transcript))
+        XCTAssertFalse(context.systemPrompt.contains("User dictionary"))
         XCTAssertEqual(messages.last?.role, "user")
         XCTAssertEqual(messages.last?.content, transcript)
     }
@@ -543,7 +538,7 @@ final class LLMRefinerTests: XCTestCase {
             model: model,
             timeout: 25,
             maxOutputTokens: 192,
-            promptContext: PromptStaticContextCache.context(stylePack: StylePackStore.builtinPacks[0], hotwords: []),
+            promptContext: PromptStaticContextCache.context(stylePack: StylePackStore.builtinPacks[0]),
             transcript: "我想用配森解析杰森"
         )
     }

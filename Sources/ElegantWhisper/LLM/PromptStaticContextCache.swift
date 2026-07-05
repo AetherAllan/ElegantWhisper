@@ -14,25 +14,21 @@ struct PromptStaticContext: Sendable {
 enum PromptStaticContextCache {
     private static let storage = PromptStaticContextStorage()
 
-    static func context(stylePack: StylePack, hotwords: [String]) -> PromptStaticContext {
-        let key = cacheKey(stylePack: stylePack, hotwords: hotwords)
+    static func context(stylePack: StylePack) -> PromptStaticContext {
+        let key = cacheKey(stylePack: stylePack)
         if let prompt = storage.prompt(for: key) {
             return PromptStaticContext(systemPrompt: prompt)
         }
 
-        let prompt = LLMPromptBuilder.systemPrompt(template: stylePack.systemPrompt, hotwords: hotwords)
+        let prompt = LLMPromptBuilder.systemPrompt(template: stylePack.systemPrompt)
         storage.setPrompt(prompt, for: key)
         return PromptStaticContext(systemPrompt: prompt)
     }
 
-    static func cacheKey(stylePack: StylePack, hotwords: [String]) -> String {
+    static func cacheKey(stylePack: StylePack) -> String {
         [
             stylePack.id,
-            stylePack.systemPrompt,
-            hotwords
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty }
-                .joined(separator: "\u{1f}")
+            stylePack.systemPrompt
         ].joined(separator: "\u{1e}")
     }
 

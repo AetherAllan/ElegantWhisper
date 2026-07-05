@@ -78,11 +78,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func rebuildMenu() {
         let menu = NSMenu()
 
-        let toggleTitle = controller.state.mode == .recording ? "Stop and Transcribe" : "Start Recording"
-        menu.addItem(NSMenuItem(title: toggleTitle, action: #selector(toggleRecording), keyEquivalent: ""))
+        let toggleTitle: String
+        switch controller.state.mode {
+        case .recording:
+            toggleTitle = "Stop and Transcribe"
+        case .preparing:
+            toggleTitle = "Preparing..."
+        case .idle, .transcribing, .refining, .injecting:
+            toggleTitle = "Start Recording"
+        }
+        let toggle = NSMenuItem(title: toggleTitle, action: #selector(toggleRecording), keyEquivalent: "")
+        toggle.isEnabled = controller.state.mode != .preparing
+        menu.addItem(toggle)
 
         let cancel = NSMenuItem(title: "Cancel Recording", action: #selector(cancelRecording), keyEquivalent: "")
-        cancel.isEnabled = [.recording, .transcribing, .refining].contains(controller.state.mode)
+        cancel.isEnabled = [.preparing, .recording, .transcribing, .refining].contains(controller.state.mode)
         menu.addItem(cancel)
 
         menu.addItem(.separator())

@@ -51,7 +51,7 @@ extension MainWindowController {
                 MainWindowUI.card([llmCheckbox, form, buttons]),
                 MainWindowUI.card([
                     MainWindowUI.sectionHeader("Style Pack", selectedStylePack()?.name ?? "None"),
-                    MainWindowUI.body("Use \(LLMPromptBuilder.hotwordPlaceholder) where dictionary terms should be injected."),
+                    MainWindowUI.body("Dictionary terms are used by Apple Speech only; polishing uses this style prompt without vocabulary injection."),
                     styleForm,
                     styleButtons
                 ]),

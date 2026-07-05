@@ -108,7 +108,6 @@ extension MainWindowController {
     @objc func addDictionaryTerm() {
         let ok = dictionary.add(
             term: dictionaryTermField.stringValue,
-            aliases: parseAliases(dictionaryAliasesField.stringValue),
             language: selectedLanguage(in: dictionaryLanguagePopup)
         )
         guard ok else {
@@ -116,7 +115,6 @@ extension MainWindowController {
             return
         }
         dictionaryTermField.stringValue = ""
-        dictionaryAliasesField.stringValue = ""
         showNotice("Dictionary term saved")
         renderCurrentPage()
     }
@@ -146,8 +144,7 @@ extension MainWindowController {
         currentPage = .dictionary
         updateSidebarSelection()
         dictionaryTermField.stringValue = item.text
-        dictionaryAliasesField.stringValue = ""
-        showNotice("Edit the term and add wrong forms before saving")
+        showNotice("Edit the term before saving")
         renderCurrentPage()
     }
 
@@ -165,13 +162,6 @@ extension MainWindowController {
 
     @objc func openInputMonitoringSettings() {
         controller.openInputMonitoringSettings()
-    }
-
-    func parseAliases(_ text: String) -> [String] {
-        // Do not split on spaces: many correct terms and wrong recognitions are English phrases.
-        text.components(separatedBy: CharacterSet(charactersIn: ",，;；\n"))
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
     }
 
     func historyItem(from sender: NSButton) -> HistoryItem? {
@@ -192,7 +182,7 @@ extension MainWindowController {
         guard let candidate = learningCandidate(from: sender) else {
             return
         }
-        _ = dictionary.add(term: candidate.replacement, aliases: [candidate.original], language: candidate.language)
+        _ = dictionary.add(term: candidate.replacement, language: candidate.language)
         LearningCandidateStore.shared.remove(id: candidate.id)
         showNotice("Added")
         renderCurrentPage()

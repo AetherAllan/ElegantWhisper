@@ -175,6 +175,33 @@ final class StylePackStore: @unchecked Sendable {
 
     static let programmerPackID = "builtin.programmer"
 
+    static func seedTerms(for packID: String) -> [String] {
+        builtinSeedTerms[packID] ?? []
+    }
+
+    private static let builtinSeedTerms: [String: [String]] = [
+        programmerPackID: [
+            "Python", "Docker", "SQL", "Redis", "Web3", "blockchain", "TypeScript",
+            "JavaScript", "JSON", "API", "SDK", "CLI", "YAML", "GitHub", "npm",
+            "pnpm", "Bun", "Node.js", "React", "Next.js", "Swift", "Xcode",
+            "Cursor", "IDE", "Codex", "ChatGPT", "Claude", "Claude Code", "VS Code",
+            "OpenAI", "OpenRouter", "PostgreSQL", "MySQL", "SQLite", "agent"
+        ],
+        "builtin.conservative": [
+            "Python", "JSON", "API", "GitHub", "OpenAI", "ChatGPT", "Claude",
+            "Swift", "Xcode"
+        ],
+        "builtin.prompt-cleanup": [
+            "prompt", "system prompt", "user message", "JSON", "Markdown", "API",
+            "ChatGPT", "Claude", "Codex", "OpenAI"
+        ],
+        "builtin.technical": [
+            "API", "SDK", "CLI", "JSON", "YAML", "HTTP", "HTTPS", "URL", "UUID",
+            "PostgreSQL", "MySQL", "SQLite", "Redis", "Docker", "Kubernetes",
+            "GitHub", "TypeScript", "JavaScript", "Swift", "Xcode"
+        ]
+    ]
+
     static let builtinPacks: [StylePack] = [
         StylePack(
             id: programmerPackID,

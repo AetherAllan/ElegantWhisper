@@ -62,7 +62,6 @@ final class LLMRefiner: Sendable {
     @discardableResult
     func refine(
         _ text: String,
-        hotwords: [String] = [],
         asrFinalizedIn: Duration? = nil,
         completion: @escaping @MainActor @Sendable (String) -> Void
     ) -> LLMRefinementTask? {
@@ -82,7 +81,7 @@ final class LLMRefiner: Sendable {
             return nil
         }
         guard !settings.apiKey.isEmpty,
-              let context = makeRequestContext(text: trimmed, hotwords: hotwords)
+              let context = makeRequestContext(text: trimmed)
         else {
             DebugLog.event("llmRefineSkippedMissingSettings")
             Task { @MainActor in
@@ -113,7 +112,7 @@ final class LLMRefiner: Sendable {
     }
 
     func testConnection(completion: @escaping @MainActor @Sendable (Bool, String) -> Void) {
-        guard let context = makeRequestContext(text: "我想用配森解析杰森文件。", hotwords: ["Python", "JSON"]) else {
+        guard let context = makeRequestContext(text: "我想用配森解析杰森文件。") else {
             Task { @MainActor in
                 completion(false, "Missing API settings")
             }
@@ -175,15 +174,15 @@ final class LLMRefiner: Sendable {
         attempt(mode: provider.firstMode(for: context), didFallbackStructured: false)
     }
 
-    func makeRequest(text: String, hotwords: [String] = []) -> URLRequest? {
-        guard let context = makeRequestContext(text: text, hotwords: hotwords) else {
+    func makeRequest(text: String) -> URLRequest? {
+        guard let context = makeRequestContext(text: text) else {
             return nil
         }
         let provider = providerClient(for: context.provider)
         return provider.makeRequest(context: context, mode: provider.firstMode(for: context))
     }
 
-    func makeRequestContext(text: String, hotwords: [String] = []) -> LLMProviderRequestContext? {
+    func makeRequestContext(text: String) -> LLMProviderRequestContext? {
         guard let base = URL(string: settings.apiBaseURL),
               isAllowedBaseURL(base),
               !settings.apiKey.isEmpty
@@ -193,13 +192,13 @@ final class LLMRefiner: Sendable {
 
         let provider = settings.llmProvider
         let stylePack = stylePacks.activePack()
-        let promptContext = PromptStaticContextCache.context(stylePack: stylePack, hotwords: hotwords)
+        let promptContext = PromptStaticContextCache.context(stylePack: stylePack)
         let maxOutputTokens = maxTokens(for: text)
 
         // Log counts only. System prompts, transcripts, model output, and API keys can all contain
         // private text, but these numbers are enough to confirm output budgeting uses user text
         // separately from the prompt.
-        DebugLog.event("llmRequestShape:provider=\(provider.rawValue):model=\(settings.model):systemChars=\(promptContext.systemPrompt.count):userChars=\(text.count):hotwordCount=\(hotwords.count):maxOutputTokens=\(maxOutputTokens)")
+        DebugLog.event("llmRequestShape:provider=\(provider.rawValue):model=\(settings.model):systemChars=\(promptContext.systemPrompt.count):userChars=\(text.count):maxOutputTokens=\(maxOutputTokens)")
         return LLMProviderRequestContext(
             provider: provider,
             baseURL: base,

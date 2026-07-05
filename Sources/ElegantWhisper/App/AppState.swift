@@ -2,6 +2,7 @@ import Foundation
 
 enum AppMode {
     case idle
+    case preparing
     case recording
     case transcribing
     case refining
@@ -10,6 +11,7 @@ enum AppMode {
     var title: String {
         switch self {
         case .idle: "Idle"
+        case .preparing: "Preparing"
         case .recording: "Recording"
         case .transcribing: "Transcribing"
         case .refining: "Refining"
@@ -28,7 +30,8 @@ final class AppState {
         // paste completion), and allowing arbitrary forward jumps is how duplicate recordings
         // or late paste operations happen.
         switch (mode, next) {
-        case (.idle, .recording),
+        case (.idle, .preparing),
+             (.preparing, .recording),
              (.recording, .transcribing),
              (.transcribing, .refining),
              (.transcribing, .injecting),

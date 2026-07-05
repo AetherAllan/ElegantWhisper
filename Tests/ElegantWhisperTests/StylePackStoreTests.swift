@@ -31,6 +31,17 @@ final class StylePackStoreTests: XCTestCase {
         XCTAssertEqual(store.packs().filter(\.active).count, 1)
     }
 
+    func testSeedTermsArePackMetadataOnly() throws {
+        let store = StylePackStore(fileURL: try temporaryFile())
+
+        XCTAssertTrue(StylePackStore.seedTerms(for: store.activePack().id).contains("Python"))
+
+        let data = try JSONEncoder().encode(TestStylePackFile(version: 1, packs: store.packs()))
+        let saved = String(data: data, encoding: .utf8)
+
+        XCTAssertFalse(saved?.contains("seedTerms") ?? true)
+    }
+
     func testResetBuiltinRestoresPrompt() throws {
         let store = StylePackStore(fileURL: try temporaryFile())
         var pack = store.activePack()
