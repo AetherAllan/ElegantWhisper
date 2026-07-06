@@ -1,13 +1,35 @@
 import ApplicationServices
 import Foundation
 
+// Focus-field context for dictation: Accessibility reads snippets locally, extracts technical
+// tokens, and never sends full editor text to an API. Tokens feed on-device Speech; app name +
+// AX ∪ Style Pack seed hints (≤20) optionally append to the LLM polish system prompt.
+
 struct SpeechFocusContext: Equatable, Sendable {
+    static let vocabularyHintLimit = 20
+
+    /// LLM local-context hints: AX-focused tokens first, then Style Pack seed terms (see `vocabularyHints`).
     let appName: String?
     let terms: [String]
 
     init(appName: String?, terms: [String]) {
         self.appName = Self.cleanAppName(appName)
-        self.terms = Array(terms.prefix(12))
+        self.terms = Array(terms.prefix(Self.vocabularyHintLimit))
+    }
+
+    /// AX extract first, then pack seed terms; case-insensitive dedupe; capped for LLM hints only.
+    static func vocabularyHints(focused: [String], seed: [String]) -> [String] {
+        var seen = Set<String>()
+        var terms: [String] = []
+        func append(_ raw: String) {
+            guard terms.count < vocabularyHintLimit else { return }
+            let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !value.isEmpty, seen.insert(value.lowercased()).inserted else { return }
+            terms.append(value)
+        }
+        focused.forEach(append)
+        seed.forEach(append)
+        return terms
     }
 
     var isEmpty: Bool {
@@ -55,6 +77,7 @@ struct AXFocusedTextSnapshot {
 }
 
 enum AXFocusedTextContextReader {
+    /// Reads focused-field snippets for **local** token extraction only (see `SpeechContextTermExtractor`).
     private static let selectedTextLimit = 2_000
     private static let visibleTextLimit = 4_000
 
@@ -149,6 +172,8 @@ enum AXFocusedTextContextReader {
 }
 
 enum SpeechContextTermExtractor {
+    /// Pulls technical tokens from AX snippets for Speech `contextualStrings` and LLM hints.
+    /// Full snippet text is not retained or transmitted—only filtered token strings for ASR (≤30 extract).
     private static let tokenRegex = try! NSRegularExpression(pattern: "[A-Za-z0-9]+(?:[._/-][A-Za-z0-9]+)*")
     private static let privateTextRegex = try! NSRegularExpression(pattern: "(https?://\\S+|www\\.\\S+|\\S+@\\S+)")
     private static let camelRegex = try! NSRegularExpression(pattern: "([a-z][A-Z]|[A-Z][a-z]+[A-Z])")

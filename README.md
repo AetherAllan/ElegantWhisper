@@ -40,9 +40,26 @@ Command shortcuts such as Cmd+V/C/A/Z and Option combined with other keys keep n
 
 - History, dictionary entries, Style Packs, and settings are stored locally.
 - API credentials are stored in the macOS Keychain.
-- LLM polishing is disabled by default.
-- When polishing is enabled, only the recognized text is sent to the configured API provider.
-- Audio is processed through Apple's Speech framework.
+- LLM polishing is **disabled by default**.
+- Audio is processed through Apple's Speech framework on device.
+
+### What stays on your Mac
+
+When you start dictation, ElegantWhisper may read the **focused editable field** through Accessibility (same permission used for text insertion). It does **not** upload that field's contents. Instead it:
+
+- Extracts up to **12 high-value tokens** (technical words, camelCase identifiers, etc.) from the focused field for local Apple Speech `contextualStrings`.
+- Skips secure password fields and filters URLs, emails, and obvious secret-like strings before token extraction.
+- Caps selected/visible snippet reads (2k / 4k characters) only to find those tokens; the snippets themselves are not sent to any API.
+
+### What leaves your Mac (only when LLM polishing is enabled)
+
+Each polish request sends to your configured OpenAI-compatible provider:
+
+- The **final recognized transcript** (user message).
+- The active **Style Pack** system prompt.
+- Optional **local context** appended to the system prompt: foreground **app name** (≤40 characters) and up to **20 vocabulary hints** (AX-focused tokens plus active Style Pack seed terms, deduped)—not the full editor text.
+
+No conversation history from prior dictations is sent. Each refinement is a single independent request.
 
 ## Requirements
 
@@ -156,7 +173,7 @@ Style Packs are stored at:
 ~/Library/Application Support/ElegantWhisper/style-packs.json
 ```
 
-`LLM Refinement` is disabled by default. When enabled, it sends only the final recognized text to an OpenAI-compatible `/chat/completions` endpoint and uses the active Style Pack prompt. Use `{{HOTWORDS}}` where dictionary terms should be injected.
+`LLM Refinement` is disabled by default. When enabled, each request sends the recognized transcript plus the active Style Pack prompt to an OpenAI-compatible `/chat/completions` endpoint. It may also include a short local-context block (foreground app name and up to 20 vocabulary hints: AX-focused tokens plus Style Pack seed terms—see **Privacy**).
 
 ## Languages
 

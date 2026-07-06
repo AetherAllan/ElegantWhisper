@@ -91,6 +91,18 @@ final class DictionaryAndCorrectionTests: XCTestCase {
         )
     }
 
+    func testVocabularyHintsMergeFocusedTermsBeforeSeedTerms() {
+        let hints = SpeechFocusContext.vocabularyHints(
+            focused: ["SwiftUI", "AXObserver"],
+            seed: ["Python", "TypeScript", "SwiftUI"]
+        )
+
+        XCTAssertEqual(hints.prefix(2), ["SwiftUI", "AXObserver"])
+        XCTAssertTrue(hints.contains("Python"))
+        XCTAssertEqual(hints.filter { $0.caseInsensitiveCompare("SwiftUI") == .orderedSame }.count, 1)
+        XCTAssertLessThanOrEqual(hints.count, SpeechFocusContext.vocabularyHintLimit)
+    }
+
     func testFocusedTermExtractorKeepsTechnicalTermsOnly() {
         let terms = SpeechContextTermExtractor.terms(from: [
             "the button 然后 SwiftUI AppKit AXObserver OpenRouter GPT-5.5 dbf5d503 2026-07-05 3.14 1/2 https://example.com/path sk-test ghp_secret user"

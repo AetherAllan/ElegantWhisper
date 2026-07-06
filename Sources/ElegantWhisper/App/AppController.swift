@@ -153,11 +153,16 @@ final class AppController {
             return
         }
         let language = settings.language
+        // AX → token extract: snippets stay on-device; terms → Apple Speech + optional LLM local context.
         let snippets = AXFocusedTextContextReader.snippets(from: target)
         let focusedTerms = SpeechContextTermExtractor.terms(from: snippets)
+        let activePack = stylePacks.activePack()
         let context = SpeechFocusContext(
             appName: contextAppName(target: target, application: originalApplication),
-            terms: focusedTerms
+            terms: SpeechFocusContext.vocabularyHints(
+                focused: focusedTerms,
+                seed: StylePackStore.seedTerms(for: activePack.id)
+            )
         )
         speechContext = context
         let vocabulary = SpeechVocabulary.terms(
