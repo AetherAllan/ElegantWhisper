@@ -89,7 +89,7 @@ final class SettingsStore: @unchecked Sendable {
                 // while sometimes routing to models that returned empty/reasoning-only or unrelated
                 // text. Existing installs using that old preset should move to the stable free
                 // model without requiring users to rediscover the setting manually.
-                return LLMProvider.openRouterFree.defaultModel ?? "nvidia/nemotron-3-nano-30b-a3b:free"
+                return LLMProvider.openRouterFree.defaultModel!
             }
             if llmProvider == .inferenceNet,
                let stored,

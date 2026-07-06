@@ -247,7 +247,7 @@ final class LLMRefinerTests: XCTestCase {
         let stylePacks = try makeStylePackStore()
         settings.llmProvider = .openRouterFree
         settings.apiBaseURL = "https://openrouter.ai/api/v1"
-        settings.model = "openrouter/free"
+        settings.model = "nvidia/nemotron-3-nano-30b-a3b:free"
         settings.apiKey = "test-key"
         defer { settings.apiKey = "" }
 
@@ -263,7 +263,8 @@ final class LLMRefinerTests: XCTestCase {
         XCTAssertEqual(json["model"] as? String, "nvidia/nemotron-3-nano-30b-a3b:free")
         XCTAssertEqual(json["max_tokens"] as? Int, 192)
         XCTAssertNil(json["temperature"])
-        XCTAssertNil(json["reasoning"])
+        let reasoning = try XCTUnwrap(json["reasoning"] as? [String: Any])
+        XCTAssertEqual(reasoning["effort"] as? String, "none")
         let responseFormat = try XCTUnwrap(json["response_format"] as? [String: Any])
         XCTAssertEqual(responseFormat["type"] as? String, "json_schema")
         let jsonSchema = try XCTUnwrap(responseFormat["json_schema"] as? [String: Any])
@@ -314,7 +315,23 @@ final class LLMRefinerTests: XCTestCase {
         settings.llmProvider = .openRouterFree
         settings.model = "openrouter/free"
 
-        XCTAssertEqual(settings.model, "nvidia/nemotron-3-nano-30b-a3b:free")
+        XCTAssertEqual(settings.model, "nvidia/nemotron-3-super-120b-a12b:free")
+    }
+
+    func testOpenRouterGPTOSSUsesLowReasoningEffort() throws {
+        let settings = makeSettings()
+        let stylePacks = try makeStylePackStore()
+        settings.llmProvider = .openRouterFree
+        settings.apiBaseURL = "https://openrouter.ai/api/v1"
+        settings.model = "openai/gpt-oss-20b:free"
+        settings.apiKey = "test-key"
+        defer { settings.apiKey = "" }
+
+        let request = try XCTUnwrap(LLMRefiner(settings: settings, stylePacks: stylePacks).makeRequest(text: "test"))
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: try XCTUnwrap(request.httpBody)) as? [String: Any])
+        let reasoning = try XCTUnwrap(json["reasoning"] as? [String: Any])
+        XCTAssertEqual(reasoning["effort"] as? String, "low")
+        XCTAssertNil(json["response_format"])
     }
 
     func testLongRequestGetsLargerOutputBudget() throws {

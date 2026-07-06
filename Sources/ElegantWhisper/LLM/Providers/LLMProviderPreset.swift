@@ -27,7 +27,7 @@ enum LLMProvider: String, CaseIterable, Codable, Sendable {
     var defaultModel: String? {
         switch self {
         case .openAI: "gpt-4o-mini"
-        case .openRouterFree: "nvidia/nemotron-3-nano-30b-a3b:free"
+        case .openRouterFree: "nvidia/nemotron-3-super-120b-a12b:free"
         case .inferenceNet: "nvidia/nemotron3-super"
         case .custom: nil
         }
@@ -38,7 +38,17 @@ enum LLMProvider: String, CaseIterable, Codable, Sendable {
         case .openAI:
             ["gpt-4o-mini"]
         case .openRouterFree:
-            ["nvidia/nemotron-3-nano-30b-a3b:free"]
+            [
+                "nvidia/nemotron-3-super-120b-a12b:free",
+                "nvidia/nemotron-3-ultra-550b-a55b:free",
+                "google/gemma-4-26b-a4b-it:free",
+                "nvidia/nemotron-3-nano-30b-a3b:free",
+                "openai/gpt-oss-20b:free",
+                "liquid/lfm-2.5-1.2b-instruct:free",
+                "meta-llama/llama-3.3-70b-instruct:free",
+                "qwen/qwen3-next-80b-a3b-instruct:free",
+                "openai/gpt-oss-120b:free"
+            ]
         case .inferenceNet:
             [
                 "nvidia/nemotron3-super",
@@ -56,7 +66,7 @@ enum LLMProvider: String, CaseIterable, Codable, Sendable {
         case .openAI:
             "Stable OpenAI-compatible polishing."
         case .openRouterFree:
-            "Routes to random free OpenRouter models. Good for testing, not guaranteed stable."
+            "Fixed :free models only—not openrouter/free. Best options listed first."
         case .inferenceNet:
             "OpenAI-compatible Inference.net API. Default uses Nemotron 3 Super for ASR polishing."
         case .custom:
