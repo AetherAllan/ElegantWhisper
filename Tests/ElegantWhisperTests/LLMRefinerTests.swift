@@ -211,7 +211,7 @@ final class LLMRefinerTests: XCTestCase {
         XCTAssertTrue(systemPrompt.contains("Remove obvious hesitation only when it does not change meaning"))
         XCTAssertTrue(systemPrompt.contains("这个这个, 因为因为, 我觉得我觉得"))
         XCTAssertTrue(systemPrompt.contains("外部三 / web三 / web 三 -> Web3"))
-        XCTAssertTrue(systemPrompt.contains("App: Cursor"))
+        XCTAssertTrue(systemPrompt.contains("User is currently using app: Cursor"))
         XCTAssertTrue(systemPrompt.contains("Vocabulary hints: SwiftUI, AXObserver"))
         XCTAssertFalse(systemPrompt.contains("Structured output override"))
         XCTAssertEqual(messages.last?["role"] as? String, "user")

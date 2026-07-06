@@ -25,7 +25,7 @@ struct SpeechFocusContext: Equatable, Sendable {
             "Do not mention local context."
         ]
         if let appName {
-            lines.append("App: \(appName)")
+            lines.append("User is currently using app: \(appName)")
         }
         if !terms.isEmpty {
             lines.append("Vocabulary hints: \(terms.joined(separator: ", "))")
