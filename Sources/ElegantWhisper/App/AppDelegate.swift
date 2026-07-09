@@ -1,12 +1,13 @@
 import AppKit
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let controller = AppController()
     private var statusItem: NSStatusItem?
     private var mainWindow: MainWindowController?
     private var onboardingWindow: PermissionOnboardingWindowController?
-    private var lastMessage = ""
+    private weak var microphoneMenuItem: NSMenuItem?
+    private var statusIcon: NSImage?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
@@ -17,9 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.mainWindow?.refresh()
         }
         controller.onUserMessage = { [weak self] message in
-            self?.lastMessage = message
             self?.mainWindow?.showNotice(message)
-            self?.rebuildMenu()
         }
         controller.start()
         rebuildMenu()
@@ -45,9 +44,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func setupStatusItem() {
-        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        item.button?.title = AppConstants.productName
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        statusIcon = makeStatusIcon()
+        if let button = item.button {
+            button.image = statusIcon
+            button.imagePosition = .imageOnly
+            button.imageScaling = .scaleProportionallyDown
+            button.toolTip = AppConstants.productName
+        }
         statusItem = item
+    }
+
+    private func makeStatusIcon() -> NSImage? {
+        // StatusBarIcon.png: transparent glyph, 72px bitmap for Retina. Point size 22pt.
+        guard let url = Bundle.main.url(forResource: "StatusBarIcon", withExtension: "png"),
+              let image = NSImage(contentsOf: url)
+        else {
+            return NSImage(systemSymbolName: "waveform", accessibilityDescription: AppConstants.productName)
+        }
+        image.size = NSSize(width: 22, height: 22)
+        image.isTemplate = true
+        return image
     }
 
     private func setupMainMenu() {
@@ -78,47 +95,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func rebuildMenu() {
         let menu = NSMenu()
-
-        let toggleTitle: String
-        switch controller.state.mode {
-        case .recording:
-            toggleTitle = "Stop and Transcribe"
-        case .preparing:
-            toggleTitle = "Preparing..."
-        case .idle, .transcribing, .refining, .injecting:
-            toggleTitle = "Start Recording"
-        }
-        let toggle = NSMenuItem(title: toggleTitle, action: #selector(toggleRecording), keyEquivalent: "")
-        toggle.isEnabled = controller.state.mode != .preparing
-        menu.addItem(toggle)
-
-        let cancel = NSMenuItem(title: "Cancel Recording", action: #selector(cancelRecording), keyEquivalent: "")
-        cancel.isEnabled = [.preparing, .recording, .transcribing, .refining].contains(controller.state.mode)
-        menu.addItem(cancel)
-
-        menu.addItem(.separator())
-        let status = NSMenuItem(title: "Status: \(controller.state.mode.title)", action: nil, keyEquivalent: "")
-        status.isEnabled = false
-        menu.addItem(status)
-
-        if !lastMessage.isEmpty {
-            let message = NSMenuItem(title: lastMessage, action: nil, keyEquivalent: "")
-            message.isEnabled = false
-            menu.addItem(message)
-        }
-
+        menu.delegate = self
+        menu.addItem(NSMenuItem(title: "Open \(AppConstants.productName)", action: #selector(showMainWindowMenu), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Settings", action: #selector(showSettings), keyEquivalent: ","))
         menu.addItem(languageMenu())
-        let llm = NSMenuItem(title: "LLM Refinement", action: #selector(toggleLLM), keyEquivalent: "")
+        let mic = microphoneMenu()
+        microphoneMenuItem = mic
+        menu.addItem(mic)
+        let llm = NSMenuItem(title: "LLM Polishing", action: #selector(toggleLLM), keyEquivalent: "")
         llm.state = SettingsStore.shared.llmEnabled ? .on : .off
         menu.addItem(llm)
-
-        menu.addItem(NSMenuItem(title: "Open \(AppConstants.productName)", action: #selector(showSettings), keyEquivalent: ","))
-        menu.addItem(permissionMenu())
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q"))
 
         statusItem?.menu = menu
-        statusItem?.button?.title = controller.state.mode == .recording ? "● \(AppConstants.productName)" : AppConstants.productName
+        updateStatusItemAppearance()
+    }
+
+    private func updateStatusItemAppearance() {
+        guard let button = statusItem?.button else {
+            return
+        }
+        button.title = ""
+        button.image = statusIcon
+        button.imagePosition = .imageOnly
+        button.imageScaling = .scaleProportionallyDown
+        // Keep template tint system-default. Red/black recording tints read as a solid blob
+        // on dark menu bars; recording state already shows in the floating panel.
+        button.contentTintColor = nil
     }
 
     private func languageMenu() -> NSMenuItem {
@@ -134,48 +138,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return item
     }
 
-    private func permissionMenu() -> NSMenuItem {
-        let item = NSMenuItem(title: "Permissions Status", action: nil, keyEquivalent: "")
+    private func microphoneMenu() -> NSMenuItem {
+        let item = NSMenuItem(title: "Microphone", action: nil, keyEquivalent: "")
         let submenu = NSMenu()
-        let status = controller.permissionStatus()
-
-        submenu.addItem(disabledItem("Microphone: \(status.microphoneDetail)"))
-        submenu.addItem(NSMenuItem(title: "Open Microphone Settings", action: #selector(openMicrophoneSettings), keyEquivalent: ""))
-        submenu.addItem(.separator())
-        submenu.addItem(disabledItem("Speech Recognition: \(status.speechDetail)"))
-        submenu.addItem(NSMenuItem(title: "Open Speech Settings", action: #selector(openSpeechSettings), keyEquivalent: ""))
-        submenu.addItem(.separator())
-        submenu.addItem(disabledItem("Accessibility: \(status.accessibilityDetail)"))
-        submenu.addItem(NSMenuItem(title: "Open Accessibility Settings", action: #selector(openAccessibilitySettings), keyEquivalent: ""))
-        submenu.addItem(.separator())
-        submenu.addItem(disabledItem("Input Monitoring: \(status.inputMonitoringDetail)"))
-        submenu.addItem(disabledItem(status.inputMonitoringDiagnostics))
-        submenu.addItem(NSMenuItem(title: "Open Input Monitoring Settings", action: #selector(openInputMonitoringSettings), keyEquivalent: ""))
-
-        if !status.missingTitles.isEmpty {
-            item.title = "Permissions Status: Missing \(status.missingTitles.joined(separator: ", "))"
-            if let hint = status.rebuildHint {
-                submenu.addItem(.separator())
-                submenu.addItem(disabledItem(hint))
-            }
-            submenu.addItem(disabledItem("Running from: \(status.bundlePath)"))
-        }
+        submenu.delegate = self
+        populateMicrophoneSubmenu(submenu)
         item.submenu = submenu
         return item
     }
 
-    private func disabledItem(_ title: String) -> NSMenuItem {
-        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
-        item.isEnabled = false
-        return item
+    private func populateMicrophoneSubmenu(_ submenu: NSMenu) {
+        submenu.removeAllItems()
+        let devices = AudioInputDevices.list()
+        let currentUID = AudioInputDevices.currentUID()
+        // Switching mid-capture leaves AVAudioEngine on the old HAL stream; only allow when idle.
+        let canSwitch = controller.state.mode == .idle
+
+        if devices.isEmpty {
+            let empty = NSMenuItem(title: "No input devices", action: nil, keyEquivalent: "")
+            empty.isEnabled = false
+            submenu.addItem(empty)
+            return
+        }
+
+        for device in devices {
+            let deviceItem = NSMenuItem(title: device.name, action: #selector(selectMicrophone(_:)), keyEquivalent: "")
+            deviceItem.representedObject = device.uid
+            deviceItem.state = device.uid == currentUID ? .on : .off
+            deviceItem.isEnabled = canSwitch
+            submenu.addItem(deviceItem)
+        }
     }
 
-    @objc private func toggleRecording() {
-        controller.toggleRecording()
-    }
-
-    @objc private func cancelRecording() {
-        controller.cancelCurrentOperation()
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        if menu === microphoneMenuItem?.submenu {
+            populateMicrophoneSubmenu(menu)
+        }
     }
 
     @objc private func selectLanguage(_ sender: NSMenuItem) {
@@ -187,28 +185,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.setLanguage(language)
     }
 
+    @objc private func selectMicrophone(_ sender: NSMenuItem) {
+        guard controller.state.mode == .idle,
+              let uid = sender.representedObject as? String
+        else {
+            return
+        }
+        Task { @MainActor in
+            if await AudioInputDevices.select(uid: uid) {
+                rebuildMenu()
+            } else {
+                showMicrophoneSwitchFailedAlert()
+            }
+        }
+    }
+
+    private func showMicrophoneSwitchFailedAlert() {
+        let alert = NSAlert()
+        alert.messageText = "Could not switch microphone"
+        alert.informativeText = "The system default input device did not change. Try again, or pick another device in System Settings."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
+    }
+
     @objc private func toggleLLM() {
         controller.setLLMEnabled(!SettingsStore.shared.llmEnabled)
     }
 
-    @objc private func showSettings() {
+    @objc private func showMainWindowMenu() {
         showMainWindow()
     }
 
-    @objc private func openMicrophoneSettings() {
-        controller.openMicrophoneSettings()
-    }
-
-    @objc private func openSpeechSettings() {
-        controller.openSpeechSettings()
-    }
-
-    @objc private func openAccessibilitySettings() {
-        controller.openAccessibilitySettings()
-    }
-
-    @objc private func openInputMonitoringSettings() {
-        controller.openInputMonitoringSettings()
+    @objc private func showSettings() {
+        showMainWindow()
+        mainWindow?.showPage(.settings)
     }
 
     @objc private func quit() {

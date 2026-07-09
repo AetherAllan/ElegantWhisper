@@ -13,6 +13,8 @@
 		010000000000000000000004 /* AppError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000004 /* AppError.swift */; };
 		010000000000000000000005 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000005 /* AppState.swift */; };
 		010000000000000000000006 /* AudioRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000006 /* AudioRecorder.swift */; };
+		010000000000000000000032 /* SystemOutputMute.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000032 /* SystemOutputMute.swift */; };
+		010000000000000000000033 /* AudioInputDevices.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000033 /* AudioInputDevices.swift */; };
 		010000000000000000000007 /* DebugLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000007 /* DebugLog.swift */; };
 		010000000000000000000008 /* FloatingPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000008 /* FloatingPanel.swift */; };
 		010000000000000000000009 /* FocusDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000009 /* FocusDetector.swift */; };
@@ -55,6 +57,7 @@
 		010000000000000000000031 /* InferenceNetCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000031 /* InferenceNetCodec.swift */; };
 		010000000000000000000101 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000101 /* AppIcon.icns */; };
 		010000000000000000000102 /* ElegantWhisperLogo.png in Resources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000102 /* ElegantWhisperLogo.png */; };
+		010000000000000000000106 /* StatusBarIcon.png in Resources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000106 /* StatusBarIcon.png */; };
 		010000000000000000000201 /* AppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 020000000000000000000201 /* AppKit.framework */; };
 		010000000000000000000202 /* ApplicationServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 020000000000000000000202 /* ApplicationServices.framework */; };
 		010000000000000000000203 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 020000000000000000000203 /* AVFoundation.framework */; };
@@ -72,6 +75,8 @@
 		020000000000000000000004 /* AppError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppError.swift; sourceTree = "<group>"; };
 		020000000000000000000005 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		020000000000000000000006 /* AudioRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorder.swift; sourceTree = "<group>"; };
+		020000000000000000000032 /* SystemOutputMute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemOutputMute.swift; sourceTree = "<group>"; };
+		020000000000000000000033 /* AudioInputDevices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioInputDevices.swift; sourceTree = "<group>"; };
 		020000000000000000000007 /* DebugLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLog.swift; sourceTree = "<group>"; };
 		020000000000000000000008 /* FloatingPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingPanel.swift; sourceTree = "<group>"; };
 		020000000000000000000009 /* FocusDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusDetector.swift; sourceTree = "<group>"; };
@@ -114,6 +119,7 @@
 		020000000000000000000031 /* InferenceNetCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InferenceNetCodec.swift; sourceTree = "<group>"; };
 		020000000000000000000101 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
 		020000000000000000000102 /* ElegantWhisperLogo.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ElegantWhisperLogo.png; sourceTree = "<group>"; };
+		020000000000000000000106 /* StatusBarIcon.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = StatusBarIcon.png; sourceTree = "<group>"; };
 		020000000000000000000103 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		020000000000000000000104 /* ElegantWhisper.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ElegantWhisper.entitlements; sourceTree = "<group>"; };
 		020000000000000000000105 /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.xcconfig; sourceTree = "<group>"; };
@@ -210,10 +216,12 @@
 			isa = PBXGroup;
 			children = (
 				020000000000000000000006 /* AudioRecorder.swift */,
+				020000000000000000000033 /* AudioInputDevices.swift */,
 				02000000000000000000002E /* RecognitionLanguage.swift */,
 				020000000000000000000030 /* SpeechContext.swift */,
 				02000000000000000000002F /* SpeechVocabulary.swift */,
 				020000000000000000000013 /* SpeechTranscriber.swift */,
+				020000000000000000000032 /* SystemOutputMute.swift */,
 			);
 			path = Audio;
 			sourceTree = "<group>";
@@ -320,6 +328,7 @@
 			children = (
 				020000000000000000000101 /* AppIcon.icns */,
 				020000000000000000000102 /* ElegantWhisperLogo.png */,
+				020000000000000000000106 /* StatusBarIcon.png */,
 				020000000000000000000103 /* Info.plist */,
 				020000000000000000000104 /* ElegantWhisper.entitlements */,
 			);
@@ -409,6 +418,7 @@
 			files = (
 				010000000000000000000101 /* AppIcon.icns in Resources */,
 				010000000000000000000102 /* ElegantWhisperLogo.png in Resources */,
+				010000000000000000000106 /* StatusBarIcon.png in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -425,6 +435,8 @@
 				010000000000000000000004 /* AppError.swift in Sources */,
 				010000000000000000000005 /* AppState.swift in Sources */,
 				010000000000000000000006 /* AudioRecorder.swift in Sources */,
+				010000000000000000000033 /* AudioInputDevices.swift in Sources */,
+				010000000000000000000032 /* SystemOutputMute.swift in Sources */,
 				010000000000000000000007 /* DebugLog.swift in Sources */,
 				010000000000000000000018 /* DictionaryStore.swift in Sources */,
 				010000000000000000000017 /* DictationSession.swift in Sources */,

@@ -276,9 +276,14 @@ final class MainWindowController: NSWindowController, NSTextViewDelegate, NSText
     }
 
     @objc func selectPage(_ sender: SidebarButton) {
-        currentPage = sender.page
+        showPage(sender.page)
+    }
+
+    func showPage(_ page: MainPage) {
+        currentPage = page
         updateSidebarSelection()
         renderCurrentPage()
+        showWindow(nil)
     }
 
     func updateSidebarSelection() {

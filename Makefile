@@ -36,6 +36,7 @@ install: build
 	cp Resources/Info.plist "$(CONTENTS)/Info.plist"
 	cp Resources/AppIcon.icns "$(RESOURCES)/AppIcon.icns"
 	cp Resources/ElegantWhisperLogo.png "$(RESOURCES)/ElegantWhisperLogo.png"
+	cp Resources/StatusBarIcon.png "$(RESOURCES)/StatusBarIcon.png"
 	cp "$$(swift build -c release --show-bin-path)/$(APP_NAME)" "$(MACOS)/$(APP_NAME)"
 	chmod +x "$(MACOS)/$(APP_NAME)"
 	@if [ -n "$(SIGN_IDENTITY)" ]; then \
