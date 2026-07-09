@@ -27,6 +27,7 @@ final class MainWindowController: NSWindowController, NSTextViewDelegate, NSText
     let llmCheckbox = NSButton(checkboxWithTitle: "Enable LLM Polishing", target: nil, action: nil)
     let clipboardCheckbox = NSButton(checkboxWithTitle: "Keep text on clipboard when no editable field is available", target: nil, action: nil)
     let historyCheckbox = NSButton(checkboxWithTitle: "Save transcription history", target: nil, action: nil)
+    let muteOutputCheckbox = NSButton(checkboxWithTitle: "Mute system audio while recording", target: nil, action: nil)
     let learningCheckbox = NSButton(checkboxWithTitle: "Suggest dictionary terms from edits in supported text fields", target: nil, action: nil)
     let languagePopup = NSPopUpButton()
     let dictionaryLanguagePopup = NSPopUpButton()
@@ -214,6 +215,7 @@ final class MainWindowController: NSWindowController, NSTextViewDelegate, NSText
     func syncGeneralControlsFromSettings() {
         clipboardCheckbox.state = settings.keepClipboardWithoutTarget ? .on : .off
         historyCheckbox.state = settings.saveHistory ? .on : .off
+        muteOutputCheckbox.state = settings.muteOutputDuringRecording ? .on : .off
         learningCheckbox.state = settings.postEditLearningEnabled ? .on : .off
         populateLanguagePopup(languagePopup, selected: settings.language)
         populateLanguagePopup(dictionaryLanguagePopup, selected: settings.language)

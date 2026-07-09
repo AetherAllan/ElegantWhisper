@@ -27,6 +27,7 @@ final class SettingsStore: @unchecked Sendable {
         static let keepClipboardWithoutTarget = "keepClipboardWithoutTarget"
         static let saveHistory = "saveHistory"
         static let postEditLearningEnabled = "postEditLearningEnabled"
+        static let muteOutputDuringRecording = "muteOutputDuringRecording"
     }
 
     var language: RecognitionLanguage {
@@ -146,6 +147,15 @@ final class SettingsStore: @unchecked Sendable {
         }
         set {
             defaults.set(newValue, forKey: Key.postEditLearningEnabled)
+        }
+    }
+
+    var muteOutputDuringRecording: Bool {
+        get {
+            defaults.object(forKey: Key.muteOutputDuringRecording) as? Bool ?? true
+        }
+        set {
+            defaults.set(newValue, forKey: Key.muteOutputDuringRecording)
         }
     }
 }

@@ -9,6 +9,8 @@ extension MainWindowController {
         clipboardCheckbox.action = #selector(markGeneralDirty)
         historyCheckbox.target = self
         historyCheckbox.action = #selector(markGeneralDirty)
+        muteOutputCheckbox.target = self
+        muteOutputCheckbox.action = #selector(markGeneralDirty)
         learningCheckbox.target = self
         learningCheckbox.action = #selector(markGeneralDirty)
 
@@ -27,6 +29,7 @@ extension MainWindowController {
                     general,
                     clipboardCheckbox,
                     historyCheckbox,
+                    muteOutputCheckbox,
                     learningCheckbox,
                     save
                 ]),

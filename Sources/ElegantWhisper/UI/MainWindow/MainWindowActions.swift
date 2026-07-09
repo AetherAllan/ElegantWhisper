@@ -69,6 +69,7 @@ extension MainWindowController {
         settings.language = selectedLanguage(in: languagePopup)
         settings.keepClipboardWithoutTarget = clipboardCheckbox.state == .on
         settings.saveHistory = historyCheckbox.state == .on
+        settings.muteOutputDuringRecording = muteOutputCheckbox.state == .on
         settings.postEditLearningEnabled = learningCheckbox.state == .on
         generalDirty = false
         showNotice("Settings saved")

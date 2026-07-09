@@ -9,6 +9,7 @@ final class AppController {
     private let permissions = PermissionManager()
     private let monitor = OptionKeyMonitor()
     private let recorder = AudioRecorder()
+    private let outputMute = SystemOutputMute.shared
     private let transcriber = SpeechTranscriber()
     private let dictionary = DictionaryStore.shared
     private let stylePacks = StylePackStore.shared
@@ -200,6 +201,7 @@ final class AppController {
                 transcriber.cancel()
                 return
             }
+            scheduleOutputMuteIfEnabled()
             panel.showRecording(text: "")
             onChange?()
         } catch {
@@ -217,6 +219,7 @@ final class AppController {
         recordingStoppedAt = clock.now
         ignoreToggleCancellationUntil = clock.now.advanced(by: .milliseconds(800))
         recorder.stop()
+        scheduleOutputUnmute()
         DebugLog.event("recordingStop")
         panel.showStatus("Transcribing...")
         onChange?()
@@ -235,6 +238,7 @@ final class AppController {
             return
         }
         recorder.stop()
+        scheduleOutputUnmute()
         DebugLog.event("recordingStop")
         transcriber.cancel()
         refinementTask?.cancel()
@@ -257,6 +261,7 @@ final class AppController {
             cancelRecording()
         case .preparing, .transcribing, .refining:
             recorder.stop()
+            scheduleOutputUnmute()
             transcriber.cancel()
             refinementTask?.cancel()
             refinementTask = nil
@@ -405,6 +410,7 @@ final class AppController {
 
     private func showError(_ message: String) {
         recorder.stop()
+        scheduleOutputUnmute()
         transcriber.cancel()
         refinementTask?.cancel()
         refinementTask = nil
@@ -419,6 +425,21 @@ final class AppController {
         DebugLog.event("panelHide")
         onUserMessage?(message)
         onChange?()
+    }
+
+    func restoreOutputMuteOnTerminate() {
+        outputMute.unmuteIfNeededSync()
+    }
+
+    private func scheduleOutputMuteIfEnabled() {
+        guard settings.muteOutputDuringRecording else {
+            return
+        }
+        outputMute.muteIfNeededAsync()
+    }
+
+    private func scheduleOutputUnmute() {
+        outputMute.unmuteIfNeededAsync()
     }
 
 
