@@ -14,7 +14,7 @@ enum AppMode {
         case .preparing: "Preparing"
         case .recording: "Recording"
         case .transcribing: "Transcribing"
-        case .refining: "Refining"
+        case .refining: "Polishing"
         case .injecting: "Inserting"
         }
     }

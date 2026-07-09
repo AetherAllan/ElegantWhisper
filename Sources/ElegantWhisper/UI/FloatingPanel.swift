@@ -119,6 +119,14 @@ final class FloatingPanel {
         waveform.level = CGFloat(level)
     }
 
+    /// Stop the listening chrome; leave the last partial text as-is.
+    func stopWaveform() {
+        waveform.isHidden = true
+        waveform.level = 0
+        updateWidthForCurrentText()
+        position()
+    }
+
     func showStatus(_ text: String) {
         beginPresentation()
         waveform.isHidden = true

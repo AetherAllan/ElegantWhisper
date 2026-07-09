@@ -221,7 +221,9 @@ final class AppController {
         recorder.stop()
         scheduleOutputUnmute()
         DebugLog.event("recordingStop")
-        panel.showStatus("Transcribing...")
+        // Partials already streamed during recording; finalize is usually sub-frame.
+        // Skip "Transcribing..." — it only flashes before Polishing/Insert/hide.
+        panel.stopWaveform()
         onChange?()
 
         guard let sessionID = currentSession?.id else {
@@ -331,7 +333,7 @@ final class AppController {
             // Refinement is allowed to improve obvious recognition mistakes, but it is not allowed
             // to block insertion forever. LLMRefiner owns the timeout/fallback to raw text.
             _ = state.transition(to: .refining)
-            panel.showStatus("Refining...")
+            panel.showStatus("Polishing...")
             onChange?()
             refinementTask = refiner.refine(
                 raw,
