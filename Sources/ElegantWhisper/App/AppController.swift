@@ -5,14 +5,14 @@ import Foundation
 final class AppController {
     let state = AppState()
 
-    private let settings = SettingsStore.shared
+    private let settings: SettingsStore
     private let permissions = PermissionManager()
     private let monitor = OptionKeyMonitor()
     private let recorder = AudioRecorder()
     private let outputMute = SystemOutputMute.shared
     private let transcriber = SpeechTranscriber()
     private let dictionary = DictionaryStore.shared
-    private let stylePacks = StylePackStore.shared
+    private let stylePacks: StylePackStore
     private let focusDetector = FocusDetector()
     private let inputSourceManager = InputSourceManager()
     private let postEditLearner = PostEditLearner()
@@ -32,6 +32,14 @@ final class AppController {
 
     var onChange: (@MainActor () -> Void)?
     var onUserMessage: (@MainActor (String) -> Void)?
+
+    init(
+        settings: SettingsStore = .shared,
+        stylePacks: StylePackStore = .shared
+    ) {
+        self.settings = settings
+        self.stylePacks = stylePacks
+    }
 
     func start() {
         do {
@@ -297,6 +305,24 @@ final class AppController {
         permissions.status()
     }
 
+    func requestMicrophonePermission(_ completion: @escaping @MainActor @Sendable (Bool) -> Void) {
+        permissions.requestMicrophone(completion)
+    }
+
+    func requestSpeechPermission(_ completion: @escaping @MainActor @Sendable (Bool) -> Void) {
+        permissions.requestSpeech(completion)
+    }
+
+    func requestAccessibilityPermission() {
+        permissions.requestAccessibilityPrompt()
+        permissions.openAccessibilitySettings()
+    }
+
+    func requestInputMonitoringPermission() {
+        permissions.requestInputMonitoring()
+        permissions.openInputMonitoringSettings()
+    }
+
     func openMicrophoneSettings() {
         permissions.openMicrophoneSettings()
     }
@@ -313,8 +339,8 @@ final class AppController {
         permissions.openInputMonitoringSettings()
     }
 
-    func mainWindowController() -> MainWindowController {
-        MainWindowController(settings: settings, refiner: refiner, controller: self)
+    func testConnection(completion: @escaping @MainActor @Sendable (Bool, String) -> Void) {
+        refiner.testConnection(completion: completion)
     }
 
     private func handleFinalTranscript(_ text: String, sessionID: UUID) {

@@ -15,11 +15,11 @@
 </p>
 
 
-ElegantWhisper is a macOS 26+ Dock and menu-bar voice input app built with AppKit. It records with a single Right Option tap, transcribes with Apple's Speech framework, optionally applies OpenAI-compatible Style Pack polishing, then inserts the final text into the focused editable field when it is safe to do so.
+ElegantWhisper is a macOS 26+ Dock and menu-bar voice input app with a SwiftUI interface and AppKit system integration. It records with a single Right Option tap, transcribes with Apple's Speech framework, optionally applies OpenAI-compatible Style Pack polishing, then inserts the final text into the focused editable field when it is safe to do so.
 
 ## Why ElegantWhisper
 
-- **Native macOS experience** - AppKit window, menu-bar controls, global hotkey, and compact floating bar.
+- **Native macOS experience** - SwiftUI windows and menu-bar controls with AppKit global-hotkey and non-activating-panel behavior.
 - **One-key dictation** - Tap Right Option to start, tap Right Option again to stop and transcribe.
 - **Automatic insertion** - Inserts into the focused editor when possible; otherwise keeps the result on the clipboard.
 - **Personal dictionary** - Correct project names, technical terms, people, and recurring recognition mistakes.
@@ -143,17 +143,20 @@ Input Monitoring is required for Right Option detection while ElegantWhisper is 
 
 After enabling Input Monitoring, quit and reopen ElegantWhisper. macOS often requires a relaunch before a newly granted ListenEvent permission is visible to the running process.
 
-The menu bar includes `Permissions Status` with shortcuts to the relevant System Settings panes.
+The menu bar shows the current dictation state and provides language, microphone, LLM polishing, Settings, and app-window controls.
 
 ## Settings
 
-Open `Open ElegantWhisper` from the menu bar to configure:
+Open Settings from the main window's `Application` sidebar section. `Settings…` in the menu bar and `Cmd+,` both reopen the same main window and select that page; Settings does not create a separate window.
+
+The Settings page keeps its existing General, AI Provider, and Permissions tabs. Use it to configure:
 
 - API Base URL, API Key, Model, and request timeout
 - Whether to keep text on the clipboard when no editable field is available
 - Whether to save local transcription history
-- Personal dictionary terms and common wrong recognition forms
-- Style Pack prompt templates for LLM polishing
+- macOS permission shortcuts
+
+Use the main window's Dictionary and Styles pages for personal terms, learning suggestions, and Style Pack prompt templates.
 
 History is stored at:
 

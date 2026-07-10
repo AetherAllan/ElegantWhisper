@@ -24,16 +24,17 @@ final class HistoryStore: @unchecked Sendable {
     static let shared = HistoryStore()
 
     private let queue = DispatchQueue(label: "com.aetherallan.ElegantWhisper.history")
+    private let fileURL: URL
     private var cachedItems: [HistoryItem] = []
     private var loaded = false
     private var loadFailed = false
 
-    private var fileURL: URL {
-        AppConstants.applicationSupportDirectory.appendingPathComponent("history.json")
+    init(fileURL: URL = AppConstants.applicationSupportDirectory.appendingPathComponent("history.json")) {
+        self.fileURL = fileURL
     }
 
     private var backupURL: URL {
-        AppConstants.applicationSupportDirectory.appendingPathComponent("history.json.bak")
+        fileURL.deletingPathExtension().appendingPathExtension("json.bak")
     }
 
     func items() -> [HistoryItem] {
