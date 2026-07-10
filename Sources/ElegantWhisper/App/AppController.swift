@@ -145,6 +145,7 @@ final class AppController {
         }
 
         let target = focusDetector.currentEditableTarget()
+        panel.setPreferredAnchor(focusDetector.screenAnchor(for: target))
         let originalApplication = NSWorkspace.shared.frontmostApplication
         currentSession = DictationSession(
             originalTarget: target,
@@ -315,7 +316,6 @@ final class AppController {
 
     func requestAccessibilityPermission() {
         permissions.requestAccessibilityPrompt()
-        permissions.openAccessibilitySettings()
     }
 
     func requestInputMonitoringPermission() {
@@ -472,10 +472,16 @@ final class AppController {
 
 
     private func saveHistory(_ text: String, result: HistoryResult, app: NSRunningApplication?) {
-        guard settings.saveHistory else {
+        guard settings.saveHistory,
+              Self.shouldSaveHistory(bundleIdentifier: app?.bundleIdentifier)
+        else {
             return
         }
         HistoryStore.shared.append(text: text, result: result, app: app)
+    }
+
+    static func shouldSaveHistory(bundleIdentifier: String?) -> Bool {
+        bundleIdentifier != AppConstants.bundleIdentifier
     }
 
     private func fallbackPasteApplication(target: FocusTarget?, originalApplication: NSRunningApplication?) -> NSRunningApplication? {

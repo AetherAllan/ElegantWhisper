@@ -74,6 +74,8 @@ final class DictionaryModel {
 
     func reload() {
         entries = dictionary.entries()
-        candidates = candidatesStore.items()
+        // One-off edits are usually typing cleanup, not durable vocabulary. Keep them persisted so
+        // a repeated correction can merge into the same item, but do not interrupt the user yet.
+        candidates = candidatesStore.items().filter { $0.occurrenceCount >= 2 }
     }
 }

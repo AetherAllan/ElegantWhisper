@@ -17,6 +17,7 @@ let package = Package(
                 .linkedFramework("Carbon"),
                 .linkedFramework("CoreAudio"),
                 .linkedFramework("IOKit"),
+                .linkedFramework("NaturalLanguage"),
                 .linkedFramework("Security"),
                 .linkedFramework("Speech")
             ]

@@ -15,8 +15,10 @@ struct AppShellView: View {
                     }
                 }
                 Section("Application") {
-                    Label(AppRoute.settings.title, systemImage: AppRoute.settings.symbolName)
-                        .tag(AppRoute.settings)
+                    ForEach(AppRoute.application) { route in
+                        Label(route.title, systemImage: route.symbolName)
+                            .tag(route)
+                    }
                 }
             }
             .navigationTitle(AppConstants.productName)
@@ -44,6 +46,7 @@ struct AppShellView: View {
                 case .dictionary: DictionaryView()
                 case .styles: StylesView()
                 case .settings: AppSettingsView()
+                case .about: AboutView()
                 }
             }
         }

@@ -13,18 +13,19 @@ struct ElegantWhisperApp: App {
                 .frame(minWidth: 760, minHeight: 520)
         }
         .defaultSize(width: 960, height: 680)
-        .defaultLaunchBehavior(model.permissionStatus.missingTitles.isEmpty ? .presented : .suppressed)
+        .defaultLaunchBehavior(model.onboardingCompleted ? .presented : .suppressed)
         .commands {
             AppCommands(model: model)
         }
 
-        Window("\(AppConstants.productName) Permissions", id: "onboarding") {
+        Window("Welcome to \(AppConstants.productName)", id: "onboarding") {
             OnboardingView()
+                .id(model.tutorialReplayID)
                 .environment(model)
-                .frame(width: 620, height: 480)
+                .frame(width: 720, height: 540)
         }
         .windowResizability(.contentSize)
-        .defaultLaunchBehavior(model.permissionStatus.missingTitles.isEmpty ? .suppressed : .presented)
+        .defaultLaunchBehavior(model.onboardingCompleted ? .suppressed : .presented)
 
         MenuBarExtra {
             MenuBarContentView()
@@ -32,6 +33,6 @@ struct ElegantWhisperApp: App {
         } label: {
             StatusBarLabel()
         }
-        .menuBarExtraStyle(.window)
+        .menuBarExtraStyle(.menu)
     }
 }

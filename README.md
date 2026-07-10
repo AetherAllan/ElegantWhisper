@@ -115,7 +115,7 @@ For distribution outside your own machine, use a Developer ID certificate and Ap
 
 ## Permissions
 
-On first launch, ElegantWhisper shows a permissions window. Grant each required permission from that window. Global hotkeys do not start until Accessibility and Input Monitoring are granted.
+On first launch, ElegantWhisper walks through permissions, a short feature overview, and an optional in-app dictation exercise. The overview and exercise can be skipped and replayed later from About. Global hotkeys do not start until Accessibility and Input Monitoring are granted.
 
 ### Microphone
 
@@ -135,6 +135,8 @@ System Settings -> Privacy & Security -> Accessibility -> enable ElegantWhisper.
 
 Accessibility is required to find the focused editable field and perform simulated Cmd+V insertion.
 
+The Accessibility prompt is asynchronous. Return to ElegantWhisper after enabling it in System Settings; the onboarding window refreshes automatically. If macOS still reports the current process as untrusted, use **Restart & Continue**. During local development, avoid launching differently signed copies from several build directories because each copy can create a separate privacy entry.
+
 ### Input Monitoring
 
 System Settings -> Privacy & Security -> Input Monitoring -> enable ElegantWhisper.
@@ -143,11 +145,11 @@ Input Monitoring is required for Right Option detection while ElegantWhisper is 
 
 After enabling Input Monitoring, quit and reopen ElegantWhisper. macOS often requires a relaunch before a newly granted ListenEvent permission is visible to the running process.
 
-The menu bar shows the current dictation state and provides language, microphone, LLM polishing, Settings, and app-window controls.
+The menu bar uses a compact native macOS menu for current state, language, microphone, LLM polishing, Settings, About, and app-window controls.
 
 ## Settings
 
-Open Settings from the main window's `Application` sidebar section. `Settings…` in the menu bar and `Cmd+,` both reopen the same main window and select that page; Settings does not create a separate window.
+Open Settings from the main window's `Application` sidebar section. The same section also contains About, including version, privacy summary, project link, and tutorial replay. `Settings…` in the menu bar and `Cmd+,` both reopen the same main window and select that page; Settings does not create a separate window.
 
 The Settings page keeps its existing General, AI Provider, and Permissions tabs. Use it to configure:
 
@@ -157,6 +159,8 @@ The Settings page keeps its existing General, AI Provider, and Permissions tabs.
 - macOS permission shortcuts
 
 Use the main window's Dictionary and Styles pages for personal terms, learning suggestions, and Style Pack prompt templates.
+
+Learning suggestions are intentionally conservative. ElegantWhisper records only small, word-bounded corrections and shows a suggestion after the same correction is observed twice. One-off observations remain local so a later repeat can merge without interrupting the user.
 
 History is stored at:
 

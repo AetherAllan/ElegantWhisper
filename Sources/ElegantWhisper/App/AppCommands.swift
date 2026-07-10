@@ -6,13 +6,24 @@ struct AppCommands: Commands {
     let model: AppModel
 
     var body: some Commands {
+        CommandGroup(replacing: .appInfo) {
+            Button("About \(AppConstants.productName)") {
+                model.openAbout()
+                openMainWindow()
+            }
+        }
+
         CommandGroup(replacing: .appSettings) {
             Button("Settings…") {
                 model.openSettings()
-                NSApp.activate(ignoringOtherApps: true)
-                openWindow(id: "main")
+                openMainWindow()
             }
             .keyboardShortcut(",", modifiers: .command)
         }
+    }
+
+    private func openMainWindow() {
+        NSApp.activate(ignoringOtherApps: true)
+        openWindow(id: "main")
     }
 }

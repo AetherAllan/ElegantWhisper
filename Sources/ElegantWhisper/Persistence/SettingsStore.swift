@@ -28,6 +28,7 @@ final class SettingsStore: @unchecked Sendable {
         static let saveHistory = "saveHistory"
         static let postEditLearningEnabled = "postEditLearningEnabled"
         static let muteOutputDuringRecording = "muteOutputDuringRecording"
+        static let onboardingCompleted = "onboardingCompleted"
     }
 
     var language: RecognitionLanguage {
@@ -156,6 +157,15 @@ final class SettingsStore: @unchecked Sendable {
         }
         set {
             defaults.set(newValue, forKey: Key.muteOutputDuringRecording)
+        }
+    }
+
+    var onboardingCompleted: Bool {
+        get {
+            defaults.bool(forKey: Key.onboardingCompleted)
+        }
+        set {
+            defaults.set(newValue, forKey: Key.onboardingCompleted)
         }
     }
 }

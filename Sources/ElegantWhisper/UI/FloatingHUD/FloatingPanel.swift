@@ -7,6 +7,7 @@ final class FloatingPanel {
     private let model = FloatingHUDModel()
     private var presentationID = UUID()
     private var pendingHide: DispatchWorkItem?
+    private var preferredAnchor: NSPoint?
 
     init() {
         panel = NSPanel(
@@ -38,6 +39,10 @@ final class FloatingPanel {
         model.showRecording(text: text)
         updateWidthForCurrentText()
         show()
+    }
+
+    func setPreferredAnchor(_ point: NSPoint?) {
+        preferredAnchor = point
     }
 
     func retryShowIfNeeded() {
@@ -169,10 +174,26 @@ final class FloatingPanel {
     }
 
     private func position() {
-        guard let screen = NSScreen.main else { return }
+        let screens = NSScreen.screens
+        let mouse = NSEvent.mouseLocation
+        guard let screen = preferredAnchor.flatMap({ anchor in
+            screens.first { $0.frame.contains(anchor) }
+        }) ?? screens.first(where: { $0.frame.contains(mouse) }) ?? NSScreen.main ?? screens.first
+        else {
+            return
+        }
         let visible = screen.visibleFrame
-        let x = visible.midX - panel.frame.width / 2
-        let y = visible.minY + 48
-        panel.setFrameOrigin(NSPoint(x: x, y: y))
+        panel.setFrameOrigin(FloatingPanelPlacement.origin(panelSize: panel.frame.size, visibleFrame: visible))
+    }
+}
+
+enum FloatingPanelPlacement {
+    static func origin(panelSize: NSSize, visibleFrame: NSRect) -> NSPoint {
+        let centeredX = visibleFrame.midX - panelSize.width / 2
+        let preferredY = visibleFrame.minY + 48
+        return NSPoint(
+            x: min(max(centeredX, visibleFrame.minX), max(visibleFrame.minX, visibleFrame.maxX - panelSize.width)),
+            y: min(max(preferredY, visibleFrame.minY), max(visibleFrame.minY, visibleFrame.maxY - panelSize.height))
+        )
     }
 }

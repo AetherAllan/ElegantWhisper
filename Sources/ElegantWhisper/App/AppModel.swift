@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Observation
 
@@ -7,8 +8,10 @@ enum AppRoute: String, CaseIterable, Hashable, Identifiable {
     case dictionary
     case styles
     case settings
+    case about
 
     static let primary: [AppRoute] = [.home, .history, .dictionary, .styles]
+    static let application: [AppRoute] = [.settings, .about]
 
     var id: Self { self }
 
@@ -19,6 +22,7 @@ enum AppRoute: String, CaseIterable, Hashable, Identifiable {
         case .dictionary: "Dictionary"
         case .styles: "Styles"
         case .settings: "Settings"
+        case .about: "About"
         }
     }
 
@@ -29,6 +33,7 @@ enum AppRoute: String, CaseIterable, Hashable, Identifiable {
         case .dictionary: "text.book.closed"
         case .styles: "sparkles"
         case .settings: "gearshape"
+        case .about: "info.circle"
         }
     }
 }
@@ -39,6 +44,7 @@ final class AppModel {
     private let controller: AppController
     private let settingsStore: SettingsStore
     private var started = false
+    private var accessibilityRequestPending = false
 
     let history: HistoryModel
     let dictionary: DictionaryModel
@@ -53,6 +59,9 @@ final class AppModel {
     private(set) var currentLanguage: RecognitionLanguage
     private(set) var llmEnabled: Bool
     private(set) var llmProvider: LLMProvider
+    private(set) var onboardingCompleted: Bool
+    private(set) var tutorialReplayID = UUID()
+    private(set) var accessibilityRestartSuggested = false
     var notice = ""
     var microphoneError = ""
 
@@ -79,6 +88,7 @@ final class AppModel {
         currentLanguage = settings.language
         llmEnabled = settings.llmEnabled
         llmProvider = settings.llmProvider
+        onboardingCompleted = settings.onboardingCompleted
         reloadSnapshots()
     }
 
@@ -100,6 +110,14 @@ final class AppModel {
     }
 
     func refreshAfterActivation() {
+        refreshPermissions()
+        if accessibilityRequestPending {
+            accessibilityRestartSuggested = !permissionStatus.accessibilityGranted
+            accessibilityRequestPending = false
+        }
+    }
+
+    func refreshPermissions() {
         reloadSnapshots()
         if started, permissionStatus.missingTitles.isEmpty {
             controller.startHotkeyMonitorIfPermitted()
@@ -107,13 +125,23 @@ final class AppModel {
     }
 
     func completeOnboarding() {
+        settingsStore.onboardingCompleted = true
+        onboardingCompleted = true
         reloadSnapshots()
         guard started, permissionStatus.missingTitles.isEmpty else { return }
         controller.startHotkeyMonitorIfPermitted()
     }
 
+    func prepareTutorialReplay() {
+        tutorialReplayID = UUID()
+    }
+
     func openSettings() {
         route = .settings
+    }
+
+    func openAbout() {
+        route = .about
     }
 
     func clearHistory() {
@@ -231,6 +259,8 @@ final class AppModel {
     }
 
     func requestAccessibilityPermission() {
+        accessibilityRequestPending = true
+        accessibilityRestartSuggested = false
         controller.requestAccessibilityPermission()
         reloadSnapshots()
     }
@@ -242,8 +272,35 @@ final class AppModel {
 
     func openMicrophoneSettings() { controller.openMicrophoneSettings() }
     func openSpeechSettings() { controller.openSpeechSettings() }
-    func openAccessibilitySettings() { controller.openAccessibilitySettings() }
+    func openAccessibilitySettings() {
+        accessibilityRequestPending = true
+        controller.openAccessibilitySettings()
+    }
     func openInputMonitoringSettings() { controller.openInputMonitoringSettings() }
+
+    func restartApplication() {
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.createsNewApplicationInstance = true
+        configuration.activates = true
+        configuration.addsToRecentItems = false
+
+        // Privacy grants can remain stale in the current process after System Settings changes.
+        // Stop global input and restore audio before overlapping briefly with the replacement app.
+        stop()
+        NSWorkspace.shared.openApplication(
+            at: Bundle.main.bundleURL,
+            configuration: configuration
+        ) { [weak self] _, error in
+            Task { @MainActor in
+                if let error {
+                    self?.notice = "Could not restart: \(error.localizedDescription)"
+                    self?.refreshPermissions()
+                    return
+                }
+                NSApp.terminate(nil)
+            }
+        }
+    }
 
     private func reloadSnapshots() {
         mode = controller.state.mode

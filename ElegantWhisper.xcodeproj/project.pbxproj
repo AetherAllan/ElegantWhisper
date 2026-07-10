@@ -27,6 +27,9 @@
 		010000000000000000000043 /* FloatingHUDView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000043 /* FloatingHUDView.swift */; };
 		010000000000000000000044 /* MenuBarContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000044 /* MenuBarContentView.swift */; };
 		010000000000000000000045 /* PermissionViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000045 /* PermissionViews.swift */; };
+		010000000000000000000046 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000046 /* AboutView.swift */; };
+		010000000000000000000047 /* OnboardingTutorialView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000047 /* OnboardingTutorialView.swift */; };
+		010000000000000000000048 /* LearningDiffEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000048 /* LearningDiffEngine.swift */; };
 		010000000000000000000004 /* AppError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000004 /* AppError.swift */; };
 		010000000000000000000005 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000005 /* AppState.swift */; };
 		010000000000000000000006 /* AudioRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000006 /* AudioRecorder.swift */; };
@@ -72,6 +75,7 @@
 		010000000000000000000206 /* IOKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 020000000000000000000206 /* IOKit.framework */; };
 		010000000000000000000207 /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 020000000000000000000207 /* Security.framework */; };
 		010000000000000000000208 /* Speech.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 020000000000000000000208 /* Speech.framework */; };
+		010000000000000000000209 /* NaturalLanguage.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 020000000000000000000209 /* NaturalLanguage.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -95,6 +99,9 @@
 		020000000000000000000043 /* FloatingHUDView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingHUDView.swift; sourceTree = "<group>"; };
 		020000000000000000000044 /* MenuBarContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarContentView.swift; sourceTree = "<group>"; };
 		020000000000000000000045 /* PermissionViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionViews.swift; sourceTree = "<group>"; };
+		020000000000000000000046 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = About/AboutView.swift; sourceTree = "<group>"; };
+		020000000000000000000047 /* OnboardingTutorialView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Onboarding/OnboardingTutorialView.swift; sourceTree = "<group>"; };
+		020000000000000000000048 /* LearningDiffEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LearningDiffEngine.swift; sourceTree = "<group>"; };
 		020000000000000000000004 /* AppError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppError.swift; sourceTree = "<group>"; };
 		020000000000000000000005 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		020000000000000000000006 /* AudioRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorder.swift; sourceTree = "<group>"; };
@@ -143,6 +150,7 @@
 		020000000000000000000206 /* IOKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = IOKit.framework; path = System/Library/Frameworks/IOKit.framework; sourceTree = SDKROOT; };
 		020000000000000000000207 /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = System/Library/Frameworks/Security.framework; sourceTree = SDKROOT; };
 		020000000000000000000208 /* Speech.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Speech.framework; path = System/Library/Frameworks/Speech.framework; sourceTree = SDKROOT; };
+		020000000000000000000209 /* NaturalLanguage.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = NaturalLanguage.framework; path = System/Library/Frameworks/NaturalLanguage.framework; sourceTree = SDKROOT; };
 		020000000000000000000301 /* ElegantWhisper.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ElegantWhisper.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -159,6 +167,7 @@
 				010000000000000000000206 /* IOKit.framework in Frameworks */,
 				010000000000000000000207 /* Security.framework in Frameworks */,
 				010000000000000000000208 /* Speech.framework in Frameworks */,
+				010000000000000000000209 /* NaturalLanguage.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -255,6 +264,7 @@
 			isa = PBXGroup;
 			children = (
 				020000000000000000000017 /* DictationSession.swift */,
+				020000000000000000000048 /* LearningDiffEngine.swift */,
 				020000000000000000000027 /* PostEditLearner.swift */,
 			);
 			path = Dictation;
@@ -322,10 +332,12 @@
 			isa = PBXGroup;
 			children = (
 				02000000000000000000003C /* AppShellView.swift */,
+				020000000000000000000046 /* AboutView.swift */,
 				02000000000000000000003F /* DictionaryView.swift */,
 				02000000000000000000003D /* HomeView.swift */,
 				02000000000000000000003E /* HistoryView.swift */,
 				020000000000000000000042 /* OnboardingView.swift */,
+				020000000000000000000047 /* OnboardingTutorialView.swift */,
 				020000000000000000000041 /* AppSettingsView.swift */,
 				020000000000000000000040 /* StylesView.swift */,
 			);
@@ -380,6 +392,7 @@
 				020000000000000000000206 /* IOKit.framework */,
 				020000000000000000000207 /* Security.framework */,
 				020000000000000000000208 /* Speech.framework */,
+				020000000000000000000209 /* NaturalLanguage.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -490,6 +503,8 @@
 				010000000000000000000040 /* StylesView.swift in Sources */,
 				010000000000000000000041 /* AppSettingsView.swift in Sources */,
 				010000000000000000000042 /* OnboardingView.swift in Sources */,
+				010000000000000000000047 /* OnboardingTutorialView.swift in Sources */,
+				010000000000000000000046 /* AboutView.swift in Sources */,
 				010000000000000000000044 /* MenuBarContentView.swift in Sources */,
 				010000000000000000000045 /* PermissionViews.swift in Sources */,
 				010000000000000000000009 /* FocusDetector.swift in Sources */,
@@ -504,6 +519,7 @@
 				01000000000000000000000E /* OptionKeyMonitor.swift in Sources */,
 				01000000000000000000000F /* PermissionManager.swift in Sources */,
 				01000000000000000000002A /* OpenAICompatibleCodec.swift in Sources */,
+				010000000000000000000048 /* LearningDiffEngine.swift in Sources */,
 				010000000000000000000027 /* PostEditLearner.swift in Sources */,
 				01000000000000000000002D /* PromptStaticContextCache.swift in Sources */,
 				01000000000000000000002B /* LLMProviderCodec.swift in Sources */,

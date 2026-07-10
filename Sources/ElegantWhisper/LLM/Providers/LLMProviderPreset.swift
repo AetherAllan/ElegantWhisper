@@ -61,12 +61,12 @@ enum LLMProvider: String, CaseIterable, Codable, Sendable {
         }
     }
 
-    var note: String {
+    var note: String? {
         switch self {
         case .openAI:
             "Stable OpenAI-compatible polishing."
         case .openRouterFree:
-            "Fixed :free models only—not openrouter/free. Best options listed first."
+            nil
         case .inferenceNet:
             "OpenAI-compatible Inference.net API. Default uses Nemotron 3 Super for ASR polishing."
         case .custom:

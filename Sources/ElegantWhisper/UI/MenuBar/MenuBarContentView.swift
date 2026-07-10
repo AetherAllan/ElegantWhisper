@@ -6,30 +6,27 @@ struct MenuBarContentView: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Image(systemName: model.mode == .recording ? "waveform.circle.fill" : "waveform.circle")
-                    .font(.title2)
-                VStack(alignment: .leading) {
-                    Text(AppConstants.productName).fontWeight(.semibold)
-                    Text(model.mode.title).font(.caption).foregroundStyle(.secondary)
-                }
-                Spacer()
-            }
+        Group {
+            Text(model.mode.title)
+                .disabled(true)
+
+            Button("Open \(AppConstants.productName)") { openMainWindow() }
+            Button("Settings…") { open(.settings) }
+            Button("About \(AppConstants.productName)") { open(.about) }
 
             Divider()
-            Button("Open \(AppConstants.productName)") { openMainWindow() }
-            Button("Settings…") {
-                model.openSettings()
-                openMainWindow()
-            }
 
-            Picker("Language", selection: Binding(
-                get: { model.currentLanguage },
-                set: { model.setLanguage($0) }
-            )) {
+            Menu("Language") {
                 ForEach(RecognitionLanguage.allCases, id: \.self) { language in
-                    Text(language.menuTitle).tag(language)
+                    Button {
+                        model.setLanguage(language)
+                    } label: {
+                        if language == model.currentLanguage {
+                            Label(language.menuTitle, systemImage: "checkmark")
+                        } else {
+                            Text(language.menuTitle)
+                        }
+                    }
                 }
             }
 
@@ -58,15 +55,21 @@ struct MenuBarContentView: View {
             ))
 
             if !model.microphoneError.isEmpty {
-                Text(model.microphoneError).font(.caption).foregroundStyle(.red)
+                Text(model.microphoneError)
             }
 
             Divider()
-            Button("Quit") { NSApp.terminate(nil) }.keyboardShortcut("q")
+            Button("Quit \(AppConstants.productName)") { NSApp.terminate(nil) }
+                .keyboardShortcut("q")
         }
-        .padding(14)
-        .frame(width: 290)
+        // A menu is rebuilt when it opens, so refreshing here keeps the device submenu current
+        // without owning a second audio-device observer.
         .onAppear { model.refreshMicrophones() }
+    }
+
+    private func open(_ route: AppRoute) {
+        model.route = route
+        openMainWindow()
     }
 
     private func openMainWindow() {

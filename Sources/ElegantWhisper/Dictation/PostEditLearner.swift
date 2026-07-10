@@ -12,130 +12,6 @@ enum LearningEligibility {
     case unsupportedApp
 }
 
-struct LearningTextSnapshot {
-    let beforeValue: String
-    let selectedRangeBeforeInsertion: NSRange
-    let insertedText: String
-    let expectedRangeAfterInsertion: NSRange
-    let prefixAnchor: String
-    let suffixAnchor: String
-}
-
-struct LearningCandidateDraft: Equatable {
-    let original: String
-    let replacement: String
-}
-
-enum LearningDiffEngine {
-    static func candidate(snapshot: LearningTextSnapshot, currentValue: String) -> LearningCandidateDraft? {
-        guard let expectedValue = expectedValue(from: snapshot),
-              expectedValue != currentValue
-        else {
-            return nil
-        }
-
-        guard anchorsStillExist(snapshot: snapshot, in: currentValue) else {
-            return nil
-        }
-
-        let expected = expectedValue as NSString
-        let current = currentValue as NSString
-        let expectedLength = expected.length
-        let currentLength = current.length
-
-        var prefixLength = 0
-        while prefixLength < expectedLength,
-              prefixLength < currentLength,
-              expected.character(at: prefixLength) == current.character(at: prefixLength)
-        {
-            prefixLength += 1
-        }
-
-        var suffixLength = 0
-        while suffixLength < expectedLength - prefixLength,
-              suffixLength < currentLength - prefixLength,
-              expected.character(at: expectedLength - suffixLength - 1) == current.character(at: currentLength - suffixLength - 1)
-        {
-            suffixLength += 1
-        }
-
-        let originalRange = NSRange(location: prefixLength, length: expectedLength - prefixLength - suffixLength)
-        let replacementRange = NSRange(location: prefixLength, length: currentLength - prefixLength - suffixLength)
-
-        guard originalRange.length > 0, replacementRange.length > 0 else {
-            return nil
-        }
-        guard contains(snapshot.expectedRangeAfterInsertion, originalRange) else {
-            return nil
-        }
-
-        let original = expected.substring(with: originalRange).trimmingCharacters(in: .whitespacesAndNewlines)
-        let replacement = current.substring(with: replacementRange).trimmingCharacters(in: .whitespacesAndNewlines)
-        guard isSafeDictionaryPair(original: original, replacement: replacement, insertedText: snapshot.insertedText) else {
-            return nil
-        }
-        return LearningCandidateDraft(original: original, replacement: replacement)
-    }
-
-    private static func expectedValue(from snapshot: LearningTextSnapshot) -> String? {
-        let before = snapshot.beforeValue as NSString
-        guard NSMaxRange(snapshot.selectedRangeBeforeInsertion) <= before.length else {
-            return nil
-        }
-        return before.replacingCharacters(in: snapshot.selectedRangeBeforeInsertion, with: snapshot.insertedText)
-    }
-
-    private static func anchorsStillExist(snapshot: LearningTextSnapshot, in currentValue: String) -> Bool {
-        let current = currentValue as NSString
-        if !snapshot.prefixAnchor.isEmpty,
-           current.range(of: snapshot.prefixAnchor).location == NSNotFound
-        {
-            return false
-        }
-        if !snapshot.suffixAnchor.isEmpty,
-           current.range(of: snapshot.suffixAnchor).location == NSNotFound
-        {
-            return false
-        }
-        return true
-    }
-
-    private static func contains(_ outer: NSRange, _ inner: NSRange) -> Bool {
-        inner.location >= outer.location && NSMaxRange(inner) <= NSMaxRange(outer)
-    }
-
-    private static func isSafeDictionaryPair(original: String, replacement: String, insertedText: String) -> Bool {
-        guard !original.isEmpty, !replacement.isEmpty else {
-            return false
-        }
-        guard original.count <= 64, replacement.count <= 64 else {
-            return false
-        }
-        guard hasLetterOrNumber(original), hasLetterOrNumber(replacement) else {
-            return false
-        }
-
-        let smaller = max(1, min(original.count, replacement.count))
-        let larger = max(original.count, replacement.count)
-        guard Double(larger) / Double(smaller) <= 3 else {
-            return false
-        }
-
-        if insertedText.count > 20,
-           Double(original.count) / Double(insertedText.count) > 0.6
-        {
-            return false
-        }
-        return true
-    }
-
-    private static func hasLetterOrNumber(_ value: String) -> Bool {
-        value.unicodeScalars.contains {
-            CharacterSet.letters.contains($0) || CharacterSet.decimalDigits.contains($0)
-        }
-    }
-}
-
 struct PostEditLearningContext {
     let target: FocusTarget
     let snapshot: LearningTextSnapshot
@@ -163,6 +39,9 @@ final class PostEditLearner {
         }
         guard let target else {
             return (.pasteOnly, nil)
+        }
+        guard Self.isSupportedApp(bundleIdentifier: target.bundleIdentifier) else {
+            return (.unsupportedApp, nil)
         }
         guard !isSecureField(target.element) else {
             return (.secureField, nil)
@@ -213,6 +92,10 @@ final class PostEditLearner {
     func stop() {
         session?.stop()
         session = nil
+    }
+
+    static func isSupportedApp(bundleIdentifier: String?) -> Bool {
+        bundleIdentifier != AppConstants.bundleIdentifier
     }
 
     private func anchor(in value: String, range: NSRange) -> String {
@@ -366,7 +249,9 @@ private final class EditObservationSession: AXObserverCallbackScheduling {
             self?.readCurrentValue()
         }
         debounceWorkItem = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7, execute: work)
+        // Wait for a complete word. A shorter debounce records intermediate edits such as
+        // "optio" before the user finishes typing "option".
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2, execute: work)
     }
 
     private func readCurrentValue() {

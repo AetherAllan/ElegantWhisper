@@ -66,6 +66,25 @@ final class FocusDetector {
         return isEditable(target.element)
     }
 
+    func screenAnchor(for target: FocusTarget?) -> NSPoint? {
+        guard let target,
+              isValid(target),
+              let position = pointAttribute(target.element, kAXPositionAttribute),
+              let size = sizeAttribute(target.element, kAXSizeAttribute),
+              let primaryScreen = NSScreen.screens.first
+        else {
+            return nil
+        }
+
+        // Accessibility uses Quartz screen coordinates (origin at the primary display's top-left),
+        // while AppKit uses a bottom-left origin. Converting through the primary display also keeps
+        // anchors correct when another display sits above or below it.
+        return NSPoint(
+            x: position.x + size.width / 2,
+            y: primaryScreen.frame.maxY - position.y - size.height / 2
+        )
+    }
+
     private func focusedElement() -> AXUIElement? {
         let systemWide = AXUIElementCreateSystemWide()
         // Prefer the focused application first. Browser text areas and Electron editors often
@@ -185,6 +204,32 @@ final class FocusDetector {
             return nil
         }
         return value as? Bool
+    }
+
+    private func pointAttribute(_ element: AXUIElement, _ attribute: String) -> CGPoint? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success,
+              let value,
+              CFGetTypeID(value) == AXValueGetTypeID()
+        else {
+            return nil
+        }
+        var point = CGPoint.zero
+        guard AXValueGetValue((value as! AXValue), .cgPoint, &point) else { return nil }
+        return point
+    }
+
+    private func sizeAttribute(_ element: AXUIElement, _ attribute: String) -> CGSize? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success,
+              let value,
+              CFGetTypeID(value) == AXValueGetTypeID()
+        else {
+            return nil
+        }
+        var size = CGSize.zero
+        guard AXValueGetValue((value as! AXValue), .cgSize, &size) else { return nil }
+        return size
     }
 
     private func isTextLike(_ value: String?) -> Bool {

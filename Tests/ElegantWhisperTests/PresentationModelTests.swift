@@ -15,6 +15,26 @@ final class PresentationModelTests: XCTestCase {
         XCTAssertEqual(model.text, "Polishing...")
     }
 
+    func testFloatingPanelPlacementHandlesNegativeScreenCoordinates() {
+        let origin = FloatingPanelPlacement.origin(
+            panelSize: NSSize(width: 196, height: 40),
+            visibleFrame: NSRect(x: -1920, y: -120, width: 1920, height: 1080)
+        )
+
+        XCTAssertEqual(origin.x, -1058)
+        XCTAssertEqual(origin.y, -72)
+    }
+
+    func testFloatingPanelPlacementClampsToSmallVisibleFrame() {
+        let origin = FloatingPanelPlacement.origin(
+            panelSize: NSSize(width: 196, height: 40),
+            visibleFrame: NSRect(x: 10, y: 20, width: 120, height: 60)
+        )
+
+        XCTAssertEqual(origin.x, 10)
+        XCTAssertEqual(origin.y, 40)
+    }
+
     @MainActor
     func testSettingsDraftSurvivesRuntimeRefreshAndConnectionTestSavesFirst() throws {
         let fixture = try Fixture()
@@ -104,6 +124,31 @@ final class PresentationModelTests: XCTestCase {
         fixture.model.openSettings()
 
         XCTAssertEqual(fixture.model.route, .settings)
+    }
+
+    @MainActor
+    func testOpenAboutSelectsMainWindowAboutRoute() throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanup() }
+
+        fixture.model.openAbout()
+
+        XCTAssertEqual(fixture.model.route, .about)
+    }
+
+    @MainActor
+    func testOnboardingCompletionPersistsAndReplayKeepsItCompleted() throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanup() }
+
+        XCTAssertFalse(fixture.model.onboardingCompleted)
+        fixture.model.completeOnboarding()
+        XCTAssertTrue(fixture.model.onboardingCompleted)
+        XCTAssertTrue(fixture.settings.onboardingCompleted)
+
+        fixture.model.prepareTutorialReplay()
+        XCTAssertTrue(fixture.model.onboardingCompleted)
+        XCTAssertTrue(fixture.settings.onboardingCompleted)
     }
 }
 

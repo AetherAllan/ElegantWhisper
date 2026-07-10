@@ -22,6 +22,8 @@ struct PermissionActionRow: View {
     let granted: Bool
     let actionTitle: String
     let action: () -> Void
+    var secondaryActionTitle: String? = nil
+    var secondaryAction: (() -> Void)? = nil
 
     var body: some View {
         HStack(spacing: 12) {
@@ -32,7 +34,10 @@ struct PermissionActionRow: View {
                 Text(granted ? "Granted" : detail).font(.caption).foregroundStyle(.secondary).lineLimit(2)
             }
             Spacer()
-            Button(granted ? "Open" : actionTitle, action: action)
+            if let secondaryActionTitle, let secondaryAction, !granted {
+                Button(secondaryActionTitle, action: secondaryAction)
+            }
+            Button(granted ? "Open" : actionTitle, action: granted ? (secondaryAction ?? action) : action)
         }
         .padding(.vertical, 5)
     }

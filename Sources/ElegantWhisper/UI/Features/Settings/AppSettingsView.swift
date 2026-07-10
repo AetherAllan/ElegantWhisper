@@ -2,20 +2,57 @@ import SwiftUI
 
 struct AppSettingsView: View {
     @Environment(AppModel.self) private var model
+    @State private var tab = SettingsTab.general
 
     var body: some View {
-        TabView {
-            GeneralSettingsView()
-                .tabItem { Label("General", systemImage: "gearshape") }
-            AISettingsView()
-                .tabItem { Label("AI Provider", systemImage: "sparkles") }
-            PermissionsSettingsView()
-                .tabItem { Label("Permissions", systemImage: "hand.raised") }
+        VStack(spacing: 18) {
+            Picker("Settings", selection: $tab) {
+                ForEach(SettingsTab.allCases) { tab in
+                    Label(tab.title, systemImage: tab.symbolName).tag(tab)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.segmented)
+            .frame(maxWidth: 420)
+
+            Group {
+                switch tab {
+                case .general: GeneralSettingsView()
+                case .ai: AISettingsView()
+                case .permissions: PermissionsSettingsView()
+                }
+            }
+            .frame(maxWidth: 700, maxHeight: 520)
         }
-        .frame(maxWidth: 700, maxHeight: 560)
-        .padding()
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .padding(24)
+        .background(Color(nsColor: .windowBackgroundColor))
         .navigationTitle("Settings")
         .onAppear { model.settings.beginEditing() }
+    }
+}
+
+private enum SettingsTab: String, CaseIterable, Identifiable {
+    case general
+    case ai
+    case permissions
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .general: "General"
+        case .ai: "AI Provider"
+        case .permissions: "Permissions"
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .general: "gearshape"
+        case .ai: "sparkles"
+        case .permissions: "hand.raised"
+        }
     }
 }
 
@@ -76,7 +113,9 @@ private struct AISettingsView: View {
                 }
             }
             TextField("Timeout Seconds", value: $settings.draft.timeout, format: .number)
-            Text(settings.draft.provider.note).font(.callout).foregroundStyle(.secondary)
+            if let note = settings.draft.provider.note {
+                Text(note).font(.callout).foregroundStyle(.secondary)
+            }
 
             if !settings.connectionStatus.isEmpty {
                 Text(settings.connectionStatus)

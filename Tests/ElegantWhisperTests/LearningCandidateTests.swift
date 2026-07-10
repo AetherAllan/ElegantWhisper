@@ -12,6 +12,27 @@ final class LearningCandidateTests: XCTestCase {
         )
     }
 
+    func testSingleHanCharacterDoesNotCreateCandidate() {
+        let snapshot = snapshot(insertedText: "这里是精确测试")
+
+        XCTAssertNil(LearningDiffEngine.candidate(snapshot: snapshot, currentValue: "这里是竞确测试"))
+    }
+
+    func testWholeSentenceReplacementDoesNotCreateCandidate() {
+        let snapshot = snapshot(insertedText: "看看现在这个暴力史的效果怎么样了")
+
+        XCTAssertNil(LearningDiffEngine.candidate(
+            snapshot: snapshot,
+            currentValue: "openrouter.ai/workspaces/default/keys"
+        ))
+    }
+
+    func testMixedPhraseRewriteDoesNotCreateCandidate() {
+        let snapshot = snapshot(insertedText: "我再说一句话看我能看清啊")
+
+        XCTAssertNil(LearningDiffEngine.candidate(snapshot: snapshot, currentValue: "应该是transcribe"))
+    }
+
     func testLargeRewriteDoesNotCreateCandidate() {
         let snapshot = snapshot(insertedText: "这个功能挺好用的")
         let current = "这个功能目前基本可用，但稳定性仍需验证"
@@ -67,6 +88,30 @@ final class LearningCandidateTests: XCTestCase {
         XCTAssertEqual(store.items().count, 1)
     }
 
+    @MainActor
+    func testDictionaryOnlyShowsRepeatedCandidates() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ElegantWhisperTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let candidates = LearningCandidateStore(fileURL: root.appendingPathComponent("candidates.json"))
+        let model = DictionaryModel(
+            dictionary: DictionaryStore(fileURL: root.appendingPathComponent("dictionary.json")),
+            candidates: candidates,
+            styles: StylePackStore(fileURL: root.appendingPathComponent("styles.json")),
+            language: .simplifiedChinese
+        )
+
+        candidates.record(original: "派森", replacement: "Python", language: .simplifiedChinese, bundleIdentifier: "com.apple.TextEdit")
+        model.reload()
+        XCTAssertTrue(model.candidates.isEmpty)
+
+        candidates.record(original: "派森", replacement: "Python", language: .simplifiedChinese, bundleIdentifier: "com.apple.TextEdit")
+        model.reload()
+        XCTAssertEqual(model.candidates.map(\.replacement), ["Python"])
+    }
+
     func testAcceptCandidateAddsDictionaryTerm() throws {
         let dictionaryFile = try temporaryFile(named: "dictionary.json")
         let dictionary = DictionaryStore(fileURL: dictionaryFile)
@@ -89,6 +134,14 @@ final class LearningCandidateTests: XCTestCase {
         let settings = SettingsStore(defaults: defaults, keychain: KeychainStore(service: suiteName))
 
         XCTAssertFalse(settings.postEditLearningEnabled)
+    }
+
+    @MainActor
+    func testElegantWhisperFieldsDoNotStartLearningOrSaveHistory() {
+        XCTAssertFalse(PostEditLearner.isSupportedApp(bundleIdentifier: AppConstants.bundleIdentifier))
+        XCTAssertFalse(AppController.shouldSaveHistory(bundleIdentifier: AppConstants.bundleIdentifier))
+        XCTAssertTrue(PostEditLearner.isSupportedApp(bundleIdentifier: "com.apple.TextEdit"))
+        XCTAssertTrue(AppController.shouldSaveHistory(bundleIdentifier: "com.apple.TextEdit"))
     }
 
     @MainActor
