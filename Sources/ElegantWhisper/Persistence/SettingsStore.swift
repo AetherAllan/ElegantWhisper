@@ -22,6 +22,7 @@ final class SettingsStore: @unchecked Sendable {
         static let speechModel = "speechModel"
         static let llmEnabled = "llmEnabled"
         static let shareCursorTextWithLLM = "shareCursorTextWithLLM"
+        static let readWindowText = "readWindowText"
         static let llmProvider = "llmProvider"
         static let apiBaseURL = "apiBaseURL"
         static let model = "model"
@@ -58,6 +59,16 @@ final class SettingsStore: @unchecked Sendable {
         }
         set {
             defaults.set(newValue, forKey: Key.llmEnabled)
+        }
+    }
+
+    /// Read technical words from the front window (locally) to fix their spelling after recognition.
+    var readWindowText: Bool {
+        get {
+            defaults.object(forKey: Key.readWindowText) as? Bool ?? true
+        }
+        set {
+            defaults.set(newValue, forKey: Key.readWindowText)
         }
     }
 

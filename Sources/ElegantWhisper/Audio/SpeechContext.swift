@@ -183,6 +183,11 @@ enum AXFocusedTextContextReader {
         )
     }
 
+    /// The on-screen part of a long text element, within the same size bound as focused-field reads.
+    static func snippets(fromVisibleTextOf element: AXUIElement) -> String? {
+        visibleText(element)
+    }
+
     private static func visibleText(_ element: AXUIElement) -> String? {
         guard let range = visibleCharacterRange(element) else {
             return nil
@@ -260,6 +265,158 @@ enum AXFocusedTextContextReader {
     }
 }
 
+/// Reads text from the front window (chat history, document, web page) so the post-recognition
+/// spelling pass knows technical words that are on screen but not in the focused field. Runs off
+/// MainActor while the user is speaking; only extracted terms leave this type, and nothing is sent
+/// anywhere. Traversal is bounded by element count, characters, depth, and time.
+enum AXWindowTextReader {
+    struct Limits {
+        var maxElements = 2_500
+        var maxCharacters = 60_000
+        var maxElementCharacters = 4_000
+        var maxDepth = 40
+        var timeBudget: TimeInterval = 0.3
+    }
+
+    struct Node<Element> {
+        var isSecure = false
+        /// UI chrome such as toolbars and menus: skip the subtree.
+        var isChrome = false
+        var texts: [String] = []
+        var children: [Element] = []
+    }
+
+    struct Collected: Equatable {
+        var texts: [String] = []
+        var visited = 0
+        var characters = 0
+        var stoppedEarly = false
+    }
+
+    private static let textRoles: Set<String> = [
+        kAXStaticTextRole, kAXTextAreaRole, kAXTextFieldRole, "AXHeading", "AXLink", kAXCellRole
+    ]
+    private static let chromeRoles: Set<String> = [
+        kAXToolbarRole, kAXMenuBarRole, kAXMenuRole, kAXMenuButtonRole, "AXTabGroup"
+    ]
+
+    static func terms(processIdentifier: pid_t, focused: FocusTarget?, limit: Int = 200) -> [String] {
+        let started = ProcessInfo.processInfo.systemUptime
+        guard let window = window(processIdentifier: processIdentifier, focused: focused) else {
+            DebugLog.event("windowContext noWindow")
+            return []
+        }
+        let collected = collectTexts(root: window, limits: Limits(), node: node(for:))
+        let terms = SpeechContextTermExtractor.windowTerms(from: collected.texts, limit: limit)
+        let elapsed = Int((ProcessInfo.processInfo.systemUptime - started) * 1_000)
+        // Counts only; window text is private.
+        DebugLog.event("windowContext elements=\(collected.visited) chars=\(collected.characters) terms=\(terms.count) ms=\(elapsed) truncated=\(collected.stoppedEarly)")
+        return terms
+    }
+
+    /// Breadth-first walk so the outer layout (and usually the most visible content) comes first.
+    static func collectTexts<Element>(
+        root: Element,
+        limits: Limits,
+        now: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
+        node: (Element) -> Node<Element>?
+    ) -> Collected {
+        let deadline = now() + limits.timeBudget
+        var result = Collected()
+        var queue: [(element: Element, depth: Int)] = [(root, 0)]
+        var head = 0
+        while head < queue.count {
+            guard result.visited < limits.maxElements,
+                  result.characters < limits.maxCharacters,
+                  now() < deadline
+            else {
+                result.stoppedEarly = true
+                break
+            }
+            let (element, depth) = queue[head]
+            head += 1
+            result.visited += 1
+            guard let info = node(element), !info.isSecure, !info.isChrome else {
+                continue
+            }
+            for text in info.texts {
+                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else { continue }
+                let clipped = String(trimmed.prefix(min(limits.maxElementCharacters, limits.maxCharacters - result.characters)))
+                result.texts.append(clipped)
+                result.characters += clipped.count
+            }
+            if depth < limits.maxDepth {
+                queue.append(contentsOf: info.children.map { ($0, depth + 1) })
+            }
+        }
+        return result
+    }
+
+    private static func window(processIdentifier: pid_t, focused: FocusTarget?) -> AXUIElement? {
+        if let focused, let window = elementAttribute(focused.element, kAXWindowAttribute) {
+            return window
+        }
+        return elementAttribute(AXUIElementCreateApplication(processIdentifier), kAXFocusedWindowAttribute)
+    }
+
+    private static let batchAttributes: [String] = [
+        kAXRoleAttribute, kAXSubroleAttribute, kAXTitleAttribute, kAXDescriptionAttribute,
+        kAXNumberOfCharactersAttribute, kAXChildrenAttribute
+    ]
+
+    private static func node(for element: AXUIElement) -> Node<AXUIElement>? {
+        // One IPC round trip for the common attributes; the value is fetched separately so a huge
+        // document is never copied just to be clipped.
+        var raw: CFArray?
+        guard AXUIElementCopyMultipleAttributeValues(element, batchAttributes as CFArray, AXCopyMultipleAttributeOptions(rawValue: 0), &raw) == .success,
+              let values = raw as? [Any], values.count == 6
+        else {
+            return nil
+        }
+        let role = values[0] as? String
+        let subrole = values[1] as? String
+        var node = Node<AXUIElement>()
+        node.isSecure = role == "AXSecureTextField" || subrole == "AXSecureTextField"
+        node.isChrome = role.map(chromeRoles.contains) ?? false
+        node.children = (values[5] as? [AnyObject] ?? []).compactMap { child in
+            CFGetTypeID(child) == AXUIElementGetTypeID() ? (child as! AXUIElement) : nil
+        }
+        guard let role, textRoles.contains(role), !node.isSecure else {
+            return node
+        }
+        if let title = values[2] as? String { node.texts.append(title) }
+        if let description = values[3] as? String { node.texts.append(description) }
+        let characterCount = (values[4] as? NSNumber)?.intValue ?? 0
+        if role == kAXStaticTextRole || characterCount <= Limits().maxElementCharacters {
+            if let value = stringAttribute(element, kAXValueAttribute) { node.texts.append(value) }
+        } else if let visible = AXFocusedTextContextReader.snippets(fromVisibleTextOf: element) {
+            // Long editors: only the part on screen.
+            node.texts.append(visible)
+        }
+        return node
+    }
+
+    private static func elementAttribute(_ element: AXUIElement, _ attribute: String) -> AXUIElement? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success,
+              let value,
+              CFGetTypeID(value) == AXUIElementGetTypeID()
+        else {
+            return nil
+        }
+        return (value as! AXUIElement)
+    }
+
+    private static func stringAttribute(_ element: AXUIElement, _ attribute: String) -> String? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success else {
+            return nil
+        }
+        return value as? String
+    }
+}
+
 enum SpeechContextTermExtractor {
     /// Pulls technical tokens from AX snippets for Speech `contextualStrings` and LLM hints.
     /// Full snippet text is not retained or transmitted—only filtered token strings for ASR (≤30 extract).
@@ -292,6 +449,49 @@ enum SpeechContextTermExtractor {
             }
         }
         return result as String
+    }
+
+    /// Wider than `terms(from:)` for whole-window text: technical tokens first, then capitalized
+    /// names such as "Redis" or "Vercel", most frequent first. These only serve as spelling targets
+    /// after recognition, where ordinary English words are never rewritten, so a few sentence-initial
+    /// words in the list are harmless.
+    static func windowTerms(from texts: [String], limit: Int = 200) -> [String] {
+        var terms = terms(from: texts, limit: limit)
+        var seen = Set(terms.map { $0.lowercased() })
+        var counts: [String: Int] = [:]
+        var order: [String] = []
+        for text in texts {
+            let range = NSRange(text.startIndex..<text.endIndex, in: text)
+            let scrubbed = privateTextRegex.stringByReplacingMatches(in: text, range: range, withTemplate: " ")
+            let scrubbedRange = NSRange(scrubbed.startIndex..<scrubbed.endIndex, in: scrubbed)
+            for match in tokenRegex.matches(in: scrubbed, range: scrubbedRange) {
+                guard let tokenRange = Range(match.range, in: scrubbed) else { continue }
+                let token = String(scrubbed[tokenRange])
+                guard (4...24).contains(token.count),
+                      token.first?.isUppercase == true,
+                      token.contains(where: \.isLowercase),
+                      !stopwords.contains(token.lowercased()),
+                      !looksPrivate(token),
+                      !seen.contains(token.lowercased())
+                else {
+                    continue
+                }
+                if counts[token] == nil {
+                    order.append(token)
+                }
+                counts[token, default: 0] += 1
+            }
+        }
+        // Stable sort: more frequent first, then first appearance.
+        let ranked = order.enumerated().sorted {
+            let lhs = counts[$0.element] ?? 0
+            let rhs = counts[$1.element] ?? 0
+            return lhs != rhs ? lhs > rhs : $0.offset < $1.offset
+        }
+        for (_, token) in ranked where terms.count < limit && seen.insert(token.lowercased()).inserted {
+            terms.append(token)
+        }
+        return terms
     }
 
     static func terms(from snippets: [String], limit: Int = 30) -> [String] {

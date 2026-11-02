@@ -67,12 +67,12 @@ final class AppController {
             }
             self?.showError(message)
         }
-        recorder.onLevel = { [weak self] level in
-            if level > 0.02, self?.loggedFirstAudioLevel == false {
+        recorder.onLevels = { [weak self] levels in
+            if levels.contains(where: { $0 > 0.02 }), self?.loggedFirstAudioLevel == false {
                 self?.loggedFirstAudioLevel = true
                 DebugLog.event("firstAudioLevel")
             }
-            self?.panel.updateLevel(level)
+            self?.panel.enqueueLevels(levels)
         }
         let transcriber = transcriber
         recorder.onBuffer = { buffer in
@@ -226,6 +226,19 @@ final class AppController {
             language: language,
             focusedTerms: focusedTerms
         )
+        currentSession?.dictionaryTerms = dictionary.terms(for: language, limit: 500)
+        currentSession?.correctionTerms = focusedTerms + StylePackStore.seedTerms(for: activePack.id)
+        // Walking the whole window takes up to a few hundred milliseconds of AX IPC, so it runs in
+        // the background while the user speaks; the result is only needed at finalize.
+        if settings.readWindowText,
+           let app = target?.app ?? originalApplication,
+           app.bundleIdentifier != AppConstants.bundleIdentifier
+        {
+            let processIdentifier = app.processIdentifier
+            currentSession?.windowTerms = Task.detached(priority: .userInitiated) { [target] in
+                AXWindowTextReader.terms(processIdentifier: processIdentifier, focused: target)
+            }
+        }
         DebugLog.event("asrContextBuilt total=\(vocabulary.count) focused=\(focusedTerms.count) llmTerms=\(context.terms.count) usedAX=\(!snippets.isEmpty) target=\(target != nil) appContext=\(context.appName != nil) cursorChars=\((cursorText?.before.count ?? 0) + (cursorText?.after.count ?? 0))")
 
         let start = Task { [transcriber] in
@@ -276,6 +289,14 @@ final class AppController {
             }
             guard let self, self.isCurrentSession(sessionID) else {
                 return
+            }
+            // Started with the recording and time-bounded, so normally already finished.
+            if let windowTerms = self.currentSession?.windowTerms {
+                let terms = await windowTerms.value
+                guard self.isCurrentSession(sessionID) else {
+                    return
+                }
+                self.currentSession?.correctionTerms.append(contentsOf: terms)
             }
             self.transcriber.finish { [weak self] text in
                 self?.handleFinalTranscript(text, sessionID: sessionID)
@@ -389,11 +410,22 @@ final class AppController {
         guard isCurrentSession(sessionID) else {
             return
         }
-        let raw = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !raw.isEmpty else {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
             showError("No speech recognized")
             return
         }
+        // The newer speech model ignores contextual strings, so known terms are applied here.
+        let corrected = VocabularyCorrector.correct(
+            trimmed,
+            userTerms: currentSession?.dictionaryTerms ?? [],
+            terms: currentSession?.correctionTerms ?? [],
+            isKnownWord: SystemSpelling.isKnownWord
+        )
+        if corrected.corrections > 0 {
+            DebugLog.event("vocabularyCorrections count=\(corrected.corrections)")
+        }
+        let raw = corrected.text
 
         let asrFinalizedIn = recordingStoppedAt.map { $0.duration(to: clock.now) }
 

@@ -13,13 +13,22 @@ enum FloatingHUDPhase: Equatable {
 final class FloatingHUDModel {
     static let previewLimit = 48
     static let waveformHistoryCount = 4
+    /// The center bar follows the voice every display frame; older samples step outward every
+    /// few frames (15 steps a second at 60 fps) so the ripple stays readable.
+    static let rippleInterval = 4
+    /// About half a second of audio. Bounds latency if frames stall, e.g. while the screen sleeps.
+    static let maxQueuedLevels = 30
 
     var text = "Listening..."
     var phase: FloatingHUDPhase = .listening
     private(set) var listeningSince: Date?
     // Newest level first. The waveform mirrors this history outward from the center bar so the
-    // bars ripple with speech instead of all scaling in unison.
+    // bars ripple with speech instead of all scaling in unison. `levels` is what is drawn; it
+    // eases toward `targets` every frame so bars glide between audio buffers.
     private(set) var levels = [CGFloat](repeating: 0, count: waveformHistoryCount)
+    private var targets = [CGFloat](repeating: 0, count: waveformHistoryCount)
+    private var queuedLevels: [CGFloat] = []
+    private var frame = 0
 
     var showsWaveform: Bool {
         phase == .listening
@@ -36,9 +45,31 @@ final class FloatingHUDModel {
         self.text = text.isEmpty ? "Listening..." : Self.shortPreview(text)
     }
 
-    func updateLevel(_ level: CGFloat) {
-        levels.removeLast()
-        levels.insert(level, at: 0)
+    func enqueueLevels(_ values: [CGFloat]) {
+        queuedLevels.append(contentsOf: values)
+        if queuedLevels.count > Self.maxQueuedLevels {
+            queuedLevels.removeFirst(queuedLevels.count - Self.maxQueuedLevels)
+        }
+    }
+
+    /// One display frame: take the next audio level (decay when the queue runs dry) and ease
+    /// each bar toward its target.
+    func advanceFrame() {
+        let live = queuedLevels.isEmpty ? targets[0] * 0.9 : queuedLevels.removeFirst()
+        frame += 1
+        if frame % Self.rippleInterval == 0 {
+            targets.removeLast()
+            targets.insert(live, at: 0)
+        } else {
+            targets[0] = live
+        }
+        // Build the new array first so observers see one change per frame, not one per bar.
+        var next = levels
+        for index in next.indices {
+            let easing: CGFloat = index == 0 ? 0.55 : 0.3
+            next[index] += (targets[index] - next[index]) * easing
+        }
+        levels = next
     }
 
     /// Keep the last partial visible while finalization runs.
@@ -63,6 +94,9 @@ final class FloatingHUDModel {
 
     private func resetLevels() {
         levels = [CGFloat](repeating: 0, count: Self.waveformHistoryCount)
+        targets = levels
+        queuedLevels = []
+        frame = 0
     }
 }
 

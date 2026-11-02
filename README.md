@@ -50,6 +50,8 @@ When you start dictation, ElegantWhisper may read the **focused editable field**
 - Extracts up to **12 high-value tokens** (technical words, camelCase identifiers, etc.) from the focused field for local Apple Speech `contextualStrings`.
 - Skips secure password fields and filters URLs, emails, and obvious secret-like strings before token extraction.
 - Caps selected/visible snippet reads (2k / 4k characters) only to find those tokens; the snippets themselves are not sent to any API.
+- With **Settings → General → Use words from the front window** (on by default), it also reads text from the window you are dictating into (for example a chat thread or web page) in the background while you speak. Only technical words and capitalized names (up to 200) are kept, and they are used solely to fix the spelling of the transcript on this Mac. Password fields, toolbars, and menus are skipped, and the read is capped at 2,500 elements, 60,000 characters, and 0.3 seconds.
+- After recognition, a local spelling pass fixes near-misses of your Dictionary, on-screen, and Style Pack terms (for example "redisk" → "Redis", or a name split in two such as "Elegan的 Visper" → "ElegantWhisper"). It only changes Latin-script words that are a close match and are not ordinary English words; the one exception is casing for terms you added to your Dictionary ("slack" → "Slack").
 
 ### What leaves your Mac (only when LLM polishing is enabled)
 

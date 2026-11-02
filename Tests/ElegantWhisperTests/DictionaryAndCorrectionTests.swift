@@ -232,3 +232,148 @@ final class CursorTextContextTests: XCTestCase {
         XCTAssertNil(SpeechFocusContext(appName: nil, terms: []).promptSection)
     }
 }
+
+final class VocabularyCorrectorTests: XCTestCase {
+    private let terms = ["Redis", "TypeScript", "GitHub", "Docker", "Python", "Cursor", "SQL"]
+    private let englishWords: Set<String> = ["radios", "python", "cursor", "ready", "red", "get", "up", "type", "script", "typescript"]
+
+    private func correct(_ text: String) -> VocabularyCorrector.Result {
+        VocabularyCorrector.correct(text, terms: terms) { self.englishWords.contains($0) }
+    }
+
+    func testFixesRealNewerModelMistakes() {
+        // Output from Apple's SpeechTranscriber for "...restart the Redis container, and then push the TypeScript changes".
+        XCTAssertEqual(
+            correct("restart the redisk container, and then push the typescript changes to GitHub").text,
+            "restart the Redis container, and then push the TypeScript changes to GitHub"
+        )
+        XCTAssertEqual(
+            correct("我想用ison解析这个 JSON文件，然后把结果写入 readios缓存最后提交到 Githop。").text,
+            "我想用ison解析这个 JSON文件，然后把结果写入 Redis缓存最后提交到 GitHub。"
+        )
+    }
+
+    func testJoinsSplitCompoundAndFixesCasing() {
+        let result = correct("push the type script changes from docker and run sql")
+        XCTAssertEqual(result.text, "push the TypeScript changes from Docker and run SQL")
+        XCTAssertEqual(result.corrections, 3)
+    }
+
+    func testLeavesRealWordsAndWeakMatchesAlone() {
+        let text = "I listened to the radios while the python slept, then moved the cursor to the red ready box"
+        XCTAssertEqual(correct(text), VocabularyCorrector.Result(text: text, corrections: 0))
+        // "ison" was a garbled "Python"; a different first letter keeps it from becoming "JSON".
+        XCTAssertEqual(VocabularyCorrector.correct("用ison解析", terms: ["JSON"]) { _ in false }.text, "用ison解析")
+    }
+
+    func testJoinsNameSplitAcrossAHanCharacter() {
+        // Real output for "ElegantWhisper" dictated in Chinese mode.
+        let result = VocabularyCorrector.correct(
+            "Electron App Elegan的 Visper Man",
+            terms: ["ElegantWhisper", "Electron"]
+        ) { ["electron", "app", "man"].contains($0) }
+        XCTAssertEqual(result.text, "Electron App ElegantWhisper Man")
+        XCTAssertEqual(result.corrections, 1)
+    }
+
+    func testDoesNotJoinRealWordsOrWeakMatches() {
+        // Real words on either side never merge, even with a matching long term on screen.
+        XCTAssertEqual(
+            VocabularyCorrector.correct("red的 iris and elegant whisker", terms: ["Rediris", "ElegantWhisper"]) {
+                ["red", "iris", "and", "elegant", "whisker"].contains($0)
+            }.text,
+            "red的 iris and elegant whisker"
+        )
+        // Two unknown fragments that are not close to any long term stay as they are.
+        XCTAssertEqual(
+            VocabularyCorrector.correct("Zorp的 Quax", terms: ["ElegantWhisper"]) { _ in false }.text,
+            "Zorp的 Quax"
+        )
+    }
+
+    func testDictionaryTermsFixCasingOfEnglishWordsButScreenTermsDoNot() {
+        let isKnown: (String) -> Bool = { ["slack", "check"].contains($0) }
+        XCTAssertEqual(
+            VocabularyCorrector.correct("check slack later", userTerms: ["Slack"], terms: [], isKnownWord: isKnown).text,
+            "check Slack later"
+        )
+        XCTAssertEqual(
+            VocabularyCorrector.correct("check slack later", terms: ["Slack"], isKnownWord: isKnown).text,
+            "check slack later"
+        )
+        // The user's spelling wins over the screen's when both are present.
+        XCTAssertEqual(
+            VocabularyCorrector.correct("open github", userTerms: ["Github"], terms: ["GitHub"]) { _ in false }.text,
+            "open Github"
+        )
+    }
+
+    func testPluralAndTiesAndNoTerms() {
+        XCTAssertEqual(correct("restart both dockers").text, "restart both Dockers")
+        // Equally close to two terms: leave it.
+        XCTAssertEqual(VocabularyCorrector.correct("crate", terms: ["Crane", "Crave"]) { _ in false }.text, "crate")
+        XCTAssertEqual(VocabularyCorrector.correct("redisk", terms: []) { _ in false }.corrections, 0)
+    }
+}
+
+final class WindowTextReaderTests: XCTestCase {
+    private struct FakeElement {
+        var role = "AXGroup"
+        var texts: [String] = []
+        var children: [FakeElement] = []
+    }
+
+    private func collect(_ root: FakeElement, limits: AXWindowTextReader.Limits = .init(), now: @escaping () -> TimeInterval = { 0 }) -> AXWindowTextReader.Collected {
+        AXWindowTextReader.collectTexts(root: root, limits: limits, now: now) { element in
+            var node = AXWindowTextReader.Node<FakeElement>()
+            node.isSecure = element.role == "AXSecureTextField"
+            node.isChrome = element.role == "AXToolbar"
+            node.texts = element.texts
+            node.children = element.children
+            return node
+        }
+    }
+
+    func testCollectsTextBreadthFirstAndSkipsSecureFieldsAndChrome() {
+        let window = FakeElement(children: [
+            FakeElement(role: "AXToolbar", children: [FakeElement(role: "AXStaticText", texts: ["File Edit View"])]),
+            FakeElement(role: "AXStaticText", texts: ["Deploy the useEffect hook to staging"]),
+            FakeElement(role: "AXSecureTextField", texts: ["hunter2-secret"]),
+            FakeElement(children: [FakeElement(role: "AXStaticText", texts: ["Restart Redis after the K8s rollout"])]),
+        ])
+
+        let collected = collect(window)
+
+        XCTAssertEqual(collected.texts, ["Deploy the useEffect hook to staging", "Restart Redis after the K8s rollout"])
+        XCTAssertFalse(collected.stoppedEarly)
+        XCTAssertEqual(SpeechContextTermExtractor.terms(from: collected.texts), ["useEffect", "K8s"])
+        // Window text also yields capitalized names such as "Redis", after the technical tokens.
+        XCTAssertEqual(
+            SpeechContextTermExtractor.windowTerms(from: collected.texts + ["Ask Redis team"]),
+            ["useEffect", "K8s", "Redis", "Deploy", "Restart"]
+        )
+    }
+
+    func testStopsAtElementCharacterAndTimeLimits() {
+        let wide = FakeElement(children: (0..<50).map { FakeElement(role: "AXStaticText", texts: ["row \($0) text"]) })
+        var limits = AXWindowTextReader.Limits()
+        limits.maxElements = 10
+        let byCount = collect(wide, limits: limits)
+        XCTAssertEqual(byCount.visited, 10)
+        XCTAssertTrue(byCount.stoppedEarly)
+
+        limits = AXWindowTextReader.Limits()
+        limits.maxCharacters = 25
+        let byCharacters = collect(wide, limits: limits)
+        XCTAssertLessThanOrEqual(byCharacters.characters, 25)
+        XCTAssertTrue(byCharacters.stoppedEarly)
+
+        var clock: TimeInterval = 0
+        let byTime = collect(wide, now: {
+            clock += 0.05
+            return clock
+        })
+        XCTAssertTrue(byTime.stoppedEarly)
+        XCTAssertLessThan(byTime.visited, 10)
+    }
+}

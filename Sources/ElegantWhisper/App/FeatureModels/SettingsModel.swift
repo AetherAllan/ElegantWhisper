@@ -4,6 +4,7 @@ import SwiftUI
 struct SettingsDraft: Equatable {
     var language: RecognitionLanguage
     var speechModel: SpeechRecognitionModel
+    var readWindowText: Bool
     var keepClipboardWithoutTarget: Bool
     var saveHistory: Bool
     var muteOutputDuringRecording: Bool
@@ -19,6 +20,7 @@ struct SettingsDraft: Equatable {
     init(settings: SettingsStore) {
         language = settings.language
         speechModel = settings.speechModel
+        readWindowText = settings.readWindowText
         keepClipboardWithoutTarget = settings.keepClipboardWithoutTarget
         saveHistory = settings.saveHistory
         muteOutputDuringRecording = settings.muteOutputDuringRecording
@@ -93,6 +95,7 @@ final class SettingsModel {
     func syncImmediateFields() {
         sync(\.language, store.language)
         sync(\.speechModel, store.speechModel)
+        sync(\.readWindowText, store.readWindowText)
         sync(\.keepClipboardWithoutTarget, store.keepClipboardWithoutTarget)
         sync(\.saveHistory, store.saveHistory)
         sync(\.muteOutputDuringRecording, store.muteOutputDuringRecording)

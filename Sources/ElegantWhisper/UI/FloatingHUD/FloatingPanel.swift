@@ -11,6 +11,9 @@ final class FloatingPanel {
     // Width only grows within one presentation so streaming partials do not make the capsule
     // jitter left and right around the screen center.
     private var minimumWidth: CGFloat = 0
+    private lazy var waveformClock = WaveformClock { [model] in
+        model.advanceFrame()
+    }
 
     init() {
         panel = NSPanel(
@@ -42,6 +45,9 @@ final class FloatingPanel {
         model.showRecording(text: text)
         updateWidthForCurrentText()
         show()
+        if let view = panel.contentView {
+            waveformClock.start(in: view)
+        }
     }
 
     func setPreferredAnchor(_ point: NSPoint?) {
@@ -69,12 +75,13 @@ final class FloatingPanel {
         position()
     }
 
-    func updateLevel(_ level: Float) {
-        model.updateLevel(CGFloat(level))
+    func enqueueLevels(_ levels: [Float]) {
+        model.enqueueLevels(levels.map { CGFloat($0) })
     }
 
     /// Stop the listening chrome while keeping the last partial transcript visible.
     func stopWaveform() {
+        waveformClock.stop()
         model.stopListening()
         updateWidthForCurrentText()
         position()
@@ -102,6 +109,7 @@ final class FloatingPanel {
     }
 
     func hide() {
+        waveformClock.stop()
         pendingHide?.cancel()
         pendingHide = nil
         hide(presentationID: presentationID)
@@ -160,6 +168,7 @@ final class FloatingPanel {
     }
 
     private func setText(_ text: String, phase: FloatingHUDPhase = .working) {
+        waveformClock.stop()
         model.showStatus(text, phase: phase)
         updateWidthForCurrentText()
         NSAnimationContext.runAnimationGroup { context in
@@ -197,6 +206,35 @@ final class FloatingPanel {
         }
         let visible = screen.visibleFrame
         panel.setFrameOrigin(FloatingPanelPlacement.origin(panelSize: panel.frame.size, visibleFrame: visible))
+    }
+}
+
+/// Ticks once per display refresh (up to 60 fps) while the HUD is listening, so the waveform
+/// animates at screen rate instead of at the audio buffer rate.
+@MainActor
+private final class WaveformClock: NSObject {
+    private var link: CADisplayLink?
+    private let tick: @MainActor () -> Void
+
+    init(tick: @escaping @MainActor () -> Void) {
+        self.tick = tick
+    }
+
+    func start(in view: NSView) {
+        guard link == nil else { return }
+        let link = view.displayLink(target: self, selector: #selector(step(_:)))
+        link.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 60, preferred: 60)
+        link.add(to: .main, forMode: .common)
+        self.link = link
+    }
+
+    func stop() {
+        link?.invalidate()
+        link = nil
+    }
+
+    @objc private func step(_ link: CADisplayLink) {
+        tick()
     }
 }
 

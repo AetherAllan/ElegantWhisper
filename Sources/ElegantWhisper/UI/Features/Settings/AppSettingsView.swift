@@ -57,6 +57,10 @@ private struct GeneralSettingsView: View {
                     Text("Recognition model")
                     Text("Both run on this Mac. Try each with your own voice.")
                 }
+                Toggle(isOn: settings.immediate(\.readWindowText) { $0.readWindowText = $1 }) {
+                    Text("Use words from the front window")
+                    Text("Reads technical words such as Redis or useEffect from the window you're dictating into, to fix their spelling. Password fields are skipped and nothing leaves this Mac.")
+                }
             }
 
             Section("While Recording") {

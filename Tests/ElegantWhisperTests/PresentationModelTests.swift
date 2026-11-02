@@ -25,12 +25,23 @@ final class PresentationModelTests: XCTestCase {
         let model = FloatingHUDModel()
         model.showRecording(text: "")
 
-        model.updateLevel(0.2)
-        model.updateLevel(0.8)
+        // Two audio buffers' worth of slices; one is consumed per display frame.
+        model.enqueueLevels(Array(repeating: 0.8, count: 20))
+        model.advanceFrame()
+        XCTAssertGreaterThan(model.levels[0], 0)
+        XCTAssertLessThan(model.levels[0], 0.8, "bars ease toward the level instead of jumping")
+        for _ in 0..<19 {
+            model.advanceFrame()
+        }
 
         XCTAssertEqual(model.levels.count, FloatingHUDModel.waveformHistoryCount)
-        XCTAssertEqual(model.levels[0], 0.8)
-        XCTAssertEqual(model.levels[1], 0.2)
+        XCTAssertEqual(model.levels[0], 0.8, accuracy: 0.01)
+        XCTAssertGreaterThan(model.levels[3], 0.5, "older samples ripple outward")
+        // With the queue empty the level decays instead of freezing.
+        for _ in 0..<30 {
+            model.advanceFrame()
+        }
+        XCTAssertLessThan(model.levels[0], 0.1)
         model.stopListening()
         XCTAssertFalse(model.showsWaveform)
         XCTAssertEqual(model.levels, [CGFloat](repeating: 0, count: FloatingHUDModel.waveformHistoryCount))
@@ -181,6 +192,55 @@ final class PresentationModelTests: XCTestCase {
         fixture.model.prepareTutorialReplay()
         XCTAssertTrue(fixture.model.onboardingCompleted)
         XCTAssertTrue(fixture.settings.onboardingCompleted)
+    }
+}
+
+final class VoiceLevelMeterTests: XCTestCase {
+    private func rms(db: Float) -> Float {
+        pow(10, db / 20)
+    }
+
+    private func settle(_ meter: inout VoiceLevelMeter, db: Float, chunks: Int) -> Float {
+        var level: Float = 0
+        for _ in 0..<chunks {
+            level = meter.process(rms: rms(db: db))
+        }
+        return level
+    }
+
+    func testSteadyBackgroundNoiseReadsAsSilence() {
+        var meter = VoiceLevelMeter()
+        // Two seconds of a fan at -50 dBFS.
+        XCTAssertLessThan(settle(&meter, db: -50, chunks: 120), 0.05)
+
+        // A noisier room (-40 dBFS) is learned within a few seconds.
+        var noisy = VoiceLevelMeter()
+        XCTAssertLessThan(settle(&noisy, db: -40, chunks: 180), 0.05)
+    }
+
+    func testSpeechSitsMidRangeAndShoutingStaysBelowTheTop() {
+        var meter = VoiceLevelMeter()
+        _ = settle(&meter, db: -55, chunks: 60)
+
+        let speech = settle(&meter, db: -25, chunks: 30)
+        XCTAssertGreaterThan(speech, 0.45)
+        XCTAssertLessThan(speech, 0.8)
+
+        let shout = settle(&meter, db: -3, chunks: 30)
+        XCTAssertGreaterThan(shout, speech)
+        XCTAssertLessThanOrEqual(shout, VoiceLevelMeter.ceiling)
+        XCTAssertLessThan(shout, 0.9)
+    }
+
+    func testBarsSettleGentlyAfterSpeechStops() {
+        var meter = VoiceLevelMeter()
+        _ = settle(&meter, db: -55, chunks: 60)
+        let speaking = settle(&meter, db: -25, chunks: 30)
+
+        let afterOneFrame = meter.process(rms: rms(db: -55))
+        XCTAssertGreaterThan(afterOneFrame, speaking * 0.8, "no sudden drop")
+        let afterHalfSecond = settle(&meter, db: -55, chunks: 30)
+        XCTAssertLessThan(afterHalfSecond, 0.05)
     }
 }
 

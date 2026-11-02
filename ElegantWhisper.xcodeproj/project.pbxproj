@@ -31,6 +31,7 @@
 		010000000000000000000046 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000046 /* AboutView.swift */; };
 		010000000000000000000047 /* OnboardingTutorialView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000047 /* OnboardingTutorialView.swift */; };
 		010000000000000000000048 /* LearningDiffEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000048 /* LearningDiffEngine.swift */; };
+		0100000000000000000000F2 /* VocabularyCorrector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0200000000000000000000F2 /* VocabularyCorrector.swift */; };
 		010000000000000000000004 /* AppError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000004 /* AppError.swift */; };
 		010000000000000000000005 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000005 /* AppState.swift */; };
 		010000000000000000000006 /* AudioRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000006 /* AudioRecorder.swift */; };
@@ -104,6 +105,7 @@
 		020000000000000000000046 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = About/AboutView.swift; sourceTree = "<group>"; };
 		020000000000000000000047 /* OnboardingTutorialView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Onboarding/OnboardingTutorialView.swift; sourceTree = "<group>"; };
 		020000000000000000000048 /* LearningDiffEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LearningDiffEngine.swift; sourceTree = "<group>"; };
+		0200000000000000000000F2 /* VocabularyCorrector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VocabularyCorrector.swift; sourceTree = "<group>"; };
 		020000000000000000000004 /* AppError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppError.swift; sourceTree = "<group>"; };
 		020000000000000000000005 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		020000000000000000000006 /* AudioRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorder.swift; sourceTree = "<group>"; };
@@ -267,6 +269,7 @@
 			children = (
 				020000000000000000000017 /* DictationSession.swift */,
 				020000000000000000000048 /* LearningDiffEngine.swift */,
+				0200000000000000000000F2 /* VocabularyCorrector.swift */,
 				020000000000000000000027 /* PostEditLearner.swift */,
 			);
 			path = Dictation;
@@ -524,6 +527,7 @@
 				01000000000000000000000F /* PermissionManager.swift in Sources */,
 				01000000000000000000002A /* OpenAICompatibleCodec.swift in Sources */,
 				010000000000000000000048 /* LearningDiffEngine.swift in Sources */,
+				0100000000000000000000F2 /* VocabularyCorrector.swift in Sources */,
 				010000000000000000000027 /* PostEditLearner.swift in Sources */,
 				01000000000000000000002D /* PromptStaticContextCache.swift in Sources */,
 				01000000000000000000002B /* LLMProviderCodec.swift in Sources */,
