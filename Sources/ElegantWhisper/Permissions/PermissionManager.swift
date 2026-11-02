@@ -39,6 +39,14 @@ struct PermissionStatus {
 }
 
 final class PermissionManager: Sendable {
+    var microphoneGranted: Bool {
+        AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+    }
+
+    var speechGranted: Bool {
+        SFSpeechRecognizer.authorizationStatus() == .authorized
+    }
+
     func status() -> PermissionStatus {
         let microphone = AVCaptureDevice.authorizationStatus(for: .audio)
         let speech = SFSpeechRecognizer.authorizationStatus()

@@ -26,6 +26,15 @@ final class FocusDetector {
         "AXTextEntryArea"
     ]
 
+    // AX calls are synchronous IPC into the target app and default to a ~6 s timeout. They run on
+    // MainActor in the hotkey and paste paths, so cap them process-wide; a busy target app should
+    // cost a missing hint, not a frozen ElegantWhisper.
+    private static let messagingTimeout: Float = 0.5
+
+    init() {
+        AXUIElementSetMessagingTimeout(AXUIElementCreateSystemWide(), Self.messagingTimeout)
+    }
+
     func currentEditableTarget() -> FocusTarget? {
         guard AXIsProcessTrusted(),
               let focused = focusedElement(),

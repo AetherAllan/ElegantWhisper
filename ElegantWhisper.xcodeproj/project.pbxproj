@@ -27,6 +27,7 @@
 		010000000000000000000043 /* FloatingHUDView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000043 /* FloatingHUDView.swift */; };
 		010000000000000000000044 /* MenuBarContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000044 /* MenuBarContentView.swift */; };
 		010000000000000000000045 /* PermissionViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000045 /* PermissionViews.swift */; };
+		0100000000000000000000F1 /* DesignComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0200000000000000000000F1 /* DesignComponents.swift */; };
 		010000000000000000000046 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000046 /* AboutView.swift */; };
 		010000000000000000000047 /* OnboardingTutorialView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000047 /* OnboardingTutorialView.swift */; };
 		010000000000000000000048 /* LearningDiffEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000048 /* LearningDiffEngine.swift */; };
@@ -45,7 +46,7 @@
 		01000000000000000000000E /* OptionKeyMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02000000000000000000000E /* OptionKeyMonitor.swift */; };
 		01000000000000000000000F /* PermissionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02000000000000000000000F /* PermissionManager.swift */; };
 		010000000000000000000011 /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000011 /* SettingsStore.swift */; };
-		010000000000000000000013 /* SpeechTranscriber.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000013 /* SpeechTranscriber.swift */; };
+		010000000000000000000013 /* SpeechEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000013 /* SpeechEngine.swift */; };
 		010000000000000000000014 /* TextInjector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000014 /* TextInjector.swift */; };
 		010000000000000000000016 /* ShortcutDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000016 /* ShortcutDetector.swift */; };
 		010000000000000000000017 /* DictationSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000017 /* DictationSession.swift */; };
@@ -99,6 +100,7 @@
 		020000000000000000000043 /* FloatingHUDView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingHUDView.swift; sourceTree = "<group>"; };
 		020000000000000000000044 /* MenuBarContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarContentView.swift; sourceTree = "<group>"; };
 		020000000000000000000045 /* PermissionViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionViews.swift; sourceTree = "<group>"; };
+		0200000000000000000000F1 /* DesignComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignComponents.swift; sourceTree = "<group>"; };
 		020000000000000000000046 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = About/AboutView.swift; sourceTree = "<group>"; };
 		020000000000000000000047 /* OnboardingTutorialView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Onboarding/OnboardingTutorialView.swift; sourceTree = "<group>"; };
 		020000000000000000000048 /* LearningDiffEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LearningDiffEngine.swift; sourceTree = "<group>"; };
@@ -117,7 +119,7 @@
 		02000000000000000000000E /* OptionKeyMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OptionKeyMonitor.swift; sourceTree = "<group>"; };
 		02000000000000000000000F /* PermissionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionManager.swift; sourceTree = "<group>"; };
 		020000000000000000000011 /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
-		020000000000000000000013 /* SpeechTranscriber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechTranscriber.swift; sourceTree = "<group>"; };
+		020000000000000000000013 /* SpeechEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechEngine.swift; sourceTree = "<group>"; };
 		020000000000000000000014 /* TextInjector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextInjector.swift; sourceTree = "<group>"; };
 		020000000000000000000016 /* ShortcutDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutDetector.swift; sourceTree = "<group>"; };
 		020000000000000000000017 /* DictationSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationSession.swift; sourceTree = "<group>"; };
@@ -254,7 +256,7 @@
 				02000000000000000000002E /* RecognitionLanguage.swift */,
 				020000000000000000000030 /* SpeechContext.swift */,
 				02000000000000000000002F /* SpeechVocabulary.swift */,
-				020000000000000000000013 /* SpeechTranscriber.swift */,
+				020000000000000000000013 /* SpeechEngine.swift */,
 				020000000000000000000032 /* SystemOutputMute.swift */,
 			);
 			path = Audio;
@@ -365,6 +367,7 @@
 			isa = PBXGroup;
 			children = (
 				020000000000000000000045 /* PermissionViews.swift */,
+				0200000000000000000000F1 /* DesignComponents.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -507,6 +510,7 @@
 				010000000000000000000046 /* AboutView.swift in Sources */,
 				010000000000000000000044 /* MenuBarContentView.swift in Sources */,
 				010000000000000000000045 /* PermissionViews.swift in Sources */,
+				0100000000000000000000F1 /* DesignComponents.swift in Sources */,
 				010000000000000000000009 /* FocusDetector.swift in Sources */,
 				01000000000000000000000A /* HistoryStore.swift in Sources */,
 				01000000000000000000000B /* InputSourceManager.swift in Sources */,
@@ -528,7 +532,7 @@
 				010000000000000000000016 /* ShortcutDetector.swift in Sources */,
 				010000000000000000000030 /* SpeechContext.swift in Sources */,
 				01000000000000000000002F /* SpeechVocabulary.swift in Sources */,
-				010000000000000000000013 /* SpeechTranscriber.swift in Sources */,
+				010000000000000000000013 /* SpeechEngine.swift in Sources */,
 				010000000000000000000025 /* StylePackStore.swift in Sources */,
 				010000000000000000000014 /* TextInjector.swift in Sources */,
 				01000000000000000000001B /* LLMPromptBuilder.swift in Sources */,

@@ -15,6 +15,66 @@ struct HistoryItem: Codable, Identifiable {
     let bundleIdentifier: String?
     let text: String
     let result: HistoryResult
+    /// Recording length. Optional so history written before this field still decodes.
+    var duration: TimeInterval? = nil
+}
+
+/// Lifetime totals for the Home dashboard. Unlike history this keeps no text, so it is kept even
+/// when history saving is off, and it is not capped at the last 200 dictations.
+struct UsageStats: Codable, Equatable {
+    /// Typing baseline for "time saved". A typical typing speed, not a measured one.
+    static let typingWordsPerMinute: Double = 40
+
+    var dictations = 0
+    var words = 0
+    var speakingSeconds: TimeInterval = 0
+
+    var wordsPerMinute: Int? {
+        guard speakingSeconds >= 5, words > 0 else { return nil }
+        return Int((Double(words) / (speakingSeconds / 60)).rounded())
+    }
+
+    var minutesSaved: Double {
+        max(0, Double(words) / Self.typingWordsPerMinute - speakingSeconds / 60)
+    }
+
+    mutating func record(text: String, duration: TimeInterval?) {
+        dictations += 1
+        words += Self.wordCount(text)
+        speakingSeconds += duration ?? 0
+    }
+
+    /// Counts each CJK character as a word and each run of letters or digits as one word, so the
+    /// numbers stay comparable between English and Chinese, Japanese, or Korean dictation.
+    static func wordCount(_ text: String) -> Int {
+        var count = 0
+        var inWord = false
+        for scalar in text.unicodeScalars {
+            if isCJK(scalar) {
+                count += 1
+                inWord = false
+            } else if CharacterSet.alphanumerics.contains(scalar) {
+                if !inWord {
+                    count += 1
+                    inWord = true
+                }
+            } else if inWord, scalar == "'" || scalar == "\u{2019}" {
+                continue
+            } else {
+                inWord = false
+            }
+        }
+        return count
+    }
+
+    private static func isCJK(_ scalar: Unicode.Scalar) -> Bool {
+        switch scalar.value {
+        case 0x3040...0x30FF, 0x3400...0x4DBF, 0x4E00...0x9FFF, 0xAC00...0xD7AF, 0xF900...0xFAFF:
+            true
+        default:
+            false
+        }
+    }
 }
 
 // History mutations are serialized on `queue`; readers receive value-type
@@ -44,14 +104,15 @@ final class HistoryStore: @unchecked Sendable {
         }
     }
 
-    func append(text: String, result: HistoryResult, app: NSRunningApplication?) {
+    func append(text: String, result: HistoryResult, app: NSRunningApplication?, duration: TimeInterval? = nil) {
         let item = HistoryItem(
             id: UUID(),
             createdAt: Date(),
             appName: app?.localizedName,
             bundleIdentifier: app?.bundleIdentifier,
             text: text,
-            result: result
+            result: result,
+            duration: duration
         )
 
         queue.async {

@@ -45,7 +45,7 @@ Command shortcuts such as Cmd+V/C/A/Z and Option combined with other keys keep n
 
 ### What stays on your Mac
 
-When you start dictation, ElegantWhisper may read the **focused editable field** through Accessibility (same permission used for text insertion). It does **not** upload that field's contents. Instead it:
+When you start dictation, ElegantWhisper may read the **focused editable field** through Accessibility (same permission used for text insertion). It does **not** upload that field's contents unless you turn on the opt-in described in [Optional: text around the cursor](#optional-text-around-the-cursor). Instead it:
 
 - Extracts up to **12 high-value tokens** (technical words, camelCase identifiers, etc.) from the focused field for local Apple Speech `contextualStrings`.
 - Skips secure password fields and filters URLs, emails, and obvious secret-like strings before token extraction.
@@ -60,6 +60,10 @@ Each polish request sends to your configured OpenAI-compatible provider:
 - Optional **local context** appended to the system prompt: foreground **app name** (≤40 characters) and up to **20 vocabulary hints** (AX-focused tokens plus active Style Pack seed terms, deduped)—not the full editor text.
 
 No conversation history from prior dictations is sent. Each refinement is a single independent request.
+
+### Optional: text around the cursor
+
+**Settings → AI Provider → Send text around the cursor** is off by default. When you turn it on (and polishing is enabled), each polish request also includes up to **400 characters before and 120 after** the insertion point, so the model can match names, terms, and spelling already in your document. Secure password fields are skipped, and links, emails, and secret-like strings are replaced with `[redacted]` before sending. Fields that do not support range reads are only read in full when they hold 20,000 characters or fewer.
 
 ## Requirements
 
@@ -153,6 +157,7 @@ Open Settings from the main window's `Application` sidebar section. The same sec
 
 The Settings page keeps its existing General, AI Provider, and Permissions tabs. Use it to configure:
 
+- Recognition model: Apple Speech (newer `SpeechTranscriber`, default) or Apple Dictation (classic `DictationTranscriber`); both run on device
 - API Base URL, API Key, Model, and request timeout
 - Whether to keep text on the clipboard when no editable field is available
 - Whether to save local transcription history

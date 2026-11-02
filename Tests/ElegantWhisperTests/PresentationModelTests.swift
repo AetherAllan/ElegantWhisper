@@ -6,13 +6,45 @@ final class PresentationModelTests: XCTestCase {
     func testFloatingHUDKeepsBoundedNewestPreview() {
         let model = FloatingHUDModel()
 
-        model.showRecording(text: "1234567890abcdefghijkl")
+        let longText = String(repeating: "x", count: 10) + String(repeating: "0123456789", count: 5)
+        model.showRecording(text: longText)
 
         XCTAssertTrue(model.showsWaveform)
-        XCTAssertEqual(model.text, "7890abcdefghijkl")
+        XCTAssertEqual(model.text.count, FloatingHUDModel.previewLimit)
+        XCTAssertTrue(longText.hasSuffix(model.text))
         model.showStatus("Polishing...")
         XCTAssertFalse(model.showsWaveform)
+        XCTAssertEqual(model.phase, .working)
         XCTAssertEqual(model.text, "Polishing...")
+        model.showStatus("Inserted", phase: .success)
+        XCTAssertEqual(model.phase, .success)
+    }
+
+    @MainActor
+    func testFloatingHUDWaveformKeepsNewestLevelFirst() {
+        let model = FloatingHUDModel()
+        model.showRecording(text: "")
+
+        model.updateLevel(0.2)
+        model.updateLevel(0.8)
+
+        XCTAssertEqual(model.levels.count, FloatingHUDModel.waveformHistoryCount)
+        XCTAssertEqual(model.levels[0], 0.8)
+        XCTAssertEqual(model.levels[1], 0.2)
+        model.stopListening()
+        XCTAssertFalse(model.showsWaveform)
+        XCTAssertEqual(model.levels, [CGFloat](repeating: 0, count: FloatingHUDModel.waveformHistoryCount))
+    }
+
+    func testTranscriptNormalizationRemovesSpacesAroundCJKPunctuation() {
+        XCTAssertEqual(
+            SpeechEngine.normalizedTranscript("明天下午 3:30开会 ，记得把报告发给王经理 。 好的"),
+            "明天下午 3:30开会，记得把报告发给王经理。好的"
+        )
+        XCTAssertEqual(
+            SpeechEngine.normalizedTranscript("Restart Redis, then push."),
+            "Restart Redis, then push."
+        )
     }
 
     func testFloatingPanelPlacementHandlesNegativeScreenCoordinates() {
@@ -149,6 +181,79 @@ final class PresentationModelTests: XCTestCase {
         fixture.model.prepareTutorialReplay()
         XCTAssertTrue(fixture.model.onboardingCompleted)
         XCTAssertTrue(fixture.settings.onboardingCompleted)
+    }
+}
+
+final class DashboardModelTests: XCTestCase {
+    func testWordCountTreatsCJKCharactersAsWords() {
+        XCTAssertEqual(UsageStats.wordCount("Don't restart Redis 2 times"), 5)
+        XCTAssertEqual(UsageStats.wordCount("我想用 Python 解析"), 6)
+        XCTAssertEqual(UsageStats.wordCount("  "), 0)
+    }
+
+    func testUsageStatsPaceAndTimeSaved() {
+        var stats = UsageStats()
+        stats.record(text: String(repeating: "word ", count: 120), duration: 60)
+
+        XCTAssertEqual(stats.dictations, 1)
+        XCTAssertEqual(stats.wordsPerMinute, 120)
+        // 120 words take 3 minutes to type at 40 wpm; speaking took 1 minute.
+        XCTAssertEqual(stats.minutesSaved, 2, accuracy: 0.001)
+    }
+
+    func testInsightsStreakAndWeek() throws {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 11, day: 2, hour: 12)))
+        func item(daysAgo: Int, result: HistoryResult = .pasteAttempted) -> HistoryItem {
+            HistoryItem(
+                id: UUID(),
+                createdAt: calendar.date(byAdding: .day, value: -daysAgo, to: now)!,
+                appName: nil,
+                bundleIdentifier: nil,
+                text: "hello world",
+                result: result
+            )
+        }
+        // Yesterday and the two days before count; today is empty, and day 4 breaks the run.
+        let items = [item(daysAgo: 1), item(daysAgo: 2), item(daysAgo: 3), item(daysAgo: 5), item(daysAgo: 9), item(daysAgo: 0, result: .failed)]
+        let insights = HistoryInsights(items: items, now: now, calendar: calendar)
+
+        XCTAssertEqual(insights.streakDays, 3)
+        XCTAssertEqual(insights.dictationsThisWeek, 4)
+        XCTAssertEqual(insights.dailyWords.count, 14)
+        XCTAssertEqual(insights.dailyWords.last?.words, 0)
+        XCTAssertEqual(insights.dailyWords[12].words, 2)
+    }
+
+    func testHistoryGroupsByDayNewestFirst() throws {
+        let calendar = Calendar(identifier: .gregorian)
+        let base = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 11, day: 2, hour: 15)))
+        let times = [0.0, -3_600, -86_400, -90_000].map { base.addingTimeInterval($0) }
+        let items = times.map {
+            HistoryItem(id: UUID(), createdAt: $0, appName: nil, bundleIdentifier: nil, text: "x", result: .copied)
+        }
+        let sections = HistoryDaySection.group(items, calendar: calendar)
+
+        XCTAssertEqual(sections.map(\.items.count), [2, 2])
+        XCTAssertEqual(sections.first?.items.first?.id, items.first?.id)
+    }
+
+    @MainActor
+    func testImmediateSettingAppliesAndSyncsFromMenuBar() throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanup() }
+        let settings = fixture.model.settings
+        settings.draft.model = "unsaved-model"
+
+        settings.immediate(\.language) { $0.language = $1 }.wrappedValue = .japanese
+        XCTAssertEqual(fixture.settings.language, .japanese)
+        XCTAssertEqual(fixture.model.currentLanguage, .japanese)
+
+        // A change from the menu bar must reach the open form without clobbering unsaved fields.
+        fixture.model.setLLMEnabled(true)
+        XCTAssertTrue(settings.draft.llmEnabled)
+        XCTAssertEqual(settings.draft.model, "unsaved-model")
+        XCTAssertTrue(settings.isDirty)
     }
 }
 

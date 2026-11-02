@@ -15,3 +15,18 @@ enum RecognitionLanguage: String, CaseIterable, Codable {
         }
     }
 }
+
+/// Apple on-device model used for dictation. Both run through SpeechAnalyzer.
+enum SpeechRecognitionModel: String, CaseIterable, Codable {
+    /// Apple's newer general-purpose model (`SpeechTranscriber`, macOS 26+).
+    case speech
+    /// The classic dictation model (`DictationTranscriber`) the app used before.
+    case dictation
+
+    var title: String {
+        switch self {
+        case .speech: "Apple Speech (newer)"
+        case .dictation: "Apple Dictation (classic)"
+        }
+    }
+}

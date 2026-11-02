@@ -38,6 +38,30 @@ enum AppRoute: String, CaseIterable, Hashable, Identifiable {
     }
 }
 
+enum SettingsTab: String, CaseIterable, Identifiable {
+    case general
+    case ai
+    case permissions
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .general: "General"
+        case .ai: "Polishing"
+        case .permissions: "Permissions"
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .general: "gearshape"
+        case .ai: "sparkles"
+        case .permissions: "hand.raised"
+        }
+    }
+}
+
 @MainActor
 @Observable
 final class AppModel {
@@ -52,11 +76,14 @@ final class AppModel {
     let settings: SettingsModel
 
     var route: AppRoute = .home
+    var settingsTab: SettingsTab = .general
     private(set) var mode: AppMode = .idle
     private(set) var permissionStatus: PermissionStatus
     private(set) var microphones: [AudioInputDevice] = []
     private(set) var currentMicrophoneUID: String?
     private(set) var currentLanguage: RecognitionLanguage
+    private(set) var currentSpeechModel: SpeechRecognitionModel
+    private(set) var usage: UsageStats
     private(set) var llmEnabled: Bool
     private(set) var llmProvider: LLMProvider
     private(set) var onboardingCompleted: Bool
@@ -86,16 +113,32 @@ final class AppModel {
         self.settings = SettingsModel(store: settings, controller: controller)
         permissionStatus = controller.permissionStatus()
         currentLanguage = settings.language
+        currentSpeechModel = settings.speechModel
+        usage = settings.usageStats
         llmEnabled = settings.llmEnabled
         llmProvider = settings.llmProvider
         onboardingCompleted = settings.onboardingCompleted
+        seedUsageFromHistoryIfNeeded()
         reloadSnapshots()
+        self.settings.onApply = { [weak self] in self?.settingsApplied() }
+    }
+
+    /// Lifetime stats started after history did. Seed them once from saved history so existing
+    /// users do not see an empty dashboard. Durations were not recorded then, so pace starts later.
+    private func seedUsageFromHistoryIfNeeded() {
+        guard usage.dictations == 0, !history.items.isEmpty else { return }
+        var seeded = UsageStats()
+        for item in history.items where item.result != .failed {
+            seeded.record(text: item.text, duration: item.duration)
+        }
+        settingsStore.usageStats = seeded
+        usage = seeded
     }
 
     func start() {
         guard !started else { return }
         started = true
-        controller.onChange = { [weak self] in self?.reloadSnapshots() }
+        controller.onChange = { [weak self] in self?.reloadDictationState() }
         controller.onUserMessage = { [weak self] message in self?.notice = message }
         controller.start()
         reloadSnapshots()
@@ -137,6 +180,11 @@ final class AppModel {
     }
 
     func openSettings() {
+        route = .settings
+    }
+
+    func openPermissionSettings() {
+        settingsTab = .permissions
         route = .settings
     }
 
@@ -200,11 +248,10 @@ final class AppModel {
         dictionary.reload()
     }
 
-    func saveGeneralSettings() {
-        settings.saveGeneral()
-        dictionary.language = settings.draft.language
+    private func settingsApplied() {
+        dictionary.language = settingsStore.language
         reloadRuntimeSettings()
-        notice = "Settings saved"
+        controller.prewarmSpeech()
     }
 
     func saveAISettings() {
@@ -221,10 +268,13 @@ final class AppModel {
 
     func setLanguage(_ language: RecognitionLanguage) {
         controller.setLanguage(language)
+        dictionary.language = language
+        reloadRuntimeSettings()
     }
 
     func setLLMEnabled(_ enabled: Bool) {
         controller.setLLMEnabled(enabled)
+        reloadRuntimeSettings()
     }
 
     func refreshMicrophones() {
@@ -252,7 +302,10 @@ final class AppModel {
 
     func requestSpeechPermission() {
         if permissionStatus.speechDetail == "Not requested" {
-            controller.requestSpeechPermission { [weak self] _ in self?.reloadSnapshots() }
+            controller.requestSpeechPermission { [weak self] _ in
+                self?.reloadSnapshots()
+                self?.controller.prewarmSpeech()
+            }
         } else {
             controller.openSpeechSettings()
         }
@@ -308,11 +361,26 @@ final class AppModel {
         history.reload()
         dictionary.reload()
         styles.reloadPacks()
+        usage = settingsStore.usageStats
         reloadRuntimeSettings()
+    }
+
+    /// Runs on every dictation state change, so it skips the permission probe and Style Pack
+    /// reload in reloadSnapshots(). Lists only change once a dictation ends.
+    private func reloadDictationState() {
+        mode = controller.state.mode
+        reloadRuntimeSettings()
+        if mode == .idle {
+            history.reload()
+            dictionary.reload()
+            usage = settingsStore.usageStats
+        }
     }
 
     private func reloadRuntimeSettings() {
         currentLanguage = settingsStore.language
+        currentSpeechModel = settingsStore.speechModel
+        settings.syncImmediateFields()
         llmEnabled = settingsStore.llmEnabled
         llmProvider = settingsStore.llmProvider
     }

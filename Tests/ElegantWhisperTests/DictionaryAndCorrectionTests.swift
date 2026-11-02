@@ -204,3 +204,31 @@ final class DictionaryAndCorrectionTests: XCTestCase {
         return directory.appendingPathComponent("dictionary.json")
     }
 }
+
+final class CursorTextContextTests: XCTestCase {
+    func testCursorTextIsBoundedAndRedacted() throws {
+        let before = String(repeating: "lorem ", count: 100) + " mail me at dev@example.com, key sk-abc123 see https://x.dev/p ok"
+        let context = try XCTUnwrap(CursorTextContext(before: before, after: String(repeating: "word ", count: 60)))
+
+        XCTAssertLessThanOrEqual(context.before.count, CursorTextContext.beforeLimit)
+        XCTAssertEqual(context.after.count, CursorTextContext.afterLimit)
+        XCTAssertFalse(context.before.contains("dev@example.com"))
+        XCTAssertFalse(context.before.contains("sk-abc123"))
+        XCTAssertFalse(context.before.contains("https://x.dev"))
+        XCTAssertTrue(context.before.hasSuffix("[redacted] ok"))
+    }
+
+    func testEmptyCursorTextIsDropped() {
+        XCTAssertNil(CursorTextContext(before: "  \n", after: ""))
+    }
+
+    func testPromptSectionFencesCursorText() throws {
+        let cursor = try XCTUnwrap(CursorTextContext(before: "Deploy to Kubernetes via ", after: " tonight."))
+        let context = SpeechFocusContext(appName: "Notes", terms: [], cursorText: cursor)
+        let section = try XCTUnwrap(context.promptSection)
+
+        XCTAssertTrue(section.hasPrefix("Local context:"))
+        XCTAssertTrue(section.contains("<editor_text>Deploy to Kubernetes via [CURSOR] tonight.</editor_text>"))
+        XCTAssertNil(SpeechFocusContext(appName: nil, terms: []).promptSection)
+    }
+}

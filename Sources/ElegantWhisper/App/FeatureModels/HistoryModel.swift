@@ -13,7 +13,13 @@ final class HistoryModel {
     }
 
     func reload() {
-        items = store.items()
+        let latest = store.items()
+        // Items are immutable, so matching ids mean nothing changed. Skipping the assignment keeps
+        // Home and History from re-rendering on every dictation state change.
+        guard latest.map(\.id) != items.map(\.id) else {
+            return
+        }
+        items = latest
     }
 
     func clear() {

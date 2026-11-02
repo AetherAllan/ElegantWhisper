@@ -10,7 +10,7 @@ final class AppController {
     private let monitor = OptionKeyMonitor()
     private let recorder = AudioRecorder()
     private let outputMute = SystemOutputMute.shared
-    private let transcriber = SpeechTranscriber()
+    private let transcriber = SpeechEngine()
     private let dictionary = DictionaryStore.shared
     private let stylePacks: StylePackStore
     private let focusDetector = FocusDetector()
@@ -26,9 +26,11 @@ final class AppController {
     private var monitorStarted = false
     private var loggedFirstAudioLevel = false
     private var refinementTask: LLMRefinementTask?
+    private var recordingStartedAt: ContinuousClock.Instant?
     private var recordingStoppedAt: ContinuousClock.Instant?
     private var ignoreToggleCancellationUntil: ContinuousClock.Instant?
     private var speechContext: SpeechFocusContext?
+    private var transcriberStart: Task<Void, Error>?
 
     var onChange: (@MainActor () -> Void)?
     var onUserMessage: (@MainActor (String) -> Void)?
@@ -75,6 +77,19 @@ final class AppController {
         let transcriber = transcriber
         recorder.onBuffer = { buffer in
             transcriber.append(buffer)
+        }
+        prewarmSpeech()
+    }
+
+    /// Resolve the speech model before the first hotkey press so starting dictation stays fast.
+    func prewarmSpeech() {
+        guard permissions.speechGranted else {
+            return
+        }
+        let language = settings.language
+        let model = settings.speechModel
+        Task { [transcriber] in
+            await transcriber.prewarm(language: language, model: model)
         }
     }
 
@@ -130,14 +145,15 @@ final class AppController {
             return
         }
 
-        let status = permissions.status()
-        if !status.microphoneGranted {
+        // Only the two cheap TCC reads here: the full status() probes an event tap, which does not
+        // belong on the path between the hotkey and the microphone opening.
+        if !permissions.microphoneGranted {
             permissions.requestMicrophone { [weak self] granted in
                 granted ? self?.startRecording() : self?.showError("Microphone permission missing")
             }
             return
         }
-        if !status.speechGranted {
+        if !permissions.speechGranted {
             permissions.requestSpeech { [weak self] granted in
                 granted ? self?.startRecording() : self?.showError("Speech permission missing")
             }
@@ -162,17 +178,46 @@ final class AppController {
         guard state.transition(to: .preparing), let sessionID = currentSession?.id else {
             return
         }
+
+        // Open the microphone before analyzer setup and AX context reads. SpeechEngine holds audio
+        // that arrives before the analyzer runs, so the first words are not clipped.
+        transcriber.beginSession()
+        do {
+            try recorder.start()
+        } catch {
+            showError(error.localizedDescription)
+            return
+        }
+        DebugLog.event("recordingStart")
+        recordingStartedAt = clock.now
+        guard state.transition(to: .recording) else {
+            recorder.stop()
+            transcriber.cancel()
+            return
+        }
+        scheduleOutputMuteIfEnabled()
+        panel.showRecording(text: "")
+        panel.retryShowIfNeeded()
+        DebugLog.event("panelShow")
+        onChange?()
+
         let language = settings.language
+        let model = settings.speechModel
         // AX → token extract: snippets stay on-device; terms → Apple Speech + optional LLM local context.
         let snippets = AXFocusedTextContextReader.snippets(from: target)
         let focusedTerms = SpeechContextTermExtractor.terms(from: snippets)
         let activePack = stylePacks.activePack()
+        // Raw editor text leaves the Mac only with polishing on and the explicit opt-in.
+        let cursorText = settings.llmEnabled && settings.shareCursorTextWithLLM
+            ? AXFocusedTextContextReader.cursorText(from: target)
+            : nil
         let context = SpeechFocusContext(
             appName: contextAppName(target: target, application: originalApplication),
             terms: SpeechFocusContext.vocabularyHints(
                 focused: focusedTerms,
                 seed: StylePackStore.seedTerms(for: activePack.id)
-            )
+            ),
+            cursorText: cursorText
         )
         speechContext = context
         let vocabulary = SpeechVocabulary.terms(
@@ -181,43 +226,24 @@ final class AppController {
             language: language,
             focusedTerms: focusedTerms
         )
-        DebugLog.event("asrContextBuilt total=\(vocabulary.count) focused=\(focusedTerms.count) llmTerms=\(context.terms.count) usedAX=\(!snippets.isEmpty) target=\(target != nil) appContext=\(context.appName != nil)")
-        panel.showStatus("Preparing...")
-        panel.retryShowIfNeeded()
-        DebugLog.event("panelShow")
-        onChange?()
+        DebugLog.event("asrContextBuilt total=\(vocabulary.count) focused=\(focusedTerms.count) llmTerms=\(context.terms.count) usedAX=\(!snippets.isEmpty) target=\(target != nil) appContext=\(context.appName != nil) cursorChars=\((cursorText?.before.count ?? 0) + (cursorText?.after.count ?? 0))")
 
-        Task { [weak self] in
-            await self?.prepareRecording(language: language, contextualStrings: vocabulary, sessionID: sessionID)
+        let start = Task { [transcriber] in
+            try await transcriber.start(language: language, model: model, contextualStrings: vocabulary)
         }
-    }
-
-    private func prepareRecording(
-        language: RecognitionLanguage,
-        contextualStrings: [String],
-        sessionID: UUID
-    ) async {
-        do {
-            try await transcriber.start(language: language, contextualStrings: contextualStrings)
-            guard isCurrentSession(sessionID), state.mode == .preparing else {
-                transcriber.cancel()
+        transcriberStart = start
+        Task { [weak self] in
+            do {
+                try await start.value
+                DebugLog.event("speechAnalyzerReady")
+            } catch is CancellationError {
                 return
+            } catch {
+                guard let self, self.isCurrentSession(sessionID) else {
+                    return
+                }
+                self.showError(error.localizedDescription)
             }
-            try recorder.start()
-            DebugLog.event("recordingStart")
-            guard state.transition(to: .recording) else {
-                recorder.stop()
-                transcriber.cancel()
-                return
-            }
-            scheduleOutputMuteIfEnabled()
-            panel.showRecording(text: "")
-            onChange?()
-        } catch {
-            guard isCurrentSession(sessionID) else {
-                return
-            }
-            showError(error.localizedDescription)
         }
     }
 
@@ -239,8 +265,21 @@ final class AppController {
             showError("No active session")
             return
         }
-        transcriber.finish { [weak self] text in
-            self?.handleFinalTranscript(text, sessionID: sessionID)
+        // The analyzer may still be starting (held audio is replayed once it runs). Finalize only
+        // after it is up; a failed start already reported its error and ended the session.
+        let start = transcriberStart
+        Task { [weak self] in
+            do {
+                try await start?.value
+            } catch {
+                return
+            }
+            guard let self, self.isCurrentSession(sessionID) else {
+                return
+            }
+            self.transcriber.finish { [weak self] text in
+                self?.handleFinalTranscript(text, sessionID: sessionID)
+            }
         }
     }
 
@@ -256,6 +295,7 @@ final class AppController {
         refinementTask = nil
         recordingStoppedAt = nil
         ignoreToggleCancellationUntil = nil
+        transcriberStart = nil
         currentSession = nil
         postEditLearner.stop()
         latestPartial = ""
@@ -278,6 +318,7 @@ final class AppController {
             refinementTask = nil
             recordingStoppedAt = nil
             ignoreToggleCancellationUntil = nil
+            transcriberStart = nil
             currentSession = nil
             postEditLearner.stop()
             latestPartial = ""
@@ -294,6 +335,7 @@ final class AppController {
 
     func setLanguage(_ language: RecognitionLanguage) {
         settings.language = language
+        prewarmSpeech()
         onChange?()
     }
 
@@ -404,36 +446,61 @@ final class AppController {
         }
 
         let historyApp = target?.app ?? fallbackApp ?? originalTarget?.app ?? originalApplication
+        let duration = recordingStartedAt.flatMap { start in
+            recordingStoppedAt.map { Self.seconds(start.duration(to: $0)) }
+        }
         let learningContext = postEditLearner.prepare(
             target: target,
             insertedText: text,
             language: settings.language,
             enabled: settings.postEditLearningEnabled
         ).1
-        injector.inject(text, target: target, fallbackApp: fallbackApp) { [weak self] result in
+        injector.inject(text, target: target, fallbackApp: fallbackApp, pasteSent: { [weak self] in
+            // Cmd+V is posted. The injector still waits before restoring the clipboard, but the
+            // text is already appearing, so free the HUD and the hotkey now.
             guard let self, self.isCurrentSession(sessionID) else {
+                return
+            }
+            self.panel.hide()
+            DebugLog.event("panelHide")
+            self.endInjectedSession()
+        }) { [weak self] result in
+            guard let self else {
                 return
             }
             switch result {
             case .pasteAttempted:
-                self.postEditLearner.start(learningContext)
-                self.panel.hide()
-                DebugLog.event("panelHide")
-                self.saveHistory(text, result: HistoryResult.pasteAttempted, app: historyApp)
+                // The session already ended in pasteSent. Learning reads the pasted value, so it
+                // starts here, unless a new dictation began in the meantime.
+                if self.currentSession == nil, self.state.mode == .idle {
+                    self.postEditLearner.start(learningContext)
+                }
+                self.recordUsage(text, duration: duration)
+                self.saveHistory(text, result: HistoryResult.pasteAttempted, app: historyApp, duration: duration)
+                self.onChange?()
             case .copied:
-                self.panel.showSuccess("复制")
-                self.onUserMessage?("已复制到剪贴板")
-                self.saveHistory(text, result: HistoryResult.copied, app: historyApp)
+                guard self.isCurrentSession(sessionID) else {
+                    return
+                }
+                self.panel.showSuccess("Copied to clipboard")
+                self.onUserMessage?("Copied to clipboard")
+                self.recordUsage(text, duration: duration)
+                self.saveHistory(text, result: HistoryResult.copied, app: historyApp, duration: duration)
+                self.endInjectedSession()
             }
-            self.refinementTask = nil
-            self.recordingStoppedAt = nil
-            self.ignoreToggleCancellationUntil = nil
-            self.currentSession = nil
-            self.latestPartial = ""
-            self.speechContext = nil
-            _ = self.state.transition(to: .idle)
-            self.onChange?()
         }
+    }
+
+    private func endInjectedSession() {
+        refinementTask = nil
+        recordingStoppedAt = nil
+        ignoreToggleCancellationUntil = nil
+        transcriberStart = nil
+        currentSession = nil
+        latestPartial = ""
+        speechContext = nil
+        _ = state.transition(to: .idle)
+        onChange?()
     }
 
     private func showError(_ message: String) {
@@ -444,6 +511,7 @@ final class AppController {
         refinementTask = nil
         recordingStoppedAt = nil
         ignoreToggleCancellationUntil = nil
+        transcriberStart = nil
         currentSession = nil
         postEditLearner.stop()
         latestPartial = ""
@@ -471,13 +539,24 @@ final class AppController {
     }
 
 
-    private func saveHistory(_ text: String, result: HistoryResult, app: NSRunningApplication?) {
+    private func saveHistory(_ text: String, result: HistoryResult, app: NSRunningApplication?, duration: TimeInterval? = nil) {
         guard settings.saveHistory,
               Self.shouldSaveHistory(bundleIdentifier: app?.bundleIdentifier)
         else {
             return
         }
-        HistoryStore.shared.append(text: text, result: result, app: app)
+        HistoryStore.shared.append(text: text, result: result, app: app, duration: duration)
+    }
+
+    private func recordUsage(_ text: String, duration: TimeInterval?) {
+        var stats = settings.usageStats
+        stats.record(text: text, duration: duration)
+        settings.usageStats = stats
+    }
+
+    private static func seconds(_ duration: Duration) -> TimeInterval {
+        let components = duration.components
+        return TimeInterval(components.seconds) + TimeInterval(components.attoseconds) / 1e18
     }
 
     static func shouldSaveHistory(bundleIdentifier: String?) -> Bool {

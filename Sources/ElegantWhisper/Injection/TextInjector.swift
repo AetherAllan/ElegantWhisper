@@ -23,6 +23,7 @@ final class TextInjector {
         _ text: String,
         target: FocusTarget?,
         fallbackApp: NSRunningApplication?,
+        pasteSent: @escaping @MainActor @Sendable () -> Void = {},
         completion: @escaping @MainActor @Sendable (InjectionResult) -> Void
     ) {
         let pasteboard = NSPasteboard.general
@@ -70,6 +71,7 @@ final class TextInjector {
                 completion(.copied)
                 return
             }
+            pasteSent()
 
             try? await Task.sleep(for: .milliseconds(700))
             // Many apps read the pasteboard asynchronously after Cmd+V. Restoring too early

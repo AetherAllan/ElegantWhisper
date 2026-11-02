@@ -5,7 +5,53 @@ import Speech
 // SpeechAnalyzer is async, while AVAudioEngine still delivers microphone buffers
 // synchronously on its realtime tap. This wrapper keeps the old app-facing
 // lifecycle and serializes mutable analyzer state through `queue`.
-final class SpeechTranscriber: @unchecked Sendable {
+//
+// Analyzer setup can take hundreds of milliseconds (longer if a model must be
+// installed), so callers open a session with `beginSession()` and start the
+// microphone first. Audio that arrives before the analyzer is running is held
+// in `pendingBuffers` and replayed in order once `start` installs the input stream.
+final class SpeechEngine: @unchecked Sendable {
+    private struct PreparedSetup {
+        let language: RecognitionLanguage
+        let requestedModel: SpeechRecognitionModel
+        let model: SpeechRecognitionModel
+        let locale: Locale
+        let audioFormat: AVAudioFormat
+    }
+
+    private enum Module {
+        case speech(Speech.SpeechTranscriber)
+        case dictation(DictationTranscriber)
+
+        init(model: SpeechRecognitionModel, locale: Locale) {
+            switch model {
+            case .speech:
+                self = .speech(Speech.SpeechTranscriber(locale: locale, preset: .progressiveTranscription))
+            case .dictation:
+                self = .dictation(DictationTranscriber(locale: locale, preset: .progressiveShortDictation))
+            }
+        }
+
+        var speechModule: any SpeechModule {
+            switch self {
+            case .speech(let module): module
+            case .dictation(let module): module
+            }
+        }
+
+        static func supportedLocale(model: SpeechRecognitionModel, equivalentTo locale: Locale) async -> Locale? {
+            switch model {
+            case .speech:
+                guard Speech.SpeechTranscriber.isAvailable else { return nil }
+                return await Speech.SpeechTranscriber.supportedLocale(equivalentTo: locale)
+            case .dictation:
+                return await DictationTranscriber.supportedLocale(equivalentTo: locale)
+            }
+        }
+    }
+
+    private static let maxPendingSeconds: Double = 30
+
     private let queue = DispatchQueue(label: "com.aetherallan.ElegantWhisper.speech-transcriber")
     private var analyzer: SpeechAnalyzer?
     private var inputContinuation: AsyncStream<AnalyzerInput>.Continuation?
@@ -21,37 +67,57 @@ final class SpeechTranscriber: @unchecked Sendable {
     private var delivered = false
     private var sessionID = 0
     private var timeoutWorkItem: DispatchWorkItem?
+    private var isBuffering = false
+    private var pendingBuffers: [AVAudioPCMBuffer] = []
+    private var pendingFrameCount: AVAudioFramePosition = 0
+    private var preparedSetup: PreparedSetup?
 
     var onPartial: (@MainActor @Sendable (String) -> Void)?
     var onUnexpectedStop: (@MainActor @Sendable (String) -> Void)?
 
-    func start(language: RecognitionLanguage, contextualStrings: [String] = []) async throws {
+    /// Opens a new session that holds microphone audio until `start` has the analyzer running.
+    /// Call this before starting the recorder so speech during analyzer setup is not lost.
+    func beginSession() {
         cancel()
-        let currentSessionID = queue.sync { () -> Int in
-            sessionID += 1
-            finalizedText = ""
-            volatileText = ""
-            completedEarly = false
-            delivered = false
-            timeoutWorkItem?.cancel()
-            timeoutWorkItem = nil
-            return sessionID
+        queue.sync {
+            isBuffering = true
         }
+    }
 
-        let requestedLocale = Locale(identifier: language.rawValue)
-        guard let locale = await DictationTranscriber.supportedLocale(equivalentTo: requestedLocale) else {
-            throw AppError.message("Dictation is unavailable for \(language.rawValue)")
+    /// Resolves the locale, audio format, and model install for `language` ahead of the first
+    /// dictation so the hotkey path does not pay for it.
+    func prewarm(language: RecognitionLanguage, model: SpeechRecognitionModel) async {
+        do {
+            _ = try await setup(for: language, model: model)
+            DebugLog.event("speechPrewarmed")
+        } catch {
+            DebugLog.event("speechPrewarmFailed")
+        }
+    }
+
+    func start(
+        language: RecognitionLanguage,
+        model: SpeechRecognitionModel,
+        contextualStrings: [String] = []
+    ) async throws {
+        if !queue.sync(execute: { isBuffering }) {
+            beginSession()
+        }
+        let currentSessionID = queue.sync { sessionID }
+        try ensureCurrentSession(currentSessionID)
+
+        let setup: PreparedSetup
+        do {
+            setup = try await self.setup(for: language, model: model)
+        } catch {
+            try ensureCurrentSession(currentSessionID)
+            throw error
         }
         try ensureCurrentSession(currentSessionID)
 
-        let module = DictationTranscriber(locale: locale, preset: .progressiveShortDictation)
-        let analyzer = SpeechAnalyzer(modules: [module])
-        guard let audioFormat = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [module]) else {
-            throw AppError.message("No compatible SpeechAnalyzer audio format")
-        }
-        try ensureCurrentSession(currentSessionID)
-        try await ensureModelInstalled(for: module, locale: locale)
-        try ensureCurrentSession(currentSessionID)
+        let audioFormat = setup.audioFormat
+        let module = Module(model: setup.model, locale: setup.locale)
+        let analyzer = SpeechAnalyzer(modules: [module.speechModule])
 
         let context = AnalysisContext()
         context.contextualStrings[.general] = contextualStrings
@@ -70,6 +136,17 @@ final class SpeechTranscriber: @unchecked Sendable {
             self.analyzerFormat = audioFormat
             self.converter = nil
             self.converterInputFormat = nil
+            // Replay held audio before any new tap buffer can reach append(); both run on `queue`.
+            let held = pendingBuffers
+            pendingBuffers = []
+            pendingFrameCount = 0
+            isBuffering = false
+            for buffer in held {
+                if let converted = convertedBuffer(buffer, to: audioFormat) {
+                    input.continuation.yield(AnalyzerInput(buffer: converted))
+                }
+            }
+            DebugLog.event("speechHeldAudioReplayed buffers=\(held.count)")
             return true
         }
         guard shouldStart else {
@@ -86,20 +163,34 @@ final class SpeechTranscriber: @unchecked Sendable {
             resultsTask.cancel()
             input.continuation.finish()
             await analyzer.cancelAndFinishNow()
+            // A cached setup may be stale (for example, the model was removed). Re-resolve next time.
+            queue.sync {
+                preparedSetup = nil
+            }
             throw error
         }
     }
 
     func append(_ buffer: AVAudioPCMBuffer) {
         queue.sync {
-            guard !delivered,
-                  let continuation = inputContinuation,
-                  let analyzerFormat,
-                  let converted = convertedBuffer(buffer, to: analyzerFormat)
+            guard !delivered else {
+                return
+            }
+            if let continuation = inputContinuation, let analyzerFormat {
+                if let converted = convertedBuffer(buffer, to: analyzerFormat) {
+                    continuation.yield(AnalyzerInput(buffer: converted))
+                }
+                return
+            }
+            let maxFrames = AVAudioFramePosition(buffer.format.sampleRate * Self.maxPendingSeconds)
+            guard isBuffering,
+                  pendingFrameCount < maxFrames,
+                  let copy = buffer.deepCopy()
             else {
                 return
             }
-            continuation.yield(AnalyzerInput(buffer: converted))
+            pendingBuffers.append(copy)
+            pendingFrameCount += AVAudioFramePosition(copy.frameLength)
         }
     }
 
@@ -168,6 +259,9 @@ final class SpeechTranscriber: @unchecked Sendable {
             volatileText = ""
             completedEarly = false
             delivered = false
+            isBuffering = false
+            pendingBuffers = []
+            pendingFrameCount = 0
             sessionID += 1
             return state
         }
@@ -180,16 +274,28 @@ final class SpeechTranscriber: @unchecked Sendable {
         }
     }
 
-    private func makeResultsTask(module: DictationTranscriber, sessionID expectedSessionID: Int) -> Task<Void, Never> {
+    private func makeResultsTask(module: Module, sessionID expectedSessionID: Int) -> Task<Void, Never> {
         Task { [weak self, module] in
             do {
-                for try await result in module.results {
-                    guard !Task.isCancelled else { return }
-                    self?.handleResult(
-                        String(result.text.characters),
-                        isFinal: result.isFinal,
-                        sessionID: expectedSessionID
-                    )
+                switch module {
+                case .speech(let transcriber):
+                    for try await result in transcriber.results {
+                        guard !Task.isCancelled else { return }
+                        self?.handleResult(
+                            String(result.text.characters),
+                            isFinal: result.isFinal,
+                            sessionID: expectedSessionID
+                        )
+                    }
+                case .dictation(let transcriber):
+                    for try await result in transcriber.results {
+                        guard !Task.isCancelled else { return }
+                        self?.handleResult(
+                            String(result.text.characters),
+                            isFinal: result.isFinal,
+                            sessionID: expectedSessionID
+                        )
+                    }
                 }
                 self?.handleResultsEnded(error: nil, sessionID: expectedSessionID)
             } catch {
@@ -264,6 +370,9 @@ final class SpeechTranscriber: @unchecked Sendable {
             converter = nil
             converterInputFormat = nil
             finalCompletion = nil
+            isBuffering = false
+            pendingBuffers = []
+            pendingFrameCount = 0
             return state
         }
 
@@ -276,9 +385,18 @@ final class SpeechTranscriber: @unchecked Sendable {
             Task { await analyzer.cancelAndFinishNow() }
         }
 
+        let finalText = Self.normalizedTranscript(text)
         Task { @MainActor in
-            state.5?(text)
+            state.5?(finalText)
         }
+    }
+
+    /// The newer model joins segments with a space even before full-width punctuation
+    /// ("开会 ，记得"). Drop whitespace that sits against CJK punctuation.
+    static func normalizedTranscript(_ text: String) -> String {
+        text
+            .replacingOccurrences(of: "\\s+(?=[，。！？；：、）」』》])", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "(?<=[，。！？；：、（「『《])\\s+", with: "", options: .regularExpression)
     }
 
     private func ensureCurrentSession(_ expectedSessionID: Int) throws {
@@ -296,7 +414,46 @@ final class SpeechTranscriber: @unchecked Sendable {
         }
     }
 
-    private func ensureModelInstalled(for module: DictationTranscriber, locale: Locale) async throws {
+    private func setup(for language: RecognitionLanguage, model requestedModel: SpeechRecognitionModel) async throws -> PreparedSetup {
+        if let cached = queue.sync(execute: { preparedSetup }),
+           cached.language == language,
+           cached.requestedModel == requestedModel
+        {
+            return cached
+        }
+
+        let requestedLocale = Locale(identifier: language.rawValue)
+        var model = requestedModel
+        var resolvedLocale = await Module.supportedLocale(model: model, equivalentTo: requestedLocale)
+        if resolvedLocale == nil, model == .speech {
+            // The newer model is unavailable on some hardware and covers fewer locales.
+            DebugLog.event("speechModelFallback:\(language.rawValue)")
+            model = .dictation
+            resolvedLocale = await Module.supportedLocale(model: model, equivalentTo: requestedLocale)
+        }
+        guard let locale = resolvedLocale else {
+            throw AppError.message("Dictation is unavailable for \(language.rawValue)")
+        }
+        let module = Module(model: model, locale: locale).speechModule
+        guard let audioFormat = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [module]) else {
+            throw AppError.message("No compatible SpeechAnalyzer audio format")
+        }
+        try await ensureModelInstalled(for: module, locale: locale)
+
+        let setup = PreparedSetup(
+            language: language,
+            requestedModel: requestedModel,
+            model: model,
+            locale: locale,
+            audioFormat: audioFormat
+        )
+        queue.sync {
+            preparedSetup = setup
+        }
+        return setup
+    }
+
+    private func ensureModelInstalled(for module: any SpeechModule, locale: Locale) async throws {
         let modules: [any SpeechModule] = [module]
         let status = await AssetInventory.status(forModules: modules)
         guard status != .unsupported else {
@@ -376,5 +533,24 @@ private final class ConverterInputState: @unchecked Sendable {
 
     init(buffer: AVAudioPCMBuffer) {
         self.buffer = buffer
+    }
+}
+
+private extension AVAudioPCMBuffer {
+    /// The tap may reuse its buffer after the callback returns, so held audio gets its own storage.
+    func deepCopy() -> AVAudioPCMBuffer? {
+        guard let copy = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameLength) else {
+            return nil
+        }
+        copy.frameLength = frameLength
+        let source = UnsafeMutableAudioBufferListPointer(mutableAudioBufferList)
+        let destination = UnsafeMutableAudioBufferListPointer(copy.mutableAudioBufferList)
+        for (from, to) in zip(source, destination) {
+            guard let fromData = from.mData, let toData = to.mData else {
+                continue
+            }
+            memcpy(toData, fromData, Int(min(from.mDataByteSize, to.mDataByteSize)))
+        }
+        return copy
     }
 }

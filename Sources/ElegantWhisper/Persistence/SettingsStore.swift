@@ -19,7 +19,9 @@ final class SettingsStore: @unchecked Sendable {
 
     private enum Key {
         static let language = "language"
+        static let speechModel = "speechModel"
         static let llmEnabled = "llmEnabled"
+        static let shareCursorTextWithLLM = "shareCursorTextWithLLM"
         static let llmProvider = "llmProvider"
         static let apiBaseURL = "apiBaseURL"
         static let model = "model"
@@ -29,6 +31,7 @@ final class SettingsStore: @unchecked Sendable {
         static let postEditLearningEnabled = "postEditLearningEnabled"
         static let muteOutputDuringRecording = "muteOutputDuringRecording"
         static let onboardingCompleted = "onboardingCompleted"
+        static let usageStats = "usageStats"
     }
 
     var language: RecognitionLanguage {
@@ -40,12 +43,31 @@ final class SettingsStore: @unchecked Sendable {
         }
     }
 
+    var speechModel: SpeechRecognitionModel {
+        get {
+            SpeechRecognitionModel(rawValue: defaults.string(forKey: Key.speechModel) ?? "") ?? .speech
+        }
+        set {
+            defaults.set(newValue.rawValue, forKey: Key.speechModel)
+        }
+    }
+
     var llmEnabled: Bool {
         get {
             defaults.object(forKey: Key.llmEnabled) as? Bool ?? false
         }
         set {
             defaults.set(newValue, forKey: Key.llmEnabled)
+        }
+    }
+
+    /// Opt-in: send a short, redacted window of text around the cursor with each polish request.
+    var shareCursorTextWithLLM: Bool {
+        get {
+            defaults.object(forKey: Key.shareCursorTextWithLLM) as? Bool ?? false
+        }
+        set {
+            defaults.set(newValue, forKey: Key.shareCursorTextWithLLM)
         }
     }
 
@@ -157,6 +179,15 @@ final class SettingsStore: @unchecked Sendable {
         }
         set {
             defaults.set(newValue, forKey: Key.muteOutputDuringRecording)
+        }
+    }
+
+    var usageStats: UsageStats {
+        get {
+            defaults.data(forKey: Key.usageStats).flatMap { try? JSONDecoder().decode(UsageStats.self, from: $0) } ?? UsageStats()
+        }
+        set {
+            defaults.set(try? JSONEncoder().encode(newValue), forKey: Key.usageStats)
         }
     }
 
