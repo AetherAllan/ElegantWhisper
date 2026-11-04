@@ -24,6 +24,9 @@ struct StylesView: View {
             Section("System Prompt") {
                 TextEditor(text: $styles.draft.prompt)
                     .font(.system(.body, design: .monospaced))
+                    // The editor paints its own text-view background (white, or gray in dark),
+                    // which the shell-wide setting does not reach; let the row color show.
+                    .scrollContentBackground(.hidden)
                     .frame(minHeight: 180)
             }
 

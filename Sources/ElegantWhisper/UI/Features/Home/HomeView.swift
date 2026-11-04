@@ -3,6 +3,12 @@ import SwiftUI
 
 struct HomeView: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.appTheme) private var theme
+
+    /// Prism trades the standard tints for spectrum bands.
+    private func tint(_ standard: Color, prismBand: Int) -> Color {
+        theme == .prism ? PrismPalette.spectrum[prismBand] : standard
+    }
 
     var body: some View {
         let insights = HistoryInsights(items: model.history.items)
@@ -20,21 +26,21 @@ struct HomeView: View {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 170), spacing: 14)], spacing: 14) {
                     StatTile(
                         symbol: "text.word.spacing",
-                        tint: .blue,
+                        tint: tint(.blue, prismBand: 4),
                         value: model.usage.words.formatted(),
                         title: "Words dictated",
                         detail: "\(model.usage.dictations.formatted()) dictations"
                     )
                     StatTile(
                         symbol: "hourglass",
-                        tint: .green,
+                        tint: tint(.green, prismBand: 3),
                         value: DurationText.minutes(model.usage.minutesSaved),
                         title: "Time saved",
                         detail: "vs. typing at \(Int(UsageStats.typingWordsPerMinute)) wpm"
                     )
                     StatTile(
                         symbol: "speedometer",
-                        tint: .orange,
+                        tint: tint(.orange, prismBand: 1),
                         value: model.usage.wordsPerMinute.map(String.init) ?? "—",
                         unit: model.usage.wordsPerMinute == nil ? nil : "wpm",
                         title: "Speaking pace",
@@ -42,7 +48,7 @@ struct HomeView: View {
                     )
                     StatTile(
                         symbol: "flame",
-                        tint: .pink,
+                        tint: tint(.pink, prismBand: 0),
                         value: "\(insights.streakDays)",
                         unit: insights.streakDays == 1 ? "day" : "days",
                         title: "Streak",
@@ -65,8 +71,26 @@ struct HomeView: View {
         .navigationTitle("Home")
     }
 
+    @ViewBuilder
     private var header: some View {
-        HStack(alignment: .center) {
+        if theme == .prism {
+            headerContent
+                .padding(22)
+                .frame(maxWidth: .infinity, minHeight: 190, alignment: .topLeading)
+                .background(PrismArtwork())
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.75)
+                )
+                .environment(\.colorScheme, .dark)
+        } else {
+            headerContent
+        }
+    }
+
+    private var headerContent: some View {
+        HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 8) {
                 Text(Self.greeting())
                     .font(.system(size: 30, weight: .bold, design: .rounded))
@@ -168,6 +192,13 @@ private struct PermissionSetupBanner: View {
 
 private struct ActivityCard: View {
     let days: [HistoryInsights.Day]
+    @Environment(\.appTheme) private var theme
+
+    /// Prism runs the bars through the spectrum, oldest day red to today violet.
+    private func barStyle(index: Int) -> AnyShapeStyle {
+        guard theme == .prism else { return AnyShapeStyle(Color.accentColor.gradient) }
+        return AnyShapeStyle(PrismPalette.color(at: Double(index) / Double(max(days.count - 1, 1))).gradient)
+    }
 
     private var isEmpty: Bool {
         days.allSatisfy { $0.words == 0 }
@@ -183,12 +214,12 @@ private struct ActivityCard: View {
                 Spacer()
             }
 
-            Chart(days) { day in
+            Chart(Array(days.enumerated()), id: \.element.id) { index, day in
                 BarMark(
                     x: .value("Day", day.date, unit: .day),
                     y: .value("Words", day.words)
                 )
-                .foregroundStyle(Color.accentColor.gradient)
+                .foregroundStyle(barStyle(index: index))
                 .cornerRadius(4)
             }
             .chartXAxis {

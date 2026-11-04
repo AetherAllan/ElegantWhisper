@@ -64,6 +64,21 @@ final class LLMRefinementTask: @unchecked Sendable {
     private let lock = NSLock()
     private var currentTask: URLSessionDataTask?
     private var cancelled = false
+    private var failure: String?
+
+    /// Set when the request failed for a reason the user has to fix (key, credits, model), so the
+    /// app can say why the recognized text was inserted unchanged. Nil for timeouts and rejections.
+    var configurationFailure: String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return failure
+    }
+
+    func setConfigurationFailure(_ reason: String) {
+        lock.lock()
+        failure = reason
+        lock.unlock()
+    }
 
     var isCancelled: Bool {
         lock.lock()

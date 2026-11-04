@@ -281,6 +281,105 @@ final class VoiceLevelMeterTests: XCTestCase {
     }
 }
 
+final class OutputModeTests: XCTestCase {
+    @MainActor
+    func testSwitchingOutputModesKeepsStyleAndToggleInStep() throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanup() }
+        let model = fixture.model
+        XCTAssertEqual(model.outputMode, .asSpoken)
+
+        model.selectStyle(id: "builtin.conservative")
+        model.setOutputMode(.dictate)
+        XCTAssertEqual(model.outputMode, .dictate)
+        XCTAssertTrue(fixture.settings.llmEnabled)
+        XCTAssertEqual(fixture.styles.activePack().id, StylePackStore.dictatePackID)
+
+        // Back to a Style Pack returns to the one used before Dictate.
+        model.setOutputMode(.stylePack)
+        XCTAssertEqual(model.outputMode, .stylePack)
+        XCTAssertEqual(fixture.styles.activePack().id, "builtin.conservative")
+
+        model.setOutputMode(.asSpoken)
+        XCTAssertEqual(model.outputMode, .asSpoken)
+        XCTAssertFalse(fixture.settings.llmEnabled)
+        XCTAssertEqual(fixture.styles.activePack().id, "builtin.conservative", "the chosen style is kept for next time")
+    }
+}
+
+final class RecognitionProviderTests: XCTestCase {
+    @MainActor
+    func testLegacyOnlineSettingMigratesToTheProviderOfItsKey() throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanup() }
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: fixture.suiteName))
+        defaults.set("openAI", forKey: "speechModel")
+        fixture.settings.openAITranscriptionKey = "sk-or-v1-legacy"
+
+        fixture.settings.migrateTranscriptionSettings()
+
+        XCTAssertEqual(fixture.settings.transcriptionProvider, .openRouter)
+        XCTAssertEqual(fixture.settings.speechModel, .speech)
+        XCTAssertEqual(fixture.settings.openRouterTranscriptionKey, "sk-or-v1-legacy")
+        XCTAssertEqual(fixture.settings.openAITranscriptionKey, "")
+        XCTAssertEqual(fixture.settings.openRouterTranscriptionModel, "openai/gpt-transcribe")
+
+        // Running it again changes nothing.
+        fixture.settings.migrateTranscriptionSettings()
+        XCTAssertEqual(fixture.settings.openRouterTranscriptionKey, "sk-or-v1-legacy")
+    }
+
+    @MainActor
+    func testOpenAIKeyStaysWithOpenAI() throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanup() }
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: fixture.suiteName))
+        defaults.set("openAI", forKey: "speechModel")
+        fixture.settings.openAITranscriptionKey = "sk-proj-abc"
+
+        fixture.settings.migrateTranscriptionSettings()
+
+        XCTAssertEqual(fixture.settings.transcriptionProvider, .openAI)
+        XCTAssertEqual(fixture.settings.openAITranscriptionKey, "sk-proj-abc")
+        XCTAssertEqual(fixture.settings.openRouterTranscriptionKey, "")
+    }
+
+    @MainActor
+    func testEachProviderKeepsItsOwnKeyAndPolishingSaveIsSeparate() throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanup() }
+        let settings = fixture.model.settings
+
+        settings.setKeyDraft("sk-or-v1-new", for: .openRouter)
+        XCTAssertTrue(settings.isKeyDirty(.openRouter))
+        XCTAssertFalse(settings.isKeyDirty(.openAI))
+        XCTAssertFalse(settings.isPolishingDirty, "a recognition key must not enable Save Provider")
+
+        settings.saveKey(for: .openRouter)
+        XCTAssertEqual(fixture.settings.openRouterTranscriptionKey, "sk-or-v1-new")
+        XCTAssertEqual(fixture.settings.openAITranscriptionKey, "")
+        XCTAssertFalse(settings.isKeyDirty(.openRouter))
+
+        settings.immediate(\.transcriptionProvider) { $0.transcriptionProvider = $1 }.wrappedValue = .openRouter
+        settings.immediate(\.openRouterModel) { $0.openRouterTranscriptionModel = $1 }.wrappedValue = "qwen/qwen3-asr-1.7b"
+        XCTAssertEqual(fixture.settings.transcriptionModel(for: .openRouter), "qwen/qwen3-asr-1.7b")
+        XCTAssertEqual(fixture.settings.transcriptionModel(for: .openAI), "gpt-transcribe")
+        XCTAssertEqual(fixture.model.currentProvider, .openRouter)
+    }
+
+    @MainActor
+    func testKeyPastedUnderTheWrongProviderIsCalledOut() throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanup() }
+        let settings = fixture.model.settings
+        settings.setKeyDraft("sk-or-v1-wrong-place", for: .openAI)
+
+        settings.checkKey(for: .openAI)
+
+        XCTAssertEqual(settings.keyStatus[.openAI], "Check failed: this is an OpenRouter key. Choose OpenRouter above.")
+    }
+}
+
 final class DashboardModelTests: XCTestCase {
     func testWordCountTreatsCJKCharactersAsWords() {
         XCTAssertEqual(UsageStats.wordCount("Don't restart Redis 2 times"), 5)
@@ -386,6 +485,8 @@ private final class Fixture {
 
     func cleanup() {
         keychain.setString("", for: "apiKey")
+        keychain.setString("", for: "openAITranscriptionKey")
+        keychain.setString("", for: "openRouterTranscriptionKey")
         UserDefaults.standard.removePersistentDomain(forName: suiteName)
         try? FileManager.default.removeItem(at: root)
     }

@@ -6,7 +6,8 @@ final class StylePackStoreTests: XCTestCase {
         let store = StylePackStore(fileURL: try temporaryFile())
         let packs = store.packs()
 
-        XCTAssertEqual(packs.count, 4)
+        XCTAssertEqual(packs.count, 5)
+        XCTAssertTrue(packs.contains { $0.id == StylePackStore.dictatePackID })
         XCTAssertEqual(packs.filter(\.active).count, 1)
         XCTAssertEqual(store.activePack().id, StylePackStore.programmerPackID)
     }

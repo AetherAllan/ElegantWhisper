@@ -34,6 +34,7 @@ struct HistoryView: View {
                                 HistoryEntryRow(
                                     item: item,
                                     copy: { model.copyHistory(item) },
+                                    copyOriginal: { model.copyHistoryOriginal(item) },
                                     useAsTerm: { model.useHistoryAsDictionaryTerm(item) }
                                 )
                             }
@@ -45,7 +46,6 @@ struct HistoryView: View {
                     }
                 }
                 .listStyle(.inset)
-                .scrollContentBackground(.hidden)
             }
         }
         .navigationTitle("History")
@@ -100,8 +100,10 @@ struct HistoryEntryRow: View {
     let item: HistoryItem
     var lineLimit = 3
     var copy: (() -> Void)?
+    var copyOriginal: (() -> Void)?
     var useAsTerm: (() -> Void)?
     @State private var hovering = false
+    @State private var showingOriginal = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -112,6 +114,17 @@ struct HistoryEntryRow: View {
                 HStack(spacing: 6) {
                     Text(item.appName ?? "Unknown app").fontWeight(.semibold)
                     Text(item.createdAt, format: .dateTime.hour().minute())
+                    if item.originalText != nil {
+                        // Rewritten by Dictate or a Style Pack; the recognized text is one click away.
+                        Button(showingOriginal ? "Hide original" : "Cleaned up") { showingOriginal.toggle() }
+                            .buttonStyle(.plain)
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.purple)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 1)
+                            .background(Color.purple.opacity(0.12), in: Capsule())
+                            .help("Show the text as it was recognized")
+                    }
                     if let badge = item.result.badge {
                         Text(badge.title)
                             .font(.caption2.weight(.semibold))
@@ -128,6 +141,17 @@ struct HistoryEntryRow: View {
                     .lineLimit(lineLimit)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                if showingOriginal, let original = item.originalText {
+                    Text(original)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                        .padding(.leading, 8)
+                        .overlay(alignment: .leading) {
+                            Rectangle().fill(Color.secondary.opacity(0.3)).frame(width: 2)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
 
             // Keep the actions in the layout so rows do not shift when the pointer enters.
@@ -150,6 +174,9 @@ struct HistoryEntryRow: View {
         .contextMenu {
             if let copy {
                 Button("Copy", systemImage: "doc.on.doc", action: copy)
+            }
+            if item.originalText != nil, let copyOriginal {
+                Button("Copy as Recognized", systemImage: "waveform", action: copyOriginal)
             }
             if let useAsTerm {
                 Button("Add to Dictionary…", systemImage: "text.book.closed", action: useAsTerm)

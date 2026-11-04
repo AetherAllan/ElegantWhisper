@@ -25,6 +25,7 @@ final class FloatingHUDModel {
 
     var text = "Listening..."
     var phase: FloatingHUDPhase = .listening
+    var theme: AppTheme = .standard
     // Newest level first. The waveform mirrors this history outward from the center bar so the
     // bars ripple with speech instead of all scaling in unison. `levels` is what is drawn; it
     // eases toward `targets` every frame so bars glide between audio buffers.
@@ -149,6 +150,17 @@ struct FloatingHUDView: View {
     static let waveformSpacing: CGFloat = 9
     static let compactWidth = inset * 2 + buttonSize * 2 + waveformSpacing * 2 + waveformWidth
 
+    /// Standard: a quiet gray rim. Prism: the rim catches the light as a full spectrum.
+    private var rimStyle: AnyShapeStyle {
+        guard model.theme == .prism else {
+            return AnyShapeStyle(Color(white: 0.62).opacity(0.55))
+        }
+        return AnyShapeStyle(AngularGradient(
+            colors: PrismPalette.spectrum + [PrismPalette.spectrum[0]],
+            center: .center
+        ))
+    }
+
     var body: some View {
         ZStack {
             switch model.phase {
@@ -157,9 +169,9 @@ struct FloatingHUDView: View {
                     CircleButton(kind: .cancel, action: onCancel)
                     Group {
                         if model.phase == .listening {
-                            DotWaveform(bars: model.bars)
+                            DotWaveform(bars: model.bars, theme: model.theme)
                         } else {
-                            WorkingDots(animated: !reduceMotion)
+                            WorkingDots(animated: !reduceMotion, theme: model.theme)
                         }
                     }
                     .frame(width: Self.waveformWidth, height: 20)
@@ -190,8 +202,8 @@ struct FloatingHUDView: View {
         // vertical hairline at each end of the capsule.
         .background(
             Capsule()
-                .fill(Color(white: 0.62).opacity(0.55))
-                .overlay(Capsule().fill(Color(white: 0.04)).padding(1))
+                .fill(rimStyle)
+                .overlay(Capsule().fill(Color(white: model.theme == .prism ? 0.0 : 0.04)).padding(1))
         )
         // Always dark, like the capsule itself, whatever the system appearance.
         .environment(\.colorScheme, .dark)
@@ -232,6 +244,7 @@ private struct CircleButton: View {
 /// Dots that rise into bars with the voice. Shaping happens in FloatingHUDModel.bars.
 private struct DotWaveform: View {
     let bars: [CGFloat]
+    var theme: AppTheme = .standard
     static let dotCount = FloatingHUDModel.barCount
 
     var body: some View {
@@ -247,7 +260,11 @@ private struct DotWaveform: View {
                     width: dot,
                     height: height
                 )
-                context.fill(Path(roundedRect: rect, cornerRadius: dot / 2), with: .color(.white))
+                // Prism: the dots run through the spectrum, red on the left to violet on the right.
+                let color = theme == .prism
+                    ? PrismPalette.color(at: Double(index) / Double(Self.dotCount - 1))
+                    : Color.white
+                context.fill(Path(roundedRect: rect, cornerRadius: dot / 2), with: .color(color))
             }
         }
         .accessibilityLabel("Listening")
@@ -257,6 +274,7 @@ private struct DotWaveform: View {
 /// While the transcript is finalized: a soft wave travels across the dots.
 private struct WorkingDots: View {
     let animated: Bool
+    var theme: AppTheme = .standard
 
     var body: some View {
         TimelineView(.animation(minimumInterval: 1 / 30, paused: !animated)) { timeline in
@@ -276,7 +294,7 @@ private struct WorkingDots: View {
                     )
                     context.fill(
                         Path(roundedRect: rect, cornerRadius: dot / 2),
-                        with: .color(.white.opacity(0.45 + 0.55 * wave))
+                        with: .color((theme == .prism ? PrismPalette.color(at: Double(index) / Double(count - 1)) : Color.white).opacity(0.45 + 0.55 * wave))
                     )
                 }
             }

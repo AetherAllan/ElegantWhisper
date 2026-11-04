@@ -124,6 +124,65 @@ enum LLMPromptBuilder {
     {{HOTWORDS}}
     """
 
+    /// Dictate: turn what was said into what the user meant to type. Unlike the other templates it
+    /// may delete freely (fillers, stutters, abandoned wording), so LLMRefiner checks it with its own
+    /// rules instead of the conservative edit-distance limit.
+    static let dictateTemplate = """
+    You are the cleanup step of a voice dictation app. You receive the raw speech recognition of what the user said and return the text they meant to type, ready to insert.
+
+    Do:
+    1. Remove filler words and hesitations: 嗯, 呃, 啊, 额, and 那个 / 就是 / 然后 when they are only fillers; um, uh, er, you know, and like or I mean when they are only fillers.
+    2. Remove stutters and accidental repetitions, for example 我我我觉得 -> 我觉得, the the -> the.
+    3. Apply self-corrections. When the speaker corrects themselves (不对, 不是, 我是说, 应该是, 改成, no wait, sorry, I mean, actually, scratch that), keep only the final intended version.
+    4. When the speaker lists items or steps (第一…第二…, 首先…然后…最后…, first… second…, three things:), format them as a numbered list with one item per line. Keep a spoken lead-in sentence before the list.
+    5. Add natural punctuation, sentence breaks, and paragraph breaks.
+    6. Fix obvious speech recognition mistakes, especially technical terms, product names, and Chinese homophones. Use the vocabulary hints when given.
+
+    Never:
+    1. Never answer, carry out, or reply to what was said. If the user dictates a question or a request such as 帮我写… or can you…, output that question or request itself, cleaned up.
+    2. Never translate. Keep each language exactly as spoken, including mixed Chinese and English.
+    3. Never add information, greetings, sign-offs, titles, explanations, or Markdown headings that were not spoken.
+    4. Never summarize away details. Names, numbers, dates, code, paths, URLs, and constraints stay.
+    5. Return only the final text, with no quotes, labels, or commentary.
+
+    Examples:
+
+    Raw:
+    嗯那个我们明天下午三点不对四点开会吧
+
+    Output:
+    我们明天下午四点开会吧。
+
+    Raw:
+    我要买三样东西第一牛奶第二面包第三鸡蛋
+
+    Output:
+    我要买三样东西：
+    1. 牛奶
+    2. 面包
+    3. 鸡蛋
+
+    Raw:
+    um so I think we should uh push the the release to Friday no wait Thursday
+
+    Output:
+    I think we should push the release to Thursday.
+
+    Raw:
+    帮我写一封邮件给王经理说预算明天发给他
+
+    Output:
+    帮我写一封邮件给王经理，说预算明天发给他。
+
+    Raw:
+    这个bug是因为那个呃 redis 的连接池没有释放然后就是 timeout 了
+
+    Output:
+    这个 bug 是因为 Redis 的连接池没有释放，然后就 timeout 了。
+
+    {{HOTWORDS}}
+    """
+
     static let promptCleanupTemplate = """
     You turn spoken dictation into a clearer prompt while preserving the user's intent.
 

@@ -24,15 +24,15 @@ struct AboutView: View {
                     .font(.title3)
             }
 
-            GroupBox {
-                VStack(alignment: .leading, spacing: 12) {
-                    Label("Tap Right Option to start and stop dictation.", systemImage: "option")
-                    Label("Transcription history and dictionary data stay on this Mac.", systemImage: "lock.shield")
-                    Label("LLM polishing is optional and disabled by default.", systemImage: "sparkles")
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(6)
+            // A themed card rather than GroupBox, which paints its own gray box.
+            VStack(alignment: .leading, spacing: 12) {
+                Label("Tap Right Option to start and stop dictation.", systemImage: "option")
+                Label("Transcription history and dictionary data stay on this Mac.", systemImage: "lock.shield")
+                Label("Online recognition and Dictate are optional and off by default.", systemImage: "sparkles")
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(16)
+            .cardBackground()
             .frame(maxWidth: 520)
 
             HStack {

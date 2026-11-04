@@ -17,6 +17,8 @@ struct HistoryItem: Codable, Identifiable {
     let result: HistoryResult
     /// Recording length. Optional so history written before this field still decodes.
     var duration: TimeInterval? = nil
+    /// The recognized text before Dictate or a Style Pack rewrote it; nil when nothing changed.
+    var originalText: String? = nil
 }
 
 /// Lifetime totals for the Home dashboard. Unlike history this keeps no text, so it is kept even
@@ -104,7 +106,13 @@ final class HistoryStore: @unchecked Sendable {
         }
     }
 
-    func append(text: String, result: HistoryResult, app: NSRunningApplication?, duration: TimeInterval? = nil) {
+    func append(
+        text: String,
+        result: HistoryResult,
+        app: NSRunningApplication?,
+        duration: TimeInterval? = nil,
+        originalText: String? = nil
+    ) {
         let item = HistoryItem(
             id: UUID(),
             createdAt: Date(),
@@ -112,7 +120,8 @@ final class HistoryStore: @unchecked Sendable {
             bundleIdentifier: app?.bundleIdentifier,
             text: text,
             result: result,
-            duration: duration
+            duration: duration,
+            originalText: originalText == text ? nil : originalText
         )
 
         queue.async {

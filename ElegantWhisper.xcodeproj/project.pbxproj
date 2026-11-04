@@ -44,6 +44,7 @@
 		01000000000000000000000B /* InputSourceManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02000000000000000000000B /* InputSourceManager.swift */; };
 		01000000000000000000000C /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02000000000000000000000C /* KeychainStore.swift */; };
 		01000000000000000000000D /* LLMRefiner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02000000000000000000000D /* LLMRefiner.swift */; };
+		0100000000000000000000F4 /* DictateBenchmark.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0200000000000000000000F4 /* DictateBenchmark.swift */; };
 		01000000000000000000000E /* OptionKeyMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02000000000000000000000E /* OptionKeyMonitor.swift */; };
 		01000000000000000000000F /* PermissionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02000000000000000000000F /* PermissionManager.swift */; };
 		010000000000000000000011 /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000011 /* SettingsStore.swift */; };
@@ -119,6 +120,7 @@
 		02000000000000000000000B /* InputSourceManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputSourceManager.swift; sourceTree = "<group>"; };
 		02000000000000000000000C /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
 		02000000000000000000000D /* LLMRefiner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMRefiner.swift; sourceTree = "<group>"; };
+		0200000000000000000000F4 /* DictateBenchmark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictateBenchmark.swift; sourceTree = "<group>"; };
 		02000000000000000000000E /* OptionKeyMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OptionKeyMonitor.swift; sourceTree = "<group>"; };
 		02000000000000000000000F /* PermissionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionManager.swift; sourceTree = "<group>"; };
 		020000000000000000000011 /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
@@ -292,6 +294,7 @@
 			isa = PBXGroup;
 			children = (
 				02000000000000000000000D /* LLMRefiner.swift */,
+				0200000000000000000000F4 /* DictateBenchmark.swift */,
 				02000000000000000000001B /* LLMPromptBuilder.swift */,
 				020000000000000000000028 /* LLMTypes.swift */,
 				02000000000000000000002D /* PromptStaticContextCache.swift */,
@@ -525,6 +528,7 @@
 				010000000000000000000031 /* InferenceNetCodec.swift in Sources */,
 				010000000000000000000028 /* LLMTypes.swift in Sources */,
 				01000000000000000000000D /* LLMRefiner.swift in Sources */,
+				0100000000000000000000F4 /* DictateBenchmark.swift in Sources */,
 				010000000000000000000029 /* OpenRouterCodec.swift in Sources */,
 				01000000000000000000000E /* OptionKeyMonitor.swift in Sources */,
 				01000000000000000000000F /* PermissionManager.swift in Sources */,

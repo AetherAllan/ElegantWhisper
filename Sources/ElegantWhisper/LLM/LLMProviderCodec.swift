@@ -25,7 +25,7 @@ enum LLMProviderCodecRegistry {
             OpenAICompatibleCodec()
         case .custom:
             OpenAICompatibleCodec(supportsStructuredOutput: false)
-        case .openRouterFree:
+        case .openRouter, .openRouterFree:
             OpenRouterCodec()
         case .inferenceNet:
             InferenceNetCodec()

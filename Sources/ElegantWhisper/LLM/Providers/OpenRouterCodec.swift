@@ -18,6 +18,9 @@ struct OpenRouterCodec: LLMProviderCodec {
         // ponytail: OpenRouter-only field; patch after encode instead of threading through LLMTextRequest.
         var body = try JSONSerialization.jsonObject(with: urlRequest.httpBody!) as! [String: Any]
         body["reasoning"] = ["effort": Self.reasoningEffort(for: request.model)]
+        // Dictation waits on this answer, so route to the provider with the lowest recent latency
+        // instead of OpenRouter's price-weighted default. Fallbacks to other providers stay on.
+        body["provider"] = ["sort": "latency"]
         urlRequest.httpBody = try JSONSerialization.data(withJSONObject: body)
         urlRequest.setValue("https://github.com/AetherAllan/ElegantWhisper", forHTTPHeaderField: "HTTP-Referer")
         urlRequest.setValue(AppConstants.productName, forHTTPHeaderField: "X-Title")

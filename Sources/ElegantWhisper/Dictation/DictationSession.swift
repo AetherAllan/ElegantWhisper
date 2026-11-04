@@ -14,6 +14,8 @@ struct DictationSession: Identifiable {
     var focusedTerms: [String] = []
     /// Upload of the recording to online recognition, started when the user stops.
     var onlineTranscription: Task<String, Error>?
+    /// Shown in the floating bar after insertion when Dictate or polishing could not run.
+    var warning: String?
     /// Background read of technical words in the front window, started when recording starts.
     var windowTerms: Task<[String], Never>?
 }

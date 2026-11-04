@@ -174,6 +174,7 @@ final class StylePackStore: @unchecked Sendable {
     }
 
     static let programmerPackID = "builtin.programmer"
+    static let dictatePackID = "builtin.dictate"
 
     static func seedTerms(for packID: String) -> [String] {
         builtinSeedTerms[packID] ?? []
@@ -186,6 +187,10 @@ final class StylePackStore: @unchecked Sendable {
             "pnpm", "Bun", "Node.js", "React", "Next.js", "Swift", "Xcode",
             "Cursor", "IDE", "Codex", "ChatGPT", "Claude", "Claude Code", "VS Code",
             "OpenAI", "OpenRouter", "PostgreSQL", "MySQL", "SQLite", "agent"
+        ],
+        dictatePackID: [
+            "Python", "JSON", "API", "GitHub", "OpenAI", "ChatGPT", "Claude",
+            "Swift", "Xcode", "TypeScript", "Redis", "Docker"
         ],
         "builtin.conservative": [
             "Python", "JSON", "API", "GitHub", "OpenAI", "ChatGPT", "Claude",
@@ -209,6 +214,14 @@ final class StylePackStore: @unchecked Sendable {
             description: "Correct developer dictation with Web3, TypeScript, and common tooling terms.",
             systemPrompt: LLMPromptBuilder.programmerTemplate,
             active: true,
+            updatedAt: Date(timeIntervalSince1970: 0)
+        ),
+        StylePack(
+            id: dictatePackID,
+            name: "Dictate",
+            description: "Write what you meant: removes fillers and repetitions, applies self-corrections, turns spoken lists into lists, and matches the app's tone.",
+            systemPrompt: LLMPromptBuilder.dictateTemplate,
+            active: false,
             updatedAt: Date(timeIntervalSince1970: 0)
         ),
         StylePack(

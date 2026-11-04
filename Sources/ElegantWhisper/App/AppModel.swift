@@ -40,6 +40,7 @@ enum AppRoute: String, CaseIterable, Hashable, Identifiable {
 
 enum SettingsTab: String, CaseIterable, Identifiable {
     case general
+    case recognition
     case ai
     case permissions
 
@@ -48,7 +49,8 @@ enum SettingsTab: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .general: "General"
-        case .ai: "Polishing"
+        case .recognition: "Recognition"
+        case .ai: "Dictate"
         case .permissions: "Permissions"
         }
     }
@@ -56,8 +58,29 @@ enum SettingsTab: String, CaseIterable, Identifiable {
     var symbolName: String {
         switch self {
         case .general: "gearshape"
+        case .recognition: "waveform"
         case .ai: "sparkles"
         case .permissions: "hand.raised"
+        }
+    }
+}
+
+/// What happens to the recognized text before it is inserted.
+enum OutputMode: String, CaseIterable, Identifiable {
+    /// Inserted as recognized, after the local spelling fix. No language model.
+    case asSpoken
+    /// The built-in Dictate rewrite.
+    case dictate
+    /// Another Style Pack prompt (conservative correction, programmer, …).
+    case stylePack
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .asSpoken: "As spoken"
+        case .dictate: "Dictate"
+        case .stylePack: "Style pack"
         }
     }
 }
@@ -67,6 +90,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
 final class AppModel {
     private let controller: AppController
     private let settingsStore: SettingsStore
+    private let stylePackStore: StylePackStore
     private var started = false
     private var accessibilityRequestPending = false
 
@@ -83,6 +107,8 @@ final class AppModel {
     private(set) var currentMicrophoneUID: String?
     private(set) var currentLanguage: RecognitionLanguage
     private(set) var currentSpeechModel: SpeechRecognitionModel
+    private(set) var currentProvider: TranscriptionProvider
+    private(set) var currentTheme: AppTheme
     private(set) var usage: UsageStats
     private(set) var llmEnabled: Bool
     private(set) var llmProvider: LLMProvider
@@ -102,6 +128,7 @@ final class AppModel {
     ) {
         self.controller = controller
         settingsStore = settings
+        stylePackStore = styles
         self.history = HistoryModel(store: history)
         self.dictionary = DictionaryModel(
             dictionary: dictionary,
@@ -113,7 +140,10 @@ final class AppModel {
         self.settings = SettingsModel(store: settings, controller: controller)
         permissionStatus = controller.permissionStatus()
         currentLanguage = settings.language
+        settings.migrateTranscriptionSettings()
         currentSpeechModel = settings.speechModel
+        currentProvider = settings.transcriptionProvider
+        currentTheme = settings.appTheme
         usage = settings.usageStats
         llmEnabled = settings.llmEnabled
         llmProvider = settings.llmProvider
@@ -202,6 +232,13 @@ final class AppModel {
         notice = "Copied history item"
     }
 
+    func copyHistoryOriginal(_ item: HistoryItem) {
+        guard let original = item.originalText else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(original, forType: .string)
+        notice = "Copied the text as recognized"
+    }
+
     func useHistoryAsDictionaryTerm(_ item: HistoryItem) {
         dictionary.prepareTerm(item.text)
         route = .dictionary
@@ -232,10 +269,42 @@ final class AppModel {
 
     func selectStyle(id: String) {
         styles.select(id: id)
+        if id != StylePackStore.dictatePackID {
+            settingsStore.lastStylePackID = id
+        }
         dictionary.reload()
         if let active = styles.activePack {
             notice = "Style pack active: \(active.name)"
         }
+    }
+
+    /// Output mode is not stored on its own: it is "polishing on or off" plus which Style Pack is
+    /// active, so the Styles page and the menu bar toggle stay consistent with it.
+    var outputMode: OutputMode {
+        guard settings.draft.llmEnabled else { return .asSpoken }
+        return styles.activePack?.id == StylePackStore.dictatePackID ? .dictate : .stylePack
+    }
+
+    func setOutputMode(_ mode: OutputMode) {
+        let enable = settings.immediate(\.llmEnabled) { $0.llmEnabled = $1 }
+        switch mode {
+        case .asSpoken:
+            enable.wrappedValue = false
+        case .dictate:
+            if let active = styles.activePack?.id, active != StylePackStore.dictatePackID {
+                settingsStore.lastStylePackID = active
+            }
+            styles.select(id: StylePackStore.dictatePackID)
+            enable.wrappedValue = true
+        case .stylePack:
+            if styles.activePack?.id == StylePackStore.dictatePackID {
+                let last = settingsStore.lastStylePackID
+                let fallback = styles.packs.contains { $0.id == last } ? last : StylePackStore.programmerPackID
+                styles.select(id: fallback)
+            }
+            enable.wrappedValue = true
+        }
+        dictionary.reload()
     }
 
     func saveStyle() {
@@ -257,22 +326,34 @@ final class AppModel {
     func saveAISettings() {
         settings.saveAI()
         reloadRuntimeSettings()
-        notice = "Polishing settings saved"
+        notice = "Language model settings saved"
     }
 
-    func saveOpenAIKey() {
-        settings.saveOpenAIKey()
-        notice = settings.draft.openAIKey.isEmpty ? "OpenAI key removed" : "OpenAI key saved"
+    /// A refiner on the saved settings, for Compare Models.
+    func makeBenchmarkRefiner() -> LLMRefiner {
+        LLMRefiner(settings: settingsStore, stylePacks: stylePackStore)
     }
 
-    func checkOpenAIKey() {
-        settings.checkOpenAIKey()
+    func useDictateModel(_ id: String) {
+        settings.draft.model = id
+        settings.saveAI()
+        reloadRuntimeSettings()
+        notice = "Dictate now uses \(id)"
+    }
+
+    func saveTranscriptionKey(for provider: TranscriptionProvider) {
+        settings.saveKey(for: provider)
+        notice = settings.keyDraft(for: provider).isEmpty ? "\(provider.title) key removed" : "\(provider.title) key saved"
+    }
+
+    func checkTranscriptionKey(for provider: TranscriptionProvider) {
+        settings.checkKey(for: provider)
     }
 
     func testConnection() {
         settings.testConnection()
         reloadRuntimeSettings()
-        notice = "Polishing settings saved"
+        notice = "Language model settings saved"
     }
 
     func setLanguage(_ language: RecognitionLanguage) {
@@ -389,6 +470,8 @@ final class AppModel {
     private func reloadRuntimeSettings() {
         currentLanguage = settingsStore.language
         currentSpeechModel = settingsStore.speechModel
+        currentProvider = settingsStore.transcriptionProvider
+        currentTheme = settingsStore.appTheme
         settings.syncImmediateFields()
         llmEnabled = settingsStore.llmEnabled
         llmProvider = settingsStore.llmProvider

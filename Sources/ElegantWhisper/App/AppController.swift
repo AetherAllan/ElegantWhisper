@@ -194,7 +194,7 @@ final class AppController {
         transcriber.beginSession()
         // Online recognition uploads the whole recording after stop, so collect it from the
         // first buffer. The key is only read at stop to keep Keychain off this path.
-        if settings.speechModel.isOnline {
+        if settings.transcriptionProvider.service != nil {
             clip.begin()
         } else {
             clip.cancel()
@@ -213,6 +213,8 @@ final class AppController {
             return
         }
         scheduleOutputMuteIfEnabled()
+        warmOnlineConnections()
+        panel.setTheme(settings.appTheme)
         panel.showRecording(text: "")
         panel.retryShowIfNeeded()
         DebugLog.event("panelShow")
@@ -228,13 +230,16 @@ final class AppController {
         let cursorText = settings.llmEnabled && settings.shareCursorTextWithLLM
             ? AXFocusedTextContextReader.cursorText(from: target)
             : nil
+        let dictating = settings.llmEnabled && activePack.id == StylePackStore.dictatePackID
+        let category = AppCategory(bundleIdentifier: (target?.app ?? originalApplication)?.bundleIdentifier)
         let context = SpeechFocusContext(
             appName: contextAppName(target: target, application: originalApplication),
             terms: SpeechFocusContext.vocabularyHints(
                 focused: focusedTerms,
                 seed: StylePackStore.seedTerms(for: activePack.id)
             ),
-            cursorText: cursorText
+            cursorText: cursorText,
+            toneHint: dictating && settings.dictateMatchesAppTone ? category?.toneHint : nil
         )
         speechContext = context
         let vocabulary = SpeechVocabulary.terms(
@@ -328,18 +333,30 @@ final class AppController {
         }
     }
 
+    /// Recording lasts seconds; opening the HTTPS connections now hides the handshake.
+    private func warmOnlineConnections() {
+        if let service = settings.transcriptionProvider.service {
+            ConnectionWarmer.shared.warm(service.endpoint)
+        }
+        if settings.llmEnabled, let base = URL(string: settings.apiBaseURL) {
+            ConnectionWarmer.shared.warm(base)
+        }
+    }
+
     /// Starts the upload right at stop, in parallel with on-device finalization.
     private func startOnlineTranscriptionIfEnabled() {
         let samples = clip.finish()
-        guard settings.speechModel.isOnline, !samples.isEmpty, let session = currentSession else {
+        let provider = settings.transcriptionProvider
+        guard let service = provider.service, !samples.isEmpty, let session = currentSession else {
             return
         }
-        let apiKey = settings.openAITranscriptionKey
+        let apiKey = settings.transcriptionKey(for: provider)
         guard !apiKey.isEmpty else {
             DebugLog.event("onlineTranscriptionSkipped:missingKey")
-            onUserMessage?("Add your OpenAI API key in Settings to use online recognition. Used on-device text.")
+            onUserMessage?("Add your \(provider.title) API key in Settings → Recognition to use online recognition. Used on-device text.")
             return
         }
+        let model = settings.transcriptionModel(for: provider)
         let language = settings.language
         let appName = speechContext?.appName
         // Your own terms first, then what is on screen, then the Style Pack list.
@@ -355,6 +372,8 @@ final class AppController {
                 language: language,
                 terms: baseTerms + onScreen + seedTerms,
                 appName: appName,
+                service: service,
+                model: model,
                 apiKey: apiKey
             )
             let elapsed = stoppedAt.duration(to: clock.now).components
@@ -383,7 +402,7 @@ final class AppController {
                 ?? (error is CancellationError ? .timedOut : .network(error.localizedDescription))
             DebugLog.event("onlineTranscriptionFailed:\(failure.logName)")
             if failure != .tooShort {
-                onUserMessage?("OpenAI recognition failed (\(failure.localizedDescription)). Used on-device text.")
+                onUserMessage?("Online recognition failed (\(failure.localizedDescription)). Used on-device text.")
             }
             handleFinalTranscript(onDeviceText, sessionID: sessionID)
         }
@@ -523,6 +542,10 @@ final class AppController {
             _ = state.transition(to: .refining)
             panel.showStatus("Polishing...")
             onChange?()
+            let modeName = refiner.isDictateActive ? "Dictate" : "Polishing"
+            if settings.effectiveLLMAPIKey.isEmpty {
+                currentSession?.warning = "\(modeName) needs an API key (Settings → Dictate)"
+            }
             refinementTask = refiner.refine(
                 raw,
                 speechContext: speechContext,
@@ -531,15 +554,19 @@ final class AppController {
                 guard let self, self.isCurrentSession(sessionID) else {
                     return
                 }
+                if let failure = self.refinementTask?.configurationFailure {
+                    self.currentSession?.warning = "\(modeName) didn't run: \(failure)"
+                }
                 self.refinementTask = nil
-                self.inject(refined.isEmpty ? raw : refined, sessionID: sessionID)
+                self.inject(refined.isEmpty ? raw : refined, original: raw, sessionID: sessionID)
             }
         } else {
             inject(raw, sessionID: sessionID)
         }
     }
 
-    private func inject(_ text: String, sessionID: UUID) {
+    /// `original` is the recognized text before an LLM rewrite, kept in History for comparison.
+    private func inject(_ text: String, original: String? = nil, sessionID: UUID) {
         guard isCurrentSession(sessionID) else {
             return
         }
@@ -560,7 +587,7 @@ final class AppController {
         let fallbackApp = fallbackPasteApplication(target: target, originalApplication: originalApplication)
 
         guard target != nil || fallbackApp != nil || settings.keepClipboardWithoutTarget else {
-            saveHistory(text, result: HistoryResult.failed, app: originalTarget?.app ?? originalApplication)
+            saveHistory(text, result: HistoryResult.failed, app: originalTarget?.app ?? originalApplication, original: original)
             showError("No editable field")
             return
         }
@@ -581,8 +608,14 @@ final class AppController {
             guard let self, self.isCurrentSession(sessionID) else {
                 return
             }
-            self.panel.hide()
-            DebugLog.event("panelHide")
+            if let warning = self.currentSession?.warning {
+                // The text went in unchanged; say why instead of failing silently.
+                self.panel.showError(warning)
+                self.onUserMessage?(warning)
+            } else {
+                self.panel.hide()
+                DebugLog.event("panelHide")
+            }
             self.endInjectedSession()
         }) { [weak self] result in
             guard let self else {
@@ -596,7 +629,7 @@ final class AppController {
                     self.postEditLearner.start(learningContext)
                 }
                 self.recordUsage(text, duration: duration)
-                self.saveHistory(text, result: HistoryResult.pasteAttempted, app: historyApp, duration: duration)
+                self.saveHistory(text, result: HistoryResult.pasteAttempted, app: historyApp, duration: duration, original: original)
                 self.onChange?()
             case .copied:
                 guard self.isCurrentSession(sessionID) else {
@@ -605,7 +638,7 @@ final class AppController {
                 self.panel.showSuccess("Copied to clipboard")
                 self.onUserMessage?("Copied to clipboard")
                 self.recordUsage(text, duration: duration)
-                self.saveHistory(text, result: HistoryResult.copied, app: historyApp, duration: duration)
+                self.saveHistory(text, result: HistoryResult.copied, app: historyApp, duration: duration, original: original)
                 self.endInjectedSession()
             }
         }
@@ -660,13 +693,19 @@ final class AppController {
     }
 
 
-    private func saveHistory(_ text: String, result: HistoryResult, app: NSRunningApplication?, duration: TimeInterval? = nil) {
+    private func saveHistory(
+        _ text: String,
+        result: HistoryResult,
+        app: NSRunningApplication?,
+        duration: TimeInterval? = nil,
+        original: String? = nil
+    ) {
         guard settings.saveHistory,
               Self.shouldSaveHistory(bundleIdentifier: app?.bundleIdentifier)
         else {
             return
         }
-        HistoryStore.shared.append(text: text, result: result, app: app, duration: duration)
+        HistoryStore.shared.append(text: text, result: result, app: app, duration: duration, originalText: original)
     }
 
     private func recordUsage(_ text: String, duration: TimeInterval?) {

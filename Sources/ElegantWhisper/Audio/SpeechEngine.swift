@@ -24,8 +24,8 @@ final class SpeechEngine: @unchecked Sendable {
         case dictation(DictationTranscriber)
 
         init(model: SpeechRecognitionModel, locale: Locale) {
-            switch model.onDeviceModel {
-            case .speech, .openAI:
+            switch model {
+            case .speech:
                 self = .speech(Speech.SpeechTranscriber(locale: locale, preset: .progressiveTranscription))
             case .dictation:
                 self = .dictation(DictationTranscriber(locale: locale, preset: .progressiveShortDictation))
@@ -40,8 +40,8 @@ final class SpeechEngine: @unchecked Sendable {
         }
 
         static func supportedLocale(model: SpeechRecognitionModel, equivalentTo locale: Locale) async -> Locale? {
-            switch model.onDeviceModel {
-            case .speech, .openAI:
+            switch model {
+            case .speech:
                 guard Speech.SpeechTranscriber.isAvailable else { return nil }
                 return await Speech.SpeechTranscriber.supportedLocale(equivalentTo: locale)
             case .dictation:
@@ -423,7 +423,7 @@ final class SpeechEngine: @unchecked Sendable {
         }
 
         let requestedLocale = Locale(identifier: language.rawValue)
-        var model = requestedModel.onDeviceModel
+        var model = requestedModel
         var resolvedLocale = await Module.supportedLocale(model: model, equivalentTo: requestedLocale)
         if resolvedLocale == nil, model == .speech {
             // The newer model is unavailable on some hardware and covers fewer locales.

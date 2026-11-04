@@ -49,7 +49,7 @@ struct MenuBarContentView: View {
                 }
             }
 
-            Toggle("LLM Polishing", isOn: Binding(
+            Toggle("Clean Up with LLM", isOn: Binding(
                 get: { model.llmEnabled },
                 set: { model.setLLMEnabled($0) }
             ))

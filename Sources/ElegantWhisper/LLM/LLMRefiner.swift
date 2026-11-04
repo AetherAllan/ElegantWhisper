@@ -40,6 +40,12 @@ enum CorrectionRejectionReason: String {
     case languageChanged
     case editRatio
     case finishLength
+    /// Dictate: many words that were never spoken.
+    case addedContent
+    /// Dictate: replied to the dictation instead of cleaning it ("Sure, here is…").
+    case answered
+    /// Dictate: a known term that was spoken is missing.
+    case droppedTerm
 }
 
 struct LLMRefinerRequestContext: Sendable {
@@ -52,6 +58,9 @@ struct LLMRefinerRequestContext: Sendable {
     let systemPrompt: String
     let transcript: String
     var outputFormat: LLMOutputFormat
+    var isDictate = false
+    /// Dictate: vocabulary hints that appear in the transcript and must survive the rewrite.
+    var protectedTerms: [String] = []
 }
 
 final class LLMRefiner: Sendable {
@@ -92,7 +101,15 @@ final class LLMRefiner: Sendable {
             }
             return nil
         }
-        guard !settings.apiKey.isEmpty,
+        if isDictateActive, Self.spokenUnits(in: trimmed).count <= Self.dictateMinimumUnits {
+            // Nothing to clean in two or three words; skip the round trip.
+            DebugLog.event("llmRefineSkippedShort")
+            Task { @MainActor in
+                completion(text)
+            }
+            return nil
+        }
+        guard !settings.effectiveLLMAPIKey.isEmpty,
               let context = makeRequestContext(text: trimmed, speechContext: speechContext)
         else {
             DebugLog.event("llmRefineSkippedMissingSettings")
@@ -214,9 +231,10 @@ final class LLMRefiner: Sendable {
     }
 
     func makeRequestContext(text: String, speechContext: SpeechFocusContext? = nil) -> LLMRefinerRequestContext? {
+        let apiKey = settings.effectiveLLMAPIKey
         guard let base = URL(string: settings.apiBaseURL),
               isAllowedBaseURL(base),
-              !settings.apiKey.isEmpty
+              !apiKey.isEmpty
         else {
             return nil
         }
@@ -232,23 +250,88 @@ final class LLMRefiner: Sendable {
         // private text, but these numbers are enough to confirm output budgeting uses user text
         // separately from the prompt.
         DebugLog.event("llmRequestShape:provider=\(provider.rawValue):model=\(settings.model):systemChars=\(promptContext.systemPrompt.count):userChars=\(text.count):maxOutputTokens=\(maxOutputTokens)")
+        let isDictate = stylePack.id == StylePackStore.dictatePackID
+        let protectedTerms = (speechContext?.terms ?? []).filter {
+            text.range(of: $0, options: .caseInsensitive) != nil
+        }
         return LLMRefinerRequestContext(
             provider: provider,
             baseURL: base,
-            apiKey: settings.apiKey,
+            apiKey: apiKey,
             model: settings.model,
             timeout: effectiveTimeout(),
             maxOutputTokens: maxOutputTokens,
             systemPrompt: makeSystemPrompt(promptContext: promptContext, speechContext: speechContext),
             transcript: text,
-            outputFormat: format
+            outputFormat: format,
+            isDictate: isDictate,
+            protectedTerms: protectedTerms
         )
     }
+
+    /// Short, user-facing reason for failures the user has to fix in Settings; nil for transient
+    /// ones (rate limits, server errors), which stay silent and fall back as before.
+    static func configurationFailure(status: Int, message: String) -> String? {
+        switch status {
+        case 401:
+            "API key rejected"
+        case 402:
+            "no credits left"
+        case 403 where message.localizedCaseInsensitiveContains("limit"):
+            "key spending limit reached"
+        case 403:
+            "key can't use this model"
+        case 404:
+            "model not found"
+        default:
+            nil
+        }
+    }
+
+    /// A Dictate request for `text` on `model`, built like a real dictation (same prompt, codec,
+    /// routing, and key) but independent of the active style, for the model comparison.
+    func dictateBenchmarkRequest(
+        text: String,
+        model: String
+    ) -> (request: URLRequest, provider: LLMProvider, format: LLMOutputFormat)? {
+        let apiKey = settings.effectiveLLMAPIKey
+        guard let base = URL(string: settings.apiBaseURL), isAllowedBaseURL(base), !apiKey.isEmpty else {
+            return nil
+        }
+        let provider = settings.llmProvider
+        let codec = LLMProviderCodecRegistry.codec(for: provider)
+        let pack = stylePacks.packs().first { $0.id == StylePackStore.dictatePackID }
+            ?? StylePackStore.builtinPacks.first { $0.id == StylePackStore.dictatePackID }!
+        let format = outputFormat(provider: provider, codec: codec, model: model)
+        let textRequest = LLMTextRequest(
+            model: model,
+            systemPrompt: PromptStaticContextCache.context(stylePack: pack).systemPrompt,
+            userText: text,
+            temperature: nil,
+            maxOutputTokens: maxTokens(for: text),
+            outputFormat: format
+        )
+        guard let request = try? codec.makeRequest(request: textRequest, endpoint: base, apiKey: apiKey, timeout: 20) else {
+            return nil
+        }
+        return (request, provider, format)
+    }
+
+    var isDictateActive: Bool {
+        stylePacks.activePack().id == StylePackStore.dictatePackID
+    }
+
+    /// Dictate runs on every sentence, so it gets a short leash; past this the recognized text is
+    /// inserted as is.
+    static let dictateTimeout: TimeInterval = 5
+    static let dictateMinimumUnits = 3
 
     func rejectionReason(
         original: String,
         corrected rawCorrected: String,
-        finishReason: String?
+        finishReason: String?,
+        isDictate: Bool = false,
+        protectedTerms: [String] = []
     ) -> CorrectionRejectionReason? {
         guard finishReason != "length" else {
             return .finishLength
@@ -263,6 +346,9 @@ final class LLMRefiner: Sendable {
         guard !Self.lostChineseLanguage(original: original, corrected: corrected) else {
             return .languageChanged
         }
+        if isDictate {
+            return Self.dictateRejectionReason(original: original, corrected: corrected, protectedTerms: protectedTerms)
+        }
         guard correctedCount <= max(32, Int(Double(originalCount) * 1.8)) else {
             return .tooLong
         }
@@ -273,6 +359,67 @@ final class LLMRefiner: Sendable {
             return nil
         }
         return editDistanceRatio(original, corrected) <= 0.8 ? nil : .editRatio
+    }
+
+    /// Dictate deletes freely (fillers, stutters, abandoned wording), so the edit-distance limit
+    /// does not apply. What it must not do is add: words never spoken, an answer to the dictation,
+    /// or a rewrite that drops a known term.
+    static func dictateRejectionReason(
+        original: String,
+        corrected: String,
+        protectedTerms: [String]
+    ) -> CorrectionRejectionReason? {
+        if let prefix = answerPrefixes.first(where: { corrected.lowercased().hasPrefix($0) }),
+           !original.lowercased().hasPrefix(prefix)
+        {
+            return .answered
+        }
+        let originalUnits = spokenUnits(in: original)
+        let correctedUnits = spokenUnits(in: corrected)
+        guard correctedUnits.count <= max(8, Int((Double(originalUnits.count) * 1.25).rounded(.up))) else {
+            return .tooLong
+        }
+        // ASR fixes (配森 -> Python) introduce a few new units; whole new sentences do not pass.
+        let spoken = Set(originalUnits)
+        let added = correctedUnits.filter { !spoken.contains($0) }.count
+        guard Double(added) <= max(2, Double(correctedUnits.count) * 0.3) else {
+            return .addedContent
+        }
+        for term in protectedTerms where corrected.range(of: term, options: .caseInsensitive) == nil {
+            return .droppedTerm
+        }
+        return nil
+    }
+
+    /// Openers of a reply rather than a cleaned dictation.
+    private static let answerPrefixes = [
+        "sure", "certainly", "of course", "here is", "here's", "as an ai",
+        "好的，", "好的,", "当然", "以下是", "没问题"
+    ]
+
+    /// Comparable units of meaning: each CJK character and each Latin word, lowercased. Digits,
+    /// list markers, and punctuation are left out so formatting a list does not count as adding.
+    static func spokenUnits(in text: String) -> [String] {
+        var units: [String] = []
+        var word = ""
+        func flush() {
+            if !word.isEmpty {
+                units.append(word.lowercased())
+                word = ""
+            }
+        }
+        for scalar in text.unicodeScalars {
+            if (0x4E00...0x9FFF).contains(Int(scalar.value)) || (0x3040...0x30FF).contains(Int(scalar.value)) || (0xAC00...0xD7AF).contains(Int(scalar.value)) {
+                flush()
+                units.append(String(scalar))
+            } else if CharacterSet.letters.contains(scalar) || scalar == "'" {
+                word.unicodeScalars.append(scalar)
+            } else {
+                flush()
+            }
+        }
+        flush()
+        return units
     }
 
     private static func lostChineseLanguage(original: String, corrected: String) -> Bool {
@@ -298,7 +445,8 @@ final class LLMRefiner: Sendable {
         // OpenRouter Free randomly routes to free models, and some are slow enough that a 12 second
         // timeout causes frequent silent fallbacks. Keep the UI value for paid/stable providers,
         // but give the free router enough room to prove whether polishing actually works.
-        settings.llmProvider == .openRouterFree ? max(settings.requestTimeout, 25) : settings.requestTimeout
+        let base = settings.llmProvider == .openRouterFree ? max(settings.requestTimeout, 25) : settings.requestTimeout
+        return isDictateActive ? min(base, Self.dictateTimeout) : base
     }
 
     private func outputFormat(
@@ -437,6 +585,9 @@ final class LLMRefiner: Sendable {
                     return
                 }
                 DebugLog.event("llmRefineFallback:http\(http.statusCode):\(providerError.displayMessage)")
+                if let reason = Self.configurationFailure(status: http.statusCode, message: providerError.displayMessage) {
+                    task.setConfigurationFailure(reason)
+                }
                 self.complete(originalText, task: task, completion: completion)
                 return
             }
@@ -461,7 +612,9 @@ final class LLMRefiner: Sendable {
             let rejectionReason = self.rejectionReason(
                 original: trimmedText,
                 corrected: normalized,
-                finishReason: parsed.finishReason
+                finishReason: parsed.finishReason,
+                isDictate: context.isDictate,
+                protectedTerms: context.protectedTerms
             )
             guard rejectionReason == nil else {
                 DebugLog.event("llmRefineFallback:rejected:\(rejectionReason?.rawValue ?? "unknown"):originalChars=\(trimmedText.count):correctedChars=\(normalized.count):finishReason=\(parsed.finishReason ?? "nil")")
@@ -471,12 +624,12 @@ final class LLMRefiner: Sendable {
             DebugLog.event("llmRefineCompleted")
             self.complete(normalized, task: task, completion: completion)
         }
-        let queue = OperationQueue()
-        queue.maxConcurrentOperationCount = 1
-        let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: queue)
-
+        // One shared session (URLSession.shared by default) with a per-task delegate: a new
+        // session per request meant a fresh TCP and TLS handshake on every dictation, while the
+        // shared one reuses the connection online recognition just opened to the same host.
         DebugLog.event("llmHTTPStart")
-        let dataTask = session.dataTask(with: request)
+        let dataTask = urlSession.dataTask(with: request)
+        dataTask.delegate = delegate
         task.setCurrentTask(dataTask)
         dataTask.resume()
     }
@@ -554,6 +707,5 @@ private final class TimedLLMRequestDelegate: NSObject, URLSessionDataDelegate, @
         metrics.completedAt = clock.now
         DebugLog.event("llmHTTPComplete")
         completion(body, task.response, error, metrics)
-        session.finishTasksAndInvalidate()
     }
 }

@@ -56,6 +56,10 @@ final class FloatingPanel {
         }
     }
 
+    func setTheme(_ theme: AppTheme) {
+        model.theme = theme
+    }
+
     func setPreferredAnchor(_ point: NSPoint?) {
         preferredAnchor = point
     }
@@ -196,7 +200,7 @@ final class FloatingPanel {
         panel.setContentSize(NSSize(width: width, height: FloatingHUDView.height))
     }
 
-    private static let maximumMessageWidth: CGFloat = 360
+    private static let maximumMessageWidth: CGFloat = 440
 
     private func position() {
         let screens = NSScreen.screens

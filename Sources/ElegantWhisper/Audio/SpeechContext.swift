@@ -7,6 +7,89 @@ import Foundation
 // The one exception is CursorTextContext: a short, redacted window around the insertion point
 // that reaches the LLM only when the user turns on "Send text around the cursor".
 
+/// What kind of app the user is dictating into, for Dictate's tone. Decided locally from the
+/// bundle identifier; only the category's instruction and the app name reach the model.
+enum AppCategory: String, Equatable, Sendable {
+    case chat
+    case email
+    case code
+    case document
+    case aiAssistant
+
+    init?(bundleIdentifier: String?) {
+        guard let id = bundleIdentifier?.lowercased() else { return nil }
+        if Self.prefixes.contains(where: { id.hasPrefix($0.0) }) {
+            self = Self.prefixes.first { id.hasPrefix($0.0) }!.1
+            return
+        }
+        guard let category = Self.bundleIDs[id] else { return nil }
+        self = category
+    }
+
+    var toneHint: String {
+        switch self {
+        case .chat:
+            "Instant message. Keep it casual, short, and natural, as the user would type in chat. Do not end the message with a period. Do not add greetings or sign-offs."
+        case .email:
+            "Email. Use complete sentences and paragraphs. Keep greetings and sign-offs only if they were spoken."
+        case .code:
+            "Code editor or terminal. Change as little as possible. Keep code identifiers, commands, and paths exact. Do not turn sentences into lists."
+        case .document:
+            "Document or notes. Use clear sentences and paragraphs; spoken enumerations become lists."
+        case .aiAssistant:
+            "Message to an AI assistant. Use clear, complete sentences; several separate requests become a numbered list."
+        }
+    }
+
+    private static let prefixes: [(String, AppCategory)] = [
+        ("com.jetbrains.", .code),
+        ("com.microsoft.vscode", .code)
+    ]
+
+    private static let bundleIDs: [String: AppCategory] = [
+        "com.tencent.xinwechat": .chat,
+        "com.tinyspeck.slackmacgap": .chat,
+        "com.hnc.discord": .chat,
+        "ru.keepcoder.telegram": .chat,
+        "com.apple.mobilesms": .chat,
+        "net.whatsapp.whatsapp": .chat,
+        "desktop.whatsapp": .chat,
+        "com.microsoft.teams2": .chat,
+        "com.electron.lark": .chat,
+        "com.bytedance.lark": .chat,
+        "com.alibaba.dingtalkmac": .chat,
+        "com.tencent.qq": .chat,
+        "jp.naver.line.mac": .chat,
+        "com.apple.mail": .email,
+        "com.microsoft.outlook": .email,
+        "com.readdle.smartemail-mac": .email,
+        "com.mimestream.mimestream": .email,
+        "com.superhuman.electron": .email,
+        "com.apple.dt.xcode": .code,
+        "com.todesktop.230313mzl4w4u92": .code,
+        "dev.zed.zed": .code,
+        "com.exafunction.windsurf": .code,
+        "com.sublimetext.4": .code,
+        "com.panic.nova": .code,
+        "com.googlecode.iterm2": .code,
+        "com.apple.terminal": .code,
+        "dev.warp.warp-stable": .code,
+        "com.mitchellh.ghostty": .code,
+        "net.kovidgoyal.kitty": .code,
+        "com.apple.notes": .document,
+        "com.apple.iwork.pages": .document,
+        "com.apple.textedit": .document,
+        "notion.id": .document,
+        "md.obsidian": .document,
+        "com.microsoft.word": .document,
+        "net.shinyfrog.bear": .document,
+        "com.evernote.evernote": .document,
+        "com.anthropic.claudefordesktop": .aiAssistant,
+        "com.openai.chat": .aiAssistant,
+        "ai.perplexity.mac": .aiAssistant
+    ]
+}
+
 /// Bounded text around the insertion point, for the LLM to resolve names, terms, and spelling.
 struct CursorTextContext: Equatable, Sendable {
     static let beforeLimit = 400
@@ -37,11 +120,14 @@ struct SpeechFocusContext: Equatable, Sendable {
     let appName: String?
     let terms: [String]
     let cursorText: CursorTextContext?
+    /// Dictate only: how to adapt the tone to the kind of app.
+    let toneHint: String?
 
-    init(appName: String?, terms: [String], cursorText: CursorTextContext? = nil) {
+    init(appName: String?, terms: [String], cursorText: CursorTextContext? = nil, toneHint: String? = nil) {
         self.appName = Self.cleanAppName(appName)
         self.terms = Array(terms.prefix(Self.vocabularyHintLimit))
         self.cursorText = cursorText
+        self.toneHint = toneHint
     }
 
     /// AX extract first, then pack seed terms; case-insensitive dedupe; capped for LLM hints only.
@@ -60,7 +146,7 @@ struct SpeechFocusContext: Equatable, Sendable {
     }
 
     var isEmpty: Bool {
-        appName == nil && terms.isEmpty && cursorText == nil
+        appName == nil && terms.isEmpty && cursorText == nil && toneHint == nil
     }
 
     var promptSection: String? {
@@ -75,6 +161,9 @@ struct SpeechFocusContext: Equatable, Sendable {
         ]
         if let appName {
             lines.append("User is currently using app: \(appName)")
+        }
+        if let toneHint {
+            lines.append("Tone for this app: \(toneHint)")
         }
         if !terms.isEmpty {
             lines.append("Vocabulary hints: \(terms.joined(separator: ", "))")

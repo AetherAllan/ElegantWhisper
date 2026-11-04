@@ -80,6 +80,8 @@ final class OnlineTranscriptionTests: XCTestCase {
             language: .simplifiedChinese,
             terms: ["Python", "JSON"],
             appName: "Notes",
+            service: .openAI,
+            model: "gpt-transcribe",
             apiKey: "sk-test",
             session: OpenAIStubProtocol.session(),
             hintCache: HintSupportCache(defaults: nil)
@@ -103,6 +105,8 @@ final class OnlineTranscriptionTests: XCTestCase {
             language: .englishUS,
             terms: ["Redis"],
             appName: nil,
+            service: .openAI,
+            model: "gpt-transcribe",
             apiKey: "sk-test",
             session: OpenAIStubProtocol.session(),
             hintCache: HintSupportCache(defaults: nil)
@@ -126,13 +130,16 @@ final class OnlineTranscriptionTests: XCTestCase {
 
         _ = try await OnlineTranscriber.transcribe(
             samples: speech(seconds: 1), language: .englishUS, terms: ["Redis"], appName: nil,
+            service: .openRouter, model: "openai/gpt-transcribe",
             apiKey: "sk-or-v1-test", session: session, hintCache: cache
         )
-        XCTAssertFalse(cache.acceptsHints(.openRouter))
-        XCTAssertTrue(cache.acceptsHints(.openAI), "only the service that refused is affected")
+        XCTAssertFalse(cache.acceptsHints(.openRouter, model: "openai/gpt-transcribe"))
+        XCTAssertTrue(cache.acceptsHints(.openAI, model: "gpt-transcribe"), "only the service that refused is affected")
+        XCTAssertTrue(cache.acceptsHints(.openRouter, model: "qwen/qwen3-asr-1.7b"), "and only that model")
 
         let second = try await OnlineTranscriber.transcribe(
             samples: speech(seconds: 1), language: .englishUS, terms: ["Redis"], appName: nil,
+            service: .openRouter, model: "openai/gpt-transcribe",
             apiKey: "sk-or-v1-test", session: session, hintCache: cache
         )
         XCTAssertEqual(second, "second")
@@ -144,10 +151,10 @@ final class OnlineTranscriptionTests: XCTestCase {
     func testRememberedRejectionExpires() {
         let cache = HintSupportCache(defaults: nil)
         let rejected = Date(timeIntervalSince1970: 1_000_000)
-        cache.markRejected(.openRouter, now: rejected)
+        cache.markRejected(.openRouter, model: "qwen/qwen3-asr-1.7b", now: rejected)
 
-        XCTAssertFalse(cache.acceptsHints(.openRouter, now: rejected.addingTimeInterval(60)))
-        XCTAssertTrue(cache.acceptsHints(.openRouter, now: rejected.addingTimeInterval(HintSupportCache.retryAfter + 1)))
+        XCTAssertFalse(cache.acceptsHints(.openRouter, model: "qwen/qwen3-asr-1.7b", now: rejected.addingTimeInterval(60)))
+        XCTAssertTrue(cache.acceptsHints(.openRouter, model: "qwen/qwen3-asr-1.7b", now: rejected.addingTimeInterval(HintSupportCache.retryAfter + 1)))
     }
 
     func testFailuresSurfaceWithoutRetryingAndShortClipsAreSkipped() async throws {
@@ -158,6 +165,8 @@ final class OnlineTranscriptionTests: XCTestCase {
                 language: .englishUS,
                 terms: ["Redis"],
                 appName: nil,
+                service: .openAI,
+                model: "gpt-transcribe",
                 apiKey: "sk-bad",
                 session: OpenAIStubProtocol.session(),
                 hintCache: HintSupportCache(defaults: nil)
@@ -176,6 +185,8 @@ final class OnlineTranscriptionTests: XCTestCase {
                 language: .englishUS,
                 terms: [],
                 appName: nil,
+                service: .openAI,
+                model: "gpt-transcribe",
                 apiKey: "sk-test",
                 session: OpenAIStubProtocol.session(),
                 hintCache: HintSupportCache(defaults: nil)
@@ -189,18 +200,52 @@ final class OnlineTranscriptionTests: XCTestCase {
 
     func testKeyCheckLooksUpTheModelWithoutAudio() async {
         OpenAIStubProtocol.reset(responses: [(200, #"{"id":"gpt-transcribe","object":"model"}"#)])
-        let result = await OnlineTranscriber.checkKey("sk-test", session: OpenAIStubProtocol.session())
+        let result = await OnlineTranscriber.checkKey(
+            "sk-test",
+            service: .openAI,
+            model: "gpt-transcribe",
+            session: OpenAIStubProtocol.session()
+        )
 
-        XCTAssertEqual(try? result.get(), .openAI)
+        XCTAssertNoThrow(try result.get())
         XCTAssertEqual(OpenAIStubProtocol.requests().first?.url, TranscriptionService.openAI.keyCheckEndpoint)
         XCTAssertEqual(OpenAIStubProtocol.requests().first?.method, "GET")
     }
 
-    func testServiceIsChosenFromTheKey() {
-        XCTAssertEqual(TranscriptionService(apiKey: "sk-or-v1-abc"), .openRouter)
-        XCTAssertEqual(TranscriptionService(apiKey: "  sk-or-v1-abc\n"), .openRouter)
-        XCTAssertEqual(TranscriptionService(apiKey: "sk-proj-abc"), .openAI)
-        XCTAssertEqual(TranscriptionService(apiKey: ""), .openAI)
+    func testPricesKeepTheirSignificantDigits() {
+        XCTAssertEqual(TranscriptionModelOption.openAIModel.priceText, "$0.0045/min")
+        let prices = Dictionary(uniqueKeysWithValues: TranscriptionModelOption.openRouterPresets.map { ($0.id, $0.priceText) })
+        XCTAssertEqual(prices["qwen/qwen3-asr-1.7b"], "$0.00048/min")
+        XCTAssertEqual(prices["microsoft/mai-transcribe-2"], "$0.0017/min")
+        XCTAssertEqual(prices["openai/whisper-large-v3-turbo"], "$0.0002/min")
+    }
+
+    func testOpenRouterKeysAreRecognizedForMigrationAndHints() {
+        XCTAssertTrue(TranscriptionService.looksLikeOpenRouterKey("sk-or-v1-abc"))
+        XCTAssertTrue(TranscriptionService.looksLikeOpenRouterKey("  sk-or-v1-abc\n"))
+        XCTAssertFalse(TranscriptionService.looksLikeOpenRouterKey("sk-proj-abc"))
+        XCTAssertFalse(TranscriptionService.looksLikeOpenRouterKey(""))
+        XCTAssertEqual(TranscriptionProvider.apple.service, nil)
+        XCTAssertEqual(TranscriptionProvider.openRouter.service, .openRouter)
+    }
+
+    func testChosenOpenRouterModelIsSent() async throws {
+        OpenAIStubProtocol.reset(responses: [(200, #"{"text":"ok"}"#)])
+        _ = try await OnlineTranscriber.transcribe(
+            samples: speech(seconds: 1),
+            language: .simplifiedChinese,
+            terms: [],
+            appName: nil,
+            service: .openRouter,
+            model: "qwen/qwen3-asr-1.7b",
+            apiKey: "sk-or-v1-test",
+            session: OpenAIStubProtocol.session(),
+            hintCache: HintSupportCache(defaults: nil)
+        )
+        let body = try XCTUnwrap(OpenAIStubProtocol.requests().first?.body)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(body.utf8)) as? [String: Any])
+        XCTAssertEqual(json["model"] as? String, "qwen/qwen3-asr-1.7b")
+        XCTAssertNil(json["keyterms"], "no hints to send")
     }
 
     func testOpenRouterGetsJSONWithBase64WavOneLanguageAndKeyterms() async throws {
@@ -211,6 +256,8 @@ final class OnlineTranscriptionTests: XCTestCase {
             language: .simplifiedChinese,
             terms: ["Redis", "GitHub"],
             appName: "Notes",
+            service: .openRouter,
+            model: "openai/gpt-transcribe",
             apiKey: "sk-or-v1-test",
             session: OpenAIStubProtocol.session(),
             hintCache: HintSupportCache(defaults: nil)
@@ -242,6 +289,8 @@ final class OnlineTranscriptionTests: XCTestCase {
             language: .englishUS,
             terms: ["Redis"],
             appName: nil,
+            service: .openRouter,
+            model: "openai/gpt-transcribe",
             apiKey: "sk-or-v1-test",
             session: OpenAIStubProtocol.session(),
             hintCache: HintSupportCache(defaults: nil)
@@ -255,10 +304,36 @@ final class OnlineTranscriptionTests: XCTestCase {
     }
 
     func testOpenRouterKeyCheckAndCreditErrors() async {
-        OpenAIStubProtocol.reset(responses: [(200, #"{"data":{"label":"sk-or-v1-abc...","usage":0}}"#)])
-        let result = await OnlineTranscriber.checkKey("sk-or-v1-test", session: OpenAIStubProtocol.session())
-        XCTAssertEqual(try? result.get(), .openRouter)
-        XCTAssertEqual(OpenAIStubProtocol.requests().first?.url, TranscriptionService.openRouter.keyCheckEndpoint)
+        // Key lookup, then the model lookup.
+        OpenAIStubProtocol.reset(responses: [
+            (200, #"{"data":{"label":"sk-or-v1-abc...","usage":0}}"#),
+            (200, #"{"data":{"id":"qwen/qwen3-asr-1.7b","endpoints":[]}}"#)
+        ])
+        let result = await OnlineTranscriber.checkKey(
+            "sk-or-v1-test",
+            service: .openRouter,
+            model: "qwen/qwen3-asr-1.7b",
+            session: OpenAIStubProtocol.session()
+        )
+        XCTAssertNoThrow(try result.get())
+        let urls = OpenAIStubProtocol.requests().map(\.url)
+        XCTAssertEqual(urls, [TranscriptionService.openRouter.keyCheckEndpoint, TranscriptionService.openRouterModelURL("qwen/qwen3-asr-1.7b")])
+
+        OpenAIStubProtocol.reset(responses: [
+            (200, #"{"data":{}}"#),
+            (404, #"{"error":{"message":"Model not found"}}"#)
+        ])
+        let missing = await OnlineTranscriber.checkKey(
+            "sk-or-v1-test",
+            service: .openRouter,
+            model: "not-a/real-model",
+            session: OpenAIStubProtocol.session()
+        )
+        if case .failure(let error) = missing {
+            XCTAssertEqual(error, .unknownModel("not-a/real-model"))
+        } else {
+            XCTFail("expected unknownModel")
+        }
 
         XCTAssertEqual(
             OnlineTranscriptionError.http(status: 402, message: "Insufficient credits").localizedDescription,

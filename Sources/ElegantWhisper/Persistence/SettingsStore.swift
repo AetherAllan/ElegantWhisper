@@ -20,9 +20,14 @@ final class SettingsStore: @unchecked Sendable {
     private enum Key {
         static let language = "language"
         static let speechModel = "speechModel"
+        static let transcriptionProvider = "transcriptionProvider"
+        static let openRouterTranscriptionModel = "openRouterTranscriptionModel"
         static let llmEnabled = "llmEnabled"
         static let shareCursorTextWithLLM = "shareCursorTextWithLLM"
         static let readWindowText = "readWindowText"
+        static let dictateMatchesAppTone = "dictateMatchesAppTone"
+        static let lastStylePackID = "lastStylePackID"
+        static let appTheme = "appTheme"
         static let llmProvider = "llmProvider"
         static let apiBaseURL = "apiBaseURL"
         static let model = "model"
@@ -44,12 +49,75 @@ final class SettingsStore: @unchecked Sendable {
         }
     }
 
+    /// The Apple model. An older build stored "openAI" here for online recognition; that reads
+    /// as the newer Apple model now, and migrateTranscriptionSettings() moves it to the provider.
     var speechModel: SpeechRecognitionModel {
         get {
             SpeechRecognitionModel(rawValue: defaults.string(forKey: Key.speechModel) ?? "") ?? .speech
         }
         set {
             defaults.set(newValue.rawValue, forKey: Key.speechModel)
+        }
+    }
+
+    var transcriptionProvider: TranscriptionProvider {
+        get {
+            TranscriptionProvider(rawValue: defaults.string(forKey: Key.transcriptionProvider) ?? "") ?? .apple
+        }
+        set {
+            defaults.set(newValue.rawValue, forKey: Key.transcriptionProvider)
+        }
+    }
+
+    var openRouterTranscriptionModel: String {
+        get {
+            let stored = defaults.string(forKey: Key.openRouterTranscriptionModel)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return stored.isEmpty ? TranscriptionModelOption.defaultOpenRouterModel : stored
+        }
+        set {
+            defaults.set(newValue.trimmingCharacters(in: .whitespacesAndNewlines), forKey: Key.openRouterTranscriptionModel)
+        }
+    }
+
+    /// The model ID sent for an online provider.
+    func transcriptionModel(for provider: TranscriptionProvider) -> String {
+        switch provider {
+        case .apple: speechModel.rawValue
+        case .openAI: TranscriptionModelOption.openAIModel.id
+        case .openRouter: openRouterTranscriptionModel
+        }
+    }
+
+    func transcriptionKey(for provider: TranscriptionProvider) -> String {
+        switch provider {
+        case .apple: ""
+        case .openAI: openAITranscriptionKey
+        case .openRouter: openRouterTranscriptionKey
+        }
+    }
+
+    func setTranscriptionKey(_ key: String, for provider: TranscriptionProvider) {
+        switch provider {
+        case .apple: break
+        case .openAI: openAITranscriptionKey = key
+        case .openRouter: openRouterTranscriptionKey = key
+        }
+    }
+
+    /// One-time move from the single-key setup: "openAI" in speechModel meant online recognition,
+    /// and an OpenRouter key may sit in the OpenAI slot because the service used to be picked by
+    /// key prefix.
+    func migrateTranscriptionSettings() {
+        if defaults.string(forKey: Key.speechModel) == "openAI" {
+            let key = openAITranscriptionKey
+            transcriptionProvider = TranscriptionService.looksLikeOpenRouterKey(key) ? .openRouter : .openAI
+            speechModel = .speech
+        }
+        let legacyKey = openAITranscriptionKey
+        if TranscriptionService.looksLikeOpenRouterKey(legacyKey), openRouterTranscriptionKey.isEmpty {
+            openRouterTranscriptionKey = legacyKey
+            openAITranscriptionKey = ""
         }
     }
 
@@ -60,6 +128,45 @@ final class SettingsStore: @unchecked Sendable {
         set {
             defaults.set(newValue, forKey: Key.llmEnabled)
         }
+    }
+
+    /// Dictate adapts tone to the kind of app being dictated into (chat, email, code, documents).
+    var dictateMatchesAppTone: Bool {
+        get {
+            defaults.object(forKey: Key.dictateMatchesAppTone) as? Bool ?? true
+        }
+        set {
+            defaults.set(newValue, forKey: Key.dictateMatchesAppTone)
+        }
+    }
+
+    var appTheme: AppTheme {
+        get {
+            AppTheme(rawValue: defaults.string(forKey: Key.appTheme) ?? "") ?? .standard
+        }
+        set {
+            defaults.set(newValue.rawValue, forKey: Key.appTheme)
+        }
+    }
+
+    /// The Style Pack to return to when leaving Dictate for "Style pack" mode.
+    var lastStylePackID: String {
+        get {
+            defaults.string(forKey: Key.lastStylePackID) ?? StylePackStore.programmerPackID
+        }
+        set {
+            defaults.set(newValue, forKey: Key.lastStylePackID)
+        }
+    }
+
+    /// The key polishing and Dictate actually send. With an OpenRouter provider and no key of its
+    /// own, reuse the OpenRouter key from Recognition so the same account is not entered twice.
+    var effectiveLLMAPIKey: String {
+        let key = apiKey
+        guard key.isEmpty, llmProvider.isOpenRouter else {
+            return key
+        }
+        return openRouterTranscriptionKey
     }
 
     /// Read technical words from the front window (locally) to fix their spelling after recognition.
@@ -116,13 +223,22 @@ final class SettingsStore: @unchecked Sendable {
         }
     }
 
-    /// OpenAI key for online recognition, separate from the polishing provider's key.
+    /// Keys for online recognition, one per provider and separate from the polishing key.
     var openAITranscriptionKey: String {
         get {
             keychain.string(for: "openAITranscriptionKey")
         }
         set {
             keychain.setString(newValue.trimmingCharacters(in: .whitespacesAndNewlines), for: "openAITranscriptionKey")
+        }
+    }
+
+    var openRouterTranscriptionKey: String {
+        get {
+            keychain.string(for: "openRouterTranscriptionKey")
+        }
+        set {
+            keychain.setString(newValue.trimmingCharacters(in: .whitespacesAndNewlines), for: "openRouterTranscriptionKey")
         }
     }
 

@@ -1,8 +1,8 @@
 import AVFoundation
 import Foundation
 
-// Optional online recognition with OpenAI `gpt-transcribe`, called directly at OpenAI or through
-// OpenRouter depending on the key the user pastes.
+// Optional online recognition through OpenAI (`gpt-transcribe`) or OpenRouter (any of its
+// speech-to-text models), chosen in Settings → Recognition.
 //
 // On-device recognition keeps running during the recording for the live HUD preview and as the
 // fallback. Meanwhile AudioClipCollector keeps a 16 kHz mono copy of the microphone audio. When
@@ -207,6 +207,7 @@ enum OnlineTranscriptionError: LocalizedError, Equatable {
     case timedOut
     case network(String)
     case invalidResponse
+    case unknownModel(String)
     case http(status: Int, message: String)
 
     var errorDescription: String? {
@@ -217,6 +218,7 @@ enum OnlineTranscriptionError: LocalizedError, Equatable {
         case .timedOut: "Timed out"
         case .network(let message): "Network error: \(message)"
         case .invalidResponse: "Invalid response"
+        case .unknownModel(let model): "OpenRouter has no model “\(model)”"
         case .http(401, _): "Invalid API key"
         case .http(402, _): "Not enough credits on this key"
         case .http(let status, let message): message.isEmpty ? "HTTP \(status)" : "HTTP \(status): \(message)"
@@ -232,19 +234,20 @@ enum OnlineTranscriptionError: LocalizedError, Equatable {
         case .timedOut: "timedOut"
         case .network: "network"
         case .invalidResponse: "invalidResponse"
+        case .unknownModel: "unknownModel"
         case .http(let status, _): "http\(status)"
         }
     }
 }
 
-/// Where `gpt-transcribe` is called. Chosen from the key itself, so there is nothing to configure:
-/// OpenRouter keys start with `sk-or-`.
+/// The online API a recording is sent to, set by the provider chosen in Settings.
 enum TranscriptionService: String, Equatable {
     case openAI
     case openRouter
 
-    init(apiKey: String) {
-        self = apiKey.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("sk-or-") ? .openRouter : .openAI
+    /// OpenRouter keys start with `sk-or-`. Used to point out a key pasted under the wrong provider.
+    static func looksLikeOpenRouterKey(_ key: String) -> Bool {
+        key.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("sk-or-")
     }
 
     var displayName: String {
@@ -270,11 +273,9 @@ enum TranscriptionService: String, Equatable {
         }
     }
 
-    var model: String {
-        switch self {
-        case .openAI: "gpt-transcribe"
-        case .openRouter: "openai/gpt-transcribe"
-        }
+    /// Public lookup that answers 404 for a model ID OpenRouter does not have.
+    static func openRouterModelURL(_ model: String) -> URL? {
+        URL(string: "https://openrouter.ai/api/v1/models/\(model)/endpoints")
     }
 
     /// OpenRouter documents WAV for base64 audio; OpenAI takes a smaller M4A upload.
@@ -291,6 +292,7 @@ struct OnlineTranscriptionRequest: Equatable {
     static let maxKeywords = 50
 
     var service: TranscriptionService = .openAI
+    var model = TranscriptionModelOption.openAIModel.id
     var audio: EncodedAudio
     var languages: [String]
     var keywords: [String]
@@ -366,7 +368,7 @@ struct OnlineTranscriptionRequest: Equatable {
         func field(_ name: String, _ value: String) {
             body.append(Data("--\(boundary)\r\nContent-Disposition: form-data; name=\"\(name)\"\r\n\r\n\(value)\r\n".utf8))
         }
-        field("model", service.model)
+        field("model", model)
         field("response_format", "json")
         for language in languages {
             field("languages[]", language)
@@ -404,7 +406,7 @@ struct OnlineTranscriptionRequest: Equatable {
         }
         let format = (audio.filename as NSString).pathExtension.lowercased()
         let body = Body(
-            model: service.model,
+            model: model,
             inputAudio: InputAudio(data: audio.data.base64EncodedString(), format: format.isEmpty ? "wav" : format),
             language: languages.first,
             keyterms: keywords.isEmpty ? nil : keywords
@@ -438,7 +440,10 @@ struct OnlineTranscriptionRequest: Equatable {
 /// instead of a rejected one plus a retry. Entries expire so a service that adds support later
 /// gets tried again.
 final class HintSupportCache: @unchecked Sendable {
-    static let shared = HintSupportCache(defaults: UserDefaults(suiteName: AppConstants.userDefaultsSuiteName))
+    // UserDefaults(suiteName:) returns nil for the app's own bundle identifier when running as the
+    // app, so fall back to .standard (the same domain), as SettingsStore does. Without this the
+    // rejection was kept in memory only and every launch paid for a rejected request again.
+    static let shared = HintSupportCache(defaults: UserDefaults(suiteName: AppConstants.userDefaultsSuiteName) ?? .standard)
     static let retryAfter: TimeInterval = 7 * 24 * 60 * 60
 
     private let lock = NSLock()
@@ -453,22 +458,52 @@ final class HintSupportCache: @unchecked Sendable {
         rejectedAt = stored
     }
 
-    func acceptsHints(_ service: TranscriptionService, now: Date = Date()) -> Bool {
+    func acceptsHints(_ service: TranscriptionService, model: String, now: Date = Date()) -> Bool {
         lock.withLock {
-            guard let date = rejectedAt[key(service)] else { return true }
+            guard let date = rejectedAt[key(service, model)] else { return true }
             return now.timeIntervalSince(date) > Self.retryAfter
         }
     }
 
-    func markRejected(_ service: TranscriptionService, now: Date = Date()) {
+    func markRejected(_ service: TranscriptionService, model: String, now: Date = Date()) {
         lock.withLock {
-            rejectedAt[key(service)] = now
+            rejectedAt[key(service, model)] = now
             defaults?.set(rejectedAt, forKey: Self.defaultsKey)
         }
     }
 
-    private func key(_ service: TranscriptionService) -> String {
-        "\(service.rawValue)/\(service.model)"
+    /// Per model: on OpenRouter one model may take keyterms while another refuses them.
+    private func key(_ service: TranscriptionService, _ model: String) -> String {
+        "\(service.rawValue)/\(model)"
+    }
+}
+
+/// Opens the TLS connection to an online service while the user is still speaking, so the upload
+/// and the Dictate request after it do not pay for a fresh handshake when they are sent.
+/// URLSession.shared keeps the connection alive and both requests reuse it.
+final class ConnectionWarmer: @unchecked Sendable {
+    static let shared = ConnectionWarmer()
+    /// A connection opened this recently is assumed to still be alive.
+    static let reuseWindow: TimeInterval = 20
+
+    private let lock = NSLock()
+    private var warmedAt: [String: Date] = [:]
+
+    func warm(_ url: URL, session: URLSession = .shared, now: Date = Date()) {
+        guard let host = url.host, let root = URL(string: "https://\(host)/") else { return }
+        let shouldWarm = lock.withLock { () -> Bool in
+            if let last = warmedAt[host], now.timeIntervalSince(last) < Self.reuseWindow {
+                return false
+            }
+            warmedAt[host] = now
+            return true
+        }
+        guard shouldWarm else { return }
+        // HEAD on the host root: no API key, no body, any status will do.
+        var request = URLRequest(url: root, timeoutInterval: 5)
+        request.httpMethod = "HEAD"
+        session.dataTask(with: request) { _, _, _ in }.resume()
+        DebugLog.event("connectionWarm host=\(host)")
     }
 }
 
@@ -483,6 +518,8 @@ enum OnlineTranscriber {
         language: RecognitionLanguage,
         terms: [String],
         appName: String?,
+        service: TranscriptionService,
+        model: String,
         apiKey: String,
         session: URLSession = .shared,
         hintCache: HintSupportCache = .shared
@@ -494,10 +531,10 @@ enum OnlineTranscriber {
         guard seconds >= minimumSeconds else {
             throw OnlineTranscriptionError.tooShort
         }
-        let service = TranscriptionService(apiKey: apiKey)
-        let sendHints = hintCache.acceptsHints(service)
+        let sendHints = hintCache.acceptsHints(service, model: model)
         var request = OnlineTranscriptionRequest(
             service: service,
+            model: model,
             audio: AudioClipEncoder.encode(samples: samples, compressed: service.acceptsCompressedAudio),
             languages: service == .openRouter
                 ? [OnlineTranscriptionRequest.openRouterLanguage(for: language)]
@@ -506,7 +543,7 @@ enum OnlineTranscriber {
             // OpenRouter has no prompt field.
             prompt: service == .openRouter || !sendHints ? nil : appName.map { "Voice dictation typed into \($0)." }
         )
-        DebugLog.event("onlineTranscriptionStart service=\(service.rawValue) audioSec=\(String(format: "%.1f", seconds)) bytes=\(request.audio.data.count) keywords=\(request.keywords.count)")
+        DebugLog.event("onlineTranscriptionStart service=\(service.rawValue) model=\(model) audioSec=\(String(format: "%.1f", seconds)) bytes=\(request.audio.data.count) keywords=\(request.keywords.count)")
         do {
             return try await timedSend(request, apiKey: apiKey, session: session)
         } catch OnlineTranscriptionError.http(status: 400, _) where !request.keywords.isEmpty || request.prompt != nil {
@@ -518,8 +555,8 @@ enum OnlineTranscriber {
             let text = try await timedSend(request, apiKey: apiKey, session: session)
             // The plain request worked, so the hints were the problem: skip them from now on
             // instead of paying for a rejected request on every dictation.
-            hintCache.markRejected(service)
-            DebugLog.event("onlineTranscriptionHintsDisabled service=\(service.rawValue)")
+            hintCache.markRejected(service, model: model)
+            DebugLog.event("onlineTranscriptionHintsDisabled service=\(service.rawValue) model=\(model)")
             return text
         }
     }
@@ -564,15 +601,40 @@ enum OnlineTranscriber {
         return try OnlineTranscriptionRequest.text(from: data)
     }
 
-    /// Checks the key without sending audio; both lookups are free.
-    static func checkKey(_ apiKey: String, session: URLSession = .shared) async -> Result<TranscriptionService, OnlineTranscriptionError> {
+    /// Checks the key, and for OpenRouter that the chosen model exists, without sending audio;
+    /// all lookups are free.
+    static func checkKey(
+        _ apiKey: String,
+        service: TranscriptionService,
+        model: String,
+        session: URLSession = .shared
+    ) async -> Result<Void, OnlineTranscriptionError> {
         let key = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else {
             return .failure(.missingKey)
         }
-        let service = TranscriptionService(apiKey: key)
-        var request = URLRequest(url: service.keyCheckEndpoint, timeoutInterval: 10)
-        request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+        var keyRequest = URLRequest(url: service.keyCheckEndpoint, timeoutInterval: 10)
+        keyRequest.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+        if case .failure(let error) = await get(keyRequest, session: session) {
+            return .failure(error)
+        }
+        guard service == .openRouter else {
+            return .success(())
+        }
+        guard let url = TranscriptionService.openRouterModelURL(model) else {
+            return .failure(.unknownModel(model))
+        }
+        switch await get(URLRequest(url: url, timeoutInterval: 10), session: session) {
+        case .success:
+            return .success(())
+        case .failure(.http(status: 404, _)):
+            return .failure(.unknownModel(model))
+        case .failure(let error):
+            return .failure(error)
+        }
+    }
+
+    private static func get(_ request: URLRequest, session: URLSession) async -> Result<Void, OnlineTranscriptionError> {
         do {
             let (data, response) = try await session.data(for: request)
             guard let http = response as? HTTPURLResponse else {
@@ -581,7 +643,7 @@ enum OnlineTranscriber {
             guard (200..<300).contains(http.statusCode) else {
                 return .failure(.http(status: http.statusCode, message: OnlineTranscriptionRequest.errorMessage(from: data)))
             }
-            return .success(service)
+            return .success(())
         } catch let error as URLError where error.code == .timedOut {
             return .failure(.timedOut)
         } catch {

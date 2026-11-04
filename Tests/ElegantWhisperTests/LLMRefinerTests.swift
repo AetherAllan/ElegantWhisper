@@ -265,6 +265,8 @@ final class LLMRefinerTests: XCTestCase {
         XCTAssertNil(json["temperature"])
         let reasoning = try XCTUnwrap(json["reasoning"] as? [String: Any])
         XCTAssertEqual(reasoning["effort"] as? String, "none")
+        let routing = try XCTUnwrap(json["provider"] as? [String: Any])
+        XCTAssertEqual(routing["sort"] as? String, "latency")
         let responseFormat = try XCTUnwrap(json["response_format"] as? [String: Any])
         XCTAssertEqual(responseFormat["type"] as? String, "json_schema")
         let jsonSchema = try XCTUnwrap(responseFormat["json_schema"] as? [String: Any])

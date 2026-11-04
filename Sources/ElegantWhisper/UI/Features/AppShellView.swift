@@ -23,20 +23,37 @@ struct AppShellView: View {
             }
             .navigationTitle(AppConstants.productName)
             .navigationSplitViewColumnWidth(min: 190, ideal: 220)
+            // Prism: the sidebar is page-black too, so the black toolbar above it is not a seam.
+            // Standard keeps the system sidebar material.
+            .scrollContentBackground(model.currentTheme == .prism ? .hidden : .automatic)
+            .background(model.currentTheme == .prism ? PrismPalette.background : Color.clear)
             .safeAreaInset(edge: .bottom) {
                 SidebarStatusFooter()
                     .padding(12)
             }
         } detail: {
-            switch model.route {
-            case .home: HomeView()
-            case .history: HistoryView()
-            case .dictionary: DictionaryView()
-            case .styles: StylesView()
-            case .settings: AppSettingsView()
-            case .about: AboutView()
+            Group {
+                switch model.route {
+                case .home: HomeView()
+                case .history: HistoryView()
+                case .dictionary: DictionaryView()
+                case .styles: StylesView()
+                case .settings: AppSettingsView()
+                case .about: AboutView()
+                }
             }
+            // One page color for every view: Forms, Lists, and text editors below lose their own
+            // backdrops, so a page never shows two grays.
+            .scrollContentBackground(.hidden)
+            .background(model.currentTheme.pageBackground)
         }
+        .environment(\.appTheme, model.currentTheme)
+        // Prism is a dark look by design, whatever the system appearance.
+        .preferredColorScheme(model.currentTheme == .prism ? .dark : nil)
+        // Without this the toolbar stays system gray above the black page, a visible seam.
+        .toolbarBackground(model.currentTheme.pageBackground, for: .windowToolbar)
+        .toolbarBackgroundVisibility(model.currentTheme == .prism ? .visible : .automatic, for: .windowToolbar)
+        .tint(model.currentTheme == .prism ? PrismPalette.accent : nil)
         .overlay(alignment: .bottom) {
             if !model.notice.isEmpty {
                 NoticeToast(text: model.notice) { model.notice = "" }
@@ -66,14 +83,22 @@ private struct SidebarStatusFooter: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             DictationStatusBadge(mode: model.mode)
-            HStack(spacing: 5) {
-                Keycap("Right ⌥")
-                Text(model.currentLanguage.menuTitle)
+            // One fact per line: the sidebar is narrow, and wrapping split "OpenRouter" and the
+            // keycap mid-word.
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 6) {
+                    Keycap("Right ⌥")
+                    Text(model.currentLanguage.menuTitle)
+                }
+                if model.currentProvider != .apple {
+                    // Online recognition is a privacy-relevant choice; keep it visible.
+                    Label(model.currentProvider.title, systemImage: "cloud")
+                }
                 if model.llmEnabled {
-                    Image(systemName: "sparkles")
-                        .help("LLM polishing is on")
+                    Label(model.outputMode == .dictate ? "Dictate" : "Polishing", systemImage: "sparkles")
                 }
             }
+            .lineLimit(1)
             .font(.caption)
             .foregroundStyle(.secondary)
         }
