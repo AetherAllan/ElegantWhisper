@@ -260,6 +260,15 @@ final class AppModel {
         notice = "Polishing settings saved"
     }
 
+    func saveOpenAIKey() {
+        settings.saveOpenAIKey()
+        notice = settings.draft.openAIKey.isEmpty ? "OpenAI key removed" : "OpenAI key saved"
+    }
+
+    func checkOpenAIKey() {
+        settings.checkOpenAIKey()
+    }
+
     func testConnection() {
         settings.testConnection()
         reloadRuntimeSettings()

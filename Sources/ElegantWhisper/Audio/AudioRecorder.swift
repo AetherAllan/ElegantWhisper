@@ -133,7 +133,8 @@ private final class AudioLevelSmoother: @unchecked Sendable {
 ///   bars at the top for normal speech.
 /// - An adaptive noise floor follows the room (fans, air conditioning) so steady background noise
 ///   reads as silence instead of constant flicker.
-/// - A soft knee keeps loud speech below the top of the bar.
+/// - A gentle expansion (exponent above 1) widens the gap between stressed syllables and the
+///   dips between words, so bars pulse with speech; the ceiling keeps loud speech off the top.
 struct VoiceLevelMeter {
     /// Expected to be called once per 1/60 s chunk; the rates below assume that.
     /// Typical laptop-mic room noise, so a new recording starts close to the real floor.
@@ -144,10 +145,11 @@ struct VoiceLevelMeter {
     static let maximumFloorDB: Float = -35
     /// Voice must rise this far above the floor before bars move.
     static let gateDB: Float = 6
-    /// dB above the gate that map to the full input range of the knee.
-    static let rangeDB: Float = 36
-    /// Loudest bar height; normal speech lands around 0.5-0.75.
+    /// dB above the gate that map to the full height.
+    static let rangeDB: Float = 34
+    /// Loudest bar height.
     static let ceiling: Float = 0.9
+    static let expansion: Float = 1.25
 
     mutating func process(rms: Float) -> Float {
         let db = 20 * log10(max(rms, 1e-7))
@@ -162,9 +164,10 @@ struct VoiceLevelMeter {
         noiseFloorDB = min(max(noiseFloorDB, Self.minimumFloorDB), Self.maximumFloorDB)
 
         let normalized = min(max((db - noiseFloorDB - Self.gateDB) / Self.rangeDB, 0), 1)
-        let target = Self.ceiling * tanh(1.6 * normalized)
-        // Rise fast enough to follow syllables, fall gently so bars settle instead of flickering.
-        let coefficient: Float = target > level ? 0.35 : 0.12
+        let target = Self.ceiling * pow(normalized, Self.expansion)
+        // Rise within a frame or two of a syllable and fall within about 100 ms, so the gaps
+        // between words show instead of being smoothed into one steady level.
+        let coefficient: Float = target > level ? 0.6 : 0.3
         level += (target - level) * coefficient
         return level
     }

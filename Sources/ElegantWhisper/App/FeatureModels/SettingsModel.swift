@@ -14,6 +14,7 @@ struct SettingsDraft: Equatable {
     var provider: LLMProvider
     var baseURL: String
     var apiKey: String
+    var openAIKey: String
     var model: String
     var timeout: Double
 
@@ -30,6 +31,7 @@ struct SettingsDraft: Equatable {
         provider = settings.llmProvider
         baseURL = settings.apiBaseURL
         apiKey = settings.apiKey
+        openAIKey = settings.openAITranscriptionKey
         model = settings.model
         timeout = settings.requestTimeout
     }
@@ -43,6 +45,7 @@ final class SettingsModel {
     var draft: SettingsDraft
     private(set) var savedDraft: SettingsDraft
     var connectionStatus = ""
+    var openAIKeyStatus = ""
     /// Runs after a toggle or picker applies, so the app can react (prewarm a new language, etc.).
     var onApply: (@MainActor () -> Void)?
 
@@ -63,6 +66,7 @@ final class SettingsModel {
         self.draft = draft
         savedDraft = draft
         connectionStatus = ""
+        openAIKeyStatus = ""
     }
 
     func providerChanged(to provider: LLMProvider) {
@@ -71,6 +75,31 @@ final class SettingsModel {
             draft.baseURL = baseURL
         }
         draft.model = provider.defaultModel ?? ""
+    }
+
+    var isOpenAIKeyDirty: Bool {
+        draft.openAIKey != savedDraft.openAIKey
+    }
+
+    func saveOpenAIKey() {
+        store.openAITranscriptionKey = draft.openAIKey
+        draft.openAIKey = store.openAITranscriptionKey
+        savedDraft.openAIKey = draft.openAIKey
+    }
+
+    /// Checks the typed key (saved or not) by looking up the model; no audio is sent.
+    func checkOpenAIKey() {
+        let key = draft.openAIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        openAIKeyStatus = "Checking…"
+        Task { [weak self] in
+            let result = await OnlineTranscriber.checkKey(key)
+            switch result {
+            case .success(let service):
+                self?.openAIKeyStatus = "Key works. Using gpt-transcribe through \(service.displayName)."
+            case .failure(let error):
+                self?.openAIKeyStatus = "Check failed: \(error.localizedDescription)"
+            }
+        }
     }
 
     /// Toggles and pickers apply as soon as they change, like macOS System Settings. Provider
@@ -119,6 +148,7 @@ final class SettingsModel {
         store.shareCursorTextWithLLM = draft.shareCursorTextWithLLM
         store.apiBaseURL = draft.baseURL
         store.apiKey = draft.apiKey
+        store.openAITranscriptionKey = draft.openAIKey
         store.model = draft.model
         store.requestTimeout = draft.timeout
         savedDraft = SettingsDraft(settings: store)

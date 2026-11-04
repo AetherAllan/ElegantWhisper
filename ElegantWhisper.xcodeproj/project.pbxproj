@@ -48,6 +48,7 @@
 		01000000000000000000000F /* PermissionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02000000000000000000000F /* PermissionManager.swift */; };
 		010000000000000000000011 /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000011 /* SettingsStore.swift */; };
 		010000000000000000000013 /* SpeechEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000013 /* SpeechEngine.swift */; };
+		0100000000000000000000F3 /* OnlineTranscription.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0200000000000000000000F3 /* OnlineTranscription.swift */; };
 		010000000000000000000014 /* TextInjector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000014 /* TextInjector.swift */; };
 		010000000000000000000016 /* ShortcutDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000016 /* ShortcutDetector.swift */; };
 		010000000000000000000017 /* DictationSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000017 /* DictationSession.swift */; };
@@ -122,6 +123,7 @@
 		02000000000000000000000F /* PermissionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionManager.swift; sourceTree = "<group>"; };
 		020000000000000000000011 /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
 		020000000000000000000013 /* SpeechEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechEngine.swift; sourceTree = "<group>"; };
+		0200000000000000000000F3 /* OnlineTranscription.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnlineTranscription.swift; sourceTree = "<group>"; };
 		020000000000000000000014 /* TextInjector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextInjector.swift; sourceTree = "<group>"; };
 		020000000000000000000016 /* ShortcutDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutDetector.swift; sourceTree = "<group>"; };
 		020000000000000000000017 /* DictationSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationSession.swift; sourceTree = "<group>"; };
@@ -259,6 +261,7 @@
 				020000000000000000000030 /* SpeechContext.swift */,
 				02000000000000000000002F /* SpeechVocabulary.swift */,
 				020000000000000000000013 /* SpeechEngine.swift */,
+				0200000000000000000000F3 /* OnlineTranscription.swift */,
 				020000000000000000000032 /* SystemOutputMute.swift */,
 			);
 			path = Audio;
@@ -537,6 +540,7 @@
 				010000000000000000000030 /* SpeechContext.swift in Sources */,
 				01000000000000000000002F /* SpeechVocabulary.swift in Sources */,
 				010000000000000000000013 /* SpeechEngine.swift in Sources */,
+				0100000000000000000000F3 /* OnlineTranscription.swift in Sources */,
 				010000000000000000000025 /* StylePackStore.swift in Sources */,
 				010000000000000000000014 /* TextInjector.swift in Sources */,
 				01000000000000000000001B /* LLMPromptBuilder.swift in Sources */,

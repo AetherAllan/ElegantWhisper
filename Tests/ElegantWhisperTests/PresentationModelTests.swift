@@ -36,6 +36,10 @@ final class PresentationModelTests: XCTestCase {
 
         XCTAssertEqual(model.levels.count, FloatingHUDModel.waveformHistoryCount)
         XCTAssertEqual(model.levels[0], 0.8, accuracy: 0.01)
+        XCTAssertEqual(model.bars.count, FloatingHUDModel.barCount)
+        let center = FloatingHUDModel.barCount / 2
+        XCTAssertGreaterThan(model.bars[center], 0.4)
+        XCTAssertGreaterThan(model.bars[0], 0.05, "edge bars move too, not just the middle")
         XCTAssertGreaterThan(model.levels[3], 0.5, "older samples ripple outward")
         // With the queue empty the level decays instead of freezing.
         for _ in 0..<30 {
@@ -43,8 +47,29 @@ final class PresentationModelTests: XCTestCase {
         }
         XCTAssertLessThan(model.levels[0], 0.1)
         model.stopListening()
+        XCTAssertEqual(model.bars, [CGFloat](repeating: 0, count: FloatingHUDModel.barCount))
         XCTAssertFalse(model.showsWaveform)
         XCTAssertEqual(model.levels, [CGFloat](repeating: 0, count: FloatingHUDModel.waveformHistoryCount))
+    }
+
+    @MainActor
+    func testWaveformShapeKeepsChangingWhileSpeaking() {
+        let model = FloatingHUDModel()
+        model.showRecording(text: "")
+        model.enqueueLevels(Array(repeating: 0.7, count: 30))
+        for _ in 0..<15 {
+            model.advanceFrame()
+        }
+        let before = model.bars
+        for _ in 0..<12 {
+            model.advanceFrame()
+        }
+        let after = model.bars
+
+        // Same loudness, different outline: the bars are not one fixed bell scaled up and down.
+        let change = zip(before, after).map { abs($0 - $1) }.max() ?? 0
+        XCTAssertGreaterThan(change, 0.05)
+        XCTAssertNotEqual(after.first, after.last, "left and right sides move independently")
     }
 
     func testTranscriptNormalizationRemovesSpacesAroundCJKPunctuation() {
@@ -228,8 +253,20 @@ final class VoiceLevelMeterTests: XCTestCase {
 
         let shout = settle(&meter, db: -3, chunks: 30)
         XCTAssertGreaterThan(shout, speech)
-        XCTAssertLessThanOrEqual(shout, VoiceLevelMeter.ceiling)
-        XCTAssertLessThan(shout, 0.9)
+        XCTAssertLessThanOrEqual(shout, VoiceLevelMeter.ceiling + 0.001)
+    }
+
+    func testLevelPulsesWithSyllablesInsteadOfHoldingSteady() {
+        var meter = VoiceLevelMeter()
+        _ = settle(&meter, db: -55, chunks: 60)
+        // Syllables: 100 ms at -22 dBFS, then a 100 ms dip to -42 dBFS, repeated.
+        var outputs: [Float] = []
+        for _ in 0..<6 {
+            for _ in 0..<6 { outputs.append(meter.process(rms: rms(db: -22))) }
+            for _ in 0..<6 { outputs.append(meter.process(rms: rms(db: -42))) }
+        }
+        let lastCycle = outputs.suffix(24)
+        XCTAssertGreaterThan(lastCycle.max()! - lastCycle.min()!, 0.3, "peaks and dips must be clearly different")
     }
 
     func testBarsSettleGentlyAfterSpeechStops() {
@@ -238,7 +275,7 @@ final class VoiceLevelMeterTests: XCTestCase {
         let speaking = settle(&meter, db: -25, chunks: 30)
 
         let afterOneFrame = meter.process(rms: rms(db: -55))
-        XCTAssertGreaterThan(afterOneFrame, speaking * 0.8, "no sudden drop")
+        XCTAssertGreaterThan(afterOneFrame, speaking * 0.6, "falls over a few frames, not at once")
         let afterHalfSecond = settle(&meter, db: -55, chunks: 30)
         XCTAssertLessThan(afterHalfSecond, 0.05)
     }

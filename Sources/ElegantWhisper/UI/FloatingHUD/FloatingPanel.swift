@@ -8,16 +8,15 @@ final class FloatingPanel {
     private var presentationID = UUID()
     private var pendingHide: DispatchWorkItem?
     private var preferredAnchor: NSPoint?
-    // Width only grows within one presentation so streaming partials do not make the capsule
-    // jitter left and right around the screen center.
-    private var minimumWidth: CGFloat = 0
+    var onCancel: (@MainActor () -> Void)?
+    var onConfirm: (@MainActor () -> Void)?
     private lazy var waveformClock = WaveformClock { [model] in
         model.advanceFrame()
     }
 
     init() {
         panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 196, height: Self.height),
+            contentRect: NSRect(x: 0, y: 0, width: FloatingHUDView.compactWidth, height: FloatingHUDView.height),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: true
@@ -29,11 +28,18 @@ final class FloatingPanel {
         panel.isOpaque = false
         panel.hidesOnDeactivate = false
         panel.hasShadow = true
-        panel.ignoresMouseEvents = true
+        // The cancel and finish buttons take clicks. The panel is non-activating and never
+        // becomes key, so clicking them leaves keyboard focus in the app being dictated into.
+        panel.ignoresMouseEvents = false
+        panel.becomesKeyOnlyIfNeeded = true
         panel.titleVisibility = .hidden
         panel.titlebarAppearsTransparent = true
 
-        let hostingView = NSHostingView(rootView: FloatingHUDView(model: model))
+        let hostingView = FirstMouseHostingView(rootView: FloatingHUDView(
+            model: model,
+            onCancel: { [weak self] in self?.onCancel?() },
+            onConfirm: { [weak self] in self?.onConfirm?() }
+        ))
         hostingView.wantsLayer = true
         hostingView.layer?.backgroundColor = NSColor.clear.cgColor
         panel.contentView = hostingView
@@ -70,9 +76,8 @@ final class FloatingPanel {
     }
 
     func updatePartial(_ text: String) {
+        // Kept for accessibility; the compact capsule does not show live text.
         model.updatePartial(text)
-        updateWidthForCurrentText()
-        position()
     }
 
     func enqueueLevels(_ levels: [Float]) {
@@ -119,7 +124,6 @@ final class FloatingPanel {
         pendingHide?.cancel()
         pendingHide = nil
         presentationID = UUID()
-        minimumWidth = 0
         // A new dictation can begin while the previous success/error fade is still running.
         // Reset alpha before show() inspects visibility so stale animation state cannot win.
         NSAnimationContext.runAnimationGroup { context in
@@ -178,22 +182,21 @@ final class FloatingPanel {
     }
 
     private func updateWidthForCurrentText() {
-        let font = NSFont.systemFont(ofSize: 13, weight: .medium)
-        let fittingWidth = ceil((model.text as NSString).size(withAttributes: [.font: font]).width)
-        // Leading padding + glyph + spacing + trailing padding, matching FloatingHUDView.
-        // Plus the elapsed-time label (and its spacing) while listening.
-        let chrome: CGFloat = 12 + 30 + 10 + 16 + (model.phase == .listening ? 44 : 0)
-        let width = min(Self.maximumWidth, max(Self.minimumBaseWidth, minimumWidth, chrome + fittingWidth))
-        if model.phase == .listening {
-            minimumWidth = width
+        let width: CGFloat
+        switch model.phase {
+        case .listening, .working:
+            width = FloatingHUDView.compactWidth
+        case .success, .failure:
+            let font = NSFont.systemFont(ofSize: 13, weight: .medium)
+            let textWidth = ceil((model.text as NSString).size(withAttributes: [.font: font]).width)
+            // Padding + icon + spacing + padding, matching FloatingHUDView's message layout.
+            width = min(Self.maximumMessageWidth, max(FloatingHUDView.compactWidth, 14 + 18 + 8 + 14 + textWidth))
         }
         guard panel.frame.width != width else { return }
-        panel.setContentSize(NSSize(width: width, height: Self.height))
+        panel.setContentSize(NSSize(width: width, height: FloatingHUDView.height))
     }
 
-    private static let height: CGFloat = 44
-    private static let minimumBaseWidth: CGFloat = 168
-    private static let maximumWidth: CGFloat = 360
+    private static let maximumMessageWidth: CGFloat = 360
 
     private func position() {
         let screens = NSScreen.screens
@@ -206,6 +209,14 @@ final class FloatingPanel {
         }
         let visible = screen.visibleFrame
         panel.setFrameOrigin(FloatingPanelPlacement.origin(panelSize: panel.frame.size, visibleFrame: visible))
+    }
+}
+
+/// Lets the first click on a button act immediately. The panel is never key, so without this the
+/// first click would only be spent focusing the window.
+private final class FirstMouseHostingView<Content: View>: NSHostingView<Content> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        true
     }
 }
 

@@ -116,6 +116,16 @@ final class SettingsStore: @unchecked Sendable {
         }
     }
 
+    /// OpenAI key for online recognition, separate from the polishing provider's key.
+    var openAITranscriptionKey: String {
+        get {
+            keychain.string(for: "openAITranscriptionKey")
+        }
+        set {
+            keychain.setString(newValue.trimmingCharacters(in: .whitespacesAndNewlines), for: "openAITranscriptionKey")
+        }
+    }
+
     var model: String {
         get {
             let stored = defaults.string(forKey: Key.model)

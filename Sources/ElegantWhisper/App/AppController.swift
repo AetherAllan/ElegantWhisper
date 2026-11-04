@@ -11,6 +11,7 @@ final class AppController {
     private let recorder = AudioRecorder()
     private let outputMute = SystemOutputMute.shared
     private let transcriber = SpeechEngine()
+    private let clip = AudioClipCollector()
     private let dictionary = DictionaryStore.shared
     private let stylePacks: StylePackStore
     private let focusDetector = FocusDetector()
@@ -56,6 +57,13 @@ final class AppController {
         monitor.onCancel = { [weak self] in
             self?.cancelCurrentOperation()
         }
+        panel.onCancel = { [weak self] in
+            self?.cancelCurrentOperation()
+        }
+        panel.onConfirm = { [weak self] in
+            guard self?.state.mode == .recording else { return }
+            self?.stopAndTranscribe()
+        }
 
         transcriber.onPartial = { [weak self] text in
             self?.latestPartial = text
@@ -75,8 +83,10 @@ final class AppController {
             self?.panel.enqueueLevels(levels)
         }
         let transcriber = transcriber
+        let clip = clip
         recorder.onBuffer = { buffer in
             transcriber.append(buffer)
+            clip.append(buffer)
         }
         prewarmSpeech()
     }
@@ -182,6 +192,13 @@ final class AppController {
         // Open the microphone before analyzer setup and AX context reads. SpeechEngine holds audio
         // that arrives before the analyzer runs, so the first words are not clipped.
         transcriber.beginSession()
+        // Online recognition uploads the whole recording after stop, so collect it from the
+        // first buffer. The key is only read at stop to keep Keychain off this path.
+        if settings.speechModel.isOnline {
+            clip.begin()
+        } else {
+            clip.cancel()
+        }
         do {
             try recorder.start()
         } catch {
@@ -228,6 +245,7 @@ final class AppController {
         )
         currentSession?.dictionaryTerms = dictionary.terms(for: language, limit: 500)
         currentSession?.correctionTerms = focusedTerms + StylePackStore.seedTerms(for: activePack.id)
+        currentSession?.focusedTerms = focusedTerms
         // Walking the whole window takes up to a few hundred milliseconds of AX IPC, so it runs in
         // the background while the user speaks; the result is only needed at finalize.
         if settings.readWindowText,
@@ -278,6 +296,7 @@ final class AppController {
             showError("No active session")
             return
         }
+        startOnlineTranscriptionIfEnabled()
         // The analyzer may still be starting (held audio is replayed once it runs). Finalize only
         // after it is up; a failed start already reported its error and ended the session.
         let start = transcriberStart
@@ -299,8 +318,74 @@ final class AppController {
                 self.currentSession?.correctionTerms.append(contentsOf: terms)
             }
             self.transcriber.finish { [weak self] text in
-                self?.handleFinalTranscript(text, sessionID: sessionID)
+                guard let self else { return }
+                if let online = self.currentSession?.onlineTranscription {
+                    Task { await self.finishWithOnlineTranscript(online, onDeviceText: text, sessionID: sessionID) }
+                } else {
+                    self.handleFinalTranscript(text, sessionID: sessionID)
+                }
             }
+        }
+    }
+
+    /// Starts the upload right at stop, in parallel with on-device finalization.
+    private func startOnlineTranscriptionIfEnabled() {
+        let samples = clip.finish()
+        guard settings.speechModel.isOnline, !samples.isEmpty, let session = currentSession else {
+            return
+        }
+        let apiKey = settings.openAITranscriptionKey
+        guard !apiKey.isEmpty else {
+            DebugLog.event("onlineTranscriptionSkipped:missingKey")
+            onUserMessage?("Add your OpenAI API key in Settings to use online recognition. Used on-device text.")
+            return
+        }
+        let language = settings.language
+        let appName = speechContext?.appName
+        // Your own terms first, then what is on screen, then the Style Pack list.
+        let baseTerms = session.dictionaryTerms + session.focusedTerms
+        let seedTerms = StylePackStore.seedTerms(for: stylePacks.activePack().id)
+        let windowTerms = session.windowTerms
+        let stoppedAt = clock.now
+        let clock = clock
+        currentSession?.onlineTranscription = Task.detached(priority: .userInitiated) {
+            let onScreen = await windowTerms?.value ?? []
+            let text = try await OnlineTranscriber.transcribe(
+                samples: samples,
+                language: language,
+                terms: baseTerms + onScreen + seedTerms,
+                appName: appName,
+                apiKey: apiKey
+            )
+            let elapsed = stoppedAt.duration(to: clock.now).components
+            let milliseconds = elapsed.seconds * 1_000 + elapsed.attoseconds / 1_000_000_000_000_000
+            DebugLog.event("onlineTranscriptionDone ms=\(milliseconds) chars=\(text.count)")
+            return text
+        }
+    }
+
+    private func finishWithOnlineTranscript(_ online: Task<String, Error>, onDeviceText: String, sessionID: UUID) async {
+        // URLRequest's timeout only covers idle gaps; this caps the total wait for the user.
+        let deadline = Task {
+            try await Task.sleep(for: .seconds(OnlineTranscriber.timeout))
+            online.cancel()
+        }
+        defer { deadline.cancel() }
+        do {
+            let text = try await online.value
+            guard isCurrentSession(sessionID) else { return }
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            handleFinalTranscript(trimmed.isEmpty ? onDeviceText : trimmed, sessionID: sessionID)
+        } catch {
+            guard isCurrentSession(sessionID) else { return }
+            // Within a live session, cancellation can only come from the deadline above.
+            let failure = error as? OnlineTranscriptionError
+                ?? (error is CancellationError ? .timedOut : .network(error.localizedDescription))
+            DebugLog.event("onlineTranscriptionFailed:\(failure.logName)")
+            if failure != .tooShort {
+                onUserMessage?("OpenAI recognition failed (\(failure.localizedDescription)). Used on-device text.")
+            }
+            handleFinalTranscript(onDeviceText, sessionID: sessionID)
         }
     }
 
@@ -312,6 +397,7 @@ final class AppController {
         scheduleOutputUnmute()
         DebugLog.event("recordingStop")
         transcriber.cancel()
+        clip.cancel()
         refinementTask?.cancel()
         refinementTask = nil
         recordingStoppedAt = nil
@@ -335,6 +421,8 @@ final class AppController {
             recorder.stop()
             scheduleOutputUnmute()
             transcriber.cancel()
+            clip.cancel()
+            currentSession?.onlineTranscription?.cancel()
             refinementTask?.cancel()
             refinementTask = nil
             recordingStoppedAt = nil
@@ -539,6 +627,7 @@ final class AppController {
         recorder.stop()
         scheduleOutputUnmute()
         transcriber.cancel()
+        clip.cancel()
         refinementTask?.cancel()
         refinementTask = nil
         recordingStoppedAt = nil

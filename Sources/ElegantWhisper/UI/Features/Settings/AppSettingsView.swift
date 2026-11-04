@@ -38,7 +38,7 @@ private struct GeneralSettingsView: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        let settings = model.settings
+        @Bindable var settings = model.settings
 
         Form {
             Section("Dictation") {
@@ -55,11 +55,16 @@ private struct GeneralSettingsView: View {
                     }
                 } label: {
                     Text("Recognition model")
-                    Text("Both run on this Mac. Try each with your own voice.")
+                    Text("Apple models run on this Mac; OpenAI runs online. Try each with your own voice.")
+                }
+                if settings.draft.speechModel.isOnline {
+                    OpenAIKeyRows()
                 }
                 Toggle(isOn: settings.immediate(\.readWindowText) { $0.readWindowText = $1 }) {
                     Text("Use words from the front window")
-                    Text("Reads technical words such as Redis or useEffect from the window you're dictating into, to fix their spelling. Password fields are skipped and nothing leaves this Mac.")
+                    Text(settings.draft.speechModel.isOnline
+                        ? "Reads technical words such as Redis or useEffect from the window you're dictating into, to fix their spelling. Password fields are skipped. With OpenAI recognition, some of these words are sent as hints."
+                        : "Reads technical words such as Redis or useEffect from the window you're dictating into, to fix their spelling. Password fields are skipped and nothing leaves this Mac.")
                 }
             }
 
@@ -83,6 +88,42 @@ private struct GeneralSettingsView: View {
             }
         }
         .formStyle(.grouped)
+    }
+}
+
+private struct OpenAIKeyRows: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        @Bindable var settings = model.settings
+        let failed = settings.openAIKeyStatus.hasPrefix("Check failed")
+
+        SecureField("API key", text: $settings.draft.openAIKey, prompt: Text("OpenAI or OpenRouter key"))
+        HStack {
+            if !settings.openAIKeyStatus.isEmpty {
+                Label(settings.openAIKeyStatus, systemImage: failed ? "xmark.circle.fill" : "checkmark.circle.fill")
+                    .font(.callout)
+                    .foregroundStyle(failed ? Color.red : Color.secondary)
+                    .lineLimit(2)
+            }
+            Spacer()
+            Button("Check Key") { model.checkOpenAIKey() }
+                .disabled(settings.draft.openAIKey.isEmpty)
+            Button("Save Key") { model.saveOpenAIKey() }
+                .buttonStyle(.borderedProminent)
+                .disabled(!settings.isOpenAIKeyDirty)
+        }
+        Text(Self.caption(for: settings.draft.openAIKey))
+            .font(.callout)
+            .foregroundStyle(.secondary)
+    }
+
+    private static func caption(for key: String) -> String {
+        let service = TranscriptionService(apiKey: key)
+        let route = key.isEmpty
+            ? "OpenAI keys call OpenAI directly; OpenRouter keys (sk-or-…) go through OpenRouter."
+            : "This key uses \(service.displayName)."
+        return "\(route) When you stop, the recording is uploaded (about $0.0045 per minute) with up to 50 hints from your Dictionary and the words on screen. Apple's on-device model still shows live text and is used if the request fails."
     }
 }
 

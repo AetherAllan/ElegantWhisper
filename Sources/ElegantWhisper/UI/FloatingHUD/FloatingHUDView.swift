@@ -12,16 +12,19 @@ enum FloatingHUDPhase: Equatable {
 @Observable
 final class FloatingHUDModel {
     static let previewLimit = 48
-    static let waveformHistoryCount = 4
-    /// The center bar follows the voice every display frame; older samples step outward every
-    /// few frames (15 steps a second at 60 fps) so the ripple stays readable.
-    static let rippleInterval = 4
+    /// One level per distance from the center dot: the 11-dot waveform mirrors these outward.
+    static let waveformHistoryCount = 6
+    /// The center dot follows the voice every display frame; older samples step outward every
+    /// few frames (20 steps a second at 60 fps) so the ripple stays readable.
+    static let rippleInterval = 3
     /// About half a second of audio. Bounds latency if frames stall, e.g. while the screen sleeps.
     static let maxQueuedLevels = 30
+    static let barCount = 2 * waveformHistoryCount - 1
+    /// Display frames between new per-bar wobble targets (about 0.1 s at 60 fps).
+    static let wobbleInterval = 6
 
     var text = "Listening..."
     var phase: FloatingHUDPhase = .listening
-    private(set) var listeningSince: Date?
     // Newest level first. The waveform mirrors this history outward from the center bar so the
     // bars ripple with speech instead of all scaling in unison. `levels` is what is drawn; it
     // eases toward `targets` every frame so bars glide between audio buffers.
@@ -29,6 +32,13 @@ final class FloatingHUDModel {
     private var targets = [CGFloat](repeating: 0, count: waveformHistoryCount)
     private var queuedLevels: [CGFloat] = []
     private var frame = 0
+    /// What the waveform draws, one value per dot. Level history by distance from the center,
+    /// shaped by a soft bell and a per-bar wobble so the outline changes with speech instead of
+    /// staying one symmetric bump. All zero (dots) in silence.
+    private(set) var bars = [CGFloat](repeating: 0, count: barCount)
+    private var wobble = [CGFloat](repeating: 1, count: barCount)
+    private var wobbleTargets = [CGFloat](repeating: 1, count: barCount)
+    private var randomState: UInt64 = 0x9E37_79B9_7F4A_7C15
 
     var showsWaveform: Bool {
         phase == .listening
@@ -36,7 +46,6 @@ final class FloatingHUDModel {
 
     func showRecording(text: String) {
         phase = .listening
-        listeningSince = Date()
         resetLevels()
         self.text = text.isEmpty ? "Listening..." : Self.shortPreview(text)
     }
@@ -63,25 +72,46 @@ final class FloatingHUDModel {
         } else {
             targets[0] = live
         }
-        // Build the new array first so observers see one change per frame, not one per bar.
+        // Build the new arrays first so observers see one change per frame, not one per bar.
         var next = levels
         for index in next.indices {
-            let easing: CGFloat = index == 0 ? 0.55 : 0.3
+            let easing: CGFloat = index == 0 ? 0.75 : 0.5
             next[index] += (targets[index] - next[index]) * easing
         }
         levels = next
+
+        if frame % Self.wobbleInterval == 0 {
+            for index in wobbleTargets.indices {
+                wobbleTargets[index] = 0.5 + 0.5 * nextRandom()
+            }
+        }
+        let center = Self.barCount / 2
+        var nextBars = bars
+        for index in nextBars.indices {
+            wobble[index] += (wobbleTargets[index] - wobble[index]) * 0.3
+            let distance = abs(index - center)
+            let envelope = exp(-pow(CGFloat(distance) / 4.5, 2))
+            nextBars[index] = min(1, levels[distance] * envelope * wobble[index] * 1.3)
+        }
+        bars = nextBars
+    }
+
+    /// xorshift64: cheap and deterministic, which keeps tests repeatable.
+    private func nextRandom() -> CGFloat {
+        randomState ^= randomState << 13
+        randomState ^= randomState >> 7
+        randomState ^= randomState << 17
+        return CGFloat(randomState % 10_000) / 10_000
     }
 
     /// Keep the last partial visible while finalization runs.
     func stopListening() {
         phase = .working
-        listeningSince = nil
         resetLevels()
     }
 
     func showStatus(_ text: String, phase: FloatingHUDPhase = .working) {
         self.phase = phase
-        listeningSince = nil
         resetLevels()
         self.text = text
     }
@@ -97,105 +127,160 @@ final class FloatingHUDModel {
         targets = levels
         queuedLevels = []
         frame = 0
+        bars = [CGFloat](repeating: 0, count: Self.barCount)
+        wobble = [CGFloat](repeating: 1, count: Self.barCount)
+        wobbleTargets = wobble
     }
 }
 
+/// A compact black capsule: cancel on the left, a dot waveform in the middle, finish on the
+/// right. The live transcript is not shown here (text goes straight into the field); the capsule
+/// only widens to show a short message such as "Copied to clipboard" or an error.
 struct FloatingHUDView: View {
     @Bindable var model: FloatingHUDModel
+    var onCancel: () -> Void = {}
+    var onConfirm: () -> Void = {}
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    var body: some View {
-        HStack(spacing: 10) {
-            FloatingHUDGlyph(phase: model.phase, levels: model.levels)
-                .frame(width: 30, height: 22)
-            Text(model.text)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(model.phase == .working ? .secondary : .primary)
-                .lineLimit(1)
-                // Live partials grow at the end, so drop the oldest words first.
-                .truncationMode(.head)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            if model.phase == .listening, let since = model.listeningSince {
-                // Text(timerInterval:) ticks on its own; no timer or model updates needed.
-                Text(timerInterval: since...since.addingTimeInterval(3_600), countsDown: false)
-                    .font(.system(size: 12, weight: .medium))
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
-                    .fixedSize()
-                    .transition(.opacity)
-            }
-        }
-        .padding(.leading, 12)
-        .padding(.trailing, 16)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(.regularMaterial, in: Capsule())
-        .overlay(Capsule().strokeBorder(.white.opacity(0.18), lineWidth: 0.5))
-        // Animate phase changes only. Partials stream several times per second and fading each
-        // one makes the preview flicker.
-        .animation(reduceMotion ? nil : .snappy(duration: 0.2), value: model.phase)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(model.text)
-    }
-}
-
-private struct FloatingHUDGlyph: View {
-    let phase: FloatingHUDPhase
-    let levels: [CGFloat]
+    static let height: CGFloat = 34
+    static let buttonSize: CGFloat = 24
+    static let inset: CGFloat = 5
+    static let waveformWidth: CGFloat = 46
+    static let waveformSpacing: CGFloat = 9
+    static let compactWidth = inset * 2 + buttonSize * 2 + waveformSpacing * 2 + waveformWidth
 
     var body: some View {
         ZStack {
-            switch phase {
-            case .listening:
-                WaveformCanvas(levels: levels)
-                    .transition(.scale(scale: 0.6).combined(with: .opacity))
-            case .working:
-                ProgressView()
-                    .controlSize(.small)
-                    .transition(.opacity)
-            case .success:
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(.green)
-                    .transition(.scale(scale: 0.6).combined(with: .opacity))
-            case .failure:
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(.orange)
-                    .transition(.scale(scale: 0.6).combined(with: .opacity))
+            switch model.phase {
+            case .listening, .working:
+                HStack(spacing: Self.waveformSpacing) {
+                    CircleButton(kind: .cancel, action: onCancel)
+                    Group {
+                        if model.phase == .listening {
+                            DotWaveform(bars: model.bars)
+                        } else {
+                            WorkingDots(animated: !reduceMotion)
+                        }
+                    }
+                    .frame(width: Self.waveformWidth, height: 20)
+                    CircleButton(kind: .confirm, action: onConfirm)
+                        // Finishing is only meaningful while recording.
+                        .disabled(model.phase != .listening)
+                        .opacity(model.phase == .listening ? 1 : 0.35)
+                }
+                .padding(.horizontal, Self.inset)
+                .transition(.opacity)
+            case .success, .failure:
+                HStack(spacing: 8) {
+                    Image(systemName: model.phase == .success ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(model.phase == .success ? Color.green : Color.orange)
+                    Text(model.text)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+                .padding(.horizontal, 14)
+                .transition(.opacity)
             }
         }
-        .accessibilityHidden(true)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // The 1 pt rim is a filled capsule behind an inset one: strokeBorder left a stray
+        // vertical hairline at each end of the capsule.
+        .background(
+            Capsule()
+                .fill(Color(white: 0.62).opacity(0.55))
+                .overlay(Capsule().fill(Color(white: 0.04)).padding(1))
+        )
+        // Always dark, like the capsule itself, whatever the system appearance.
+        .environment(\.colorScheme, .dark)
+        .animation(reduceMotion ? nil : .snappy(duration: 0.2), value: model.phase)
     }
 }
 
-private struct WaveformCanvas: View {
-    let levels: [CGFloat]
+private struct CircleButton: View {
+    enum Kind {
+        case cancel
+        case confirm
+    }
+
+    let kind: Kind
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: kind == .cancel ? "xmark" : "checkmark")
+                .font(.system(size: kind == .cancel ? 11 : 12, weight: .bold))
+                .foregroundStyle(kind == .cancel ? Color.white : Color.black)
+                .frame(width: FloatingHUDView.buttonSize, height: FloatingHUDView.buttonSize)
+                .background(
+                    Circle().fill(kind == .cancel
+                        ? Color(white: hovering ? 0.38 : 0.28)
+                        : Color(white: hovering ? 0.86 : 1))
+                )
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .accessibilityLabel(kind == .cancel ? "Cancel dictation" : "Finish dictation")
+        .help(kind == .cancel ? "Cancel (esc)" : "Finish and insert (Right ⌥)")
+    }
+}
+
+/// Dots that rise into bars with the voice. Shaping happens in FloatingHUDModel.bars.
+private struct DotWaveform: View {
+    let bars: [CGFloat]
+    static let dotCount = FloatingHUDModel.barCount
 
     var body: some View {
         Canvas { context, size in
-            // Mirror history around the center: [h3, h2, h1, h0, h1, h2, h3].
-            let history = levels.isEmpty ? [0] : levels
-            let bars = Array(history.reversed()) + history.dropFirst()
-            let barWidth: CGFloat = 2.5
-            let gap: CGFloat = 2
-            let totalWidth = CGFloat(bars.count) * barWidth + CGFloat(bars.count - 1) * gap
-            let startX = (size.width - totalWidth) / 2
-            let center = CGFloat(bars.count - 1) / 2
-
-            for (index, level) in bars.enumerated() {
-                // Outer bars taper slightly so the shape reads as a voice pulse.
-                let taper = 1 - abs(CGFloat(index) - center) / (center + 1) * 0.45
-                let normalized = max(0.12, min(1, level * taper))
-                let height = 4 + normalized * (size.height - 4)
+            let dot: CGFloat = 2.2
+            let gap = (size.width - CGFloat(Self.dotCount) * dot) / CGFloat(Self.dotCount - 1)
+            for index in 0..<Self.dotCount {
+                let level = index < bars.count ? bars[index] : 0
+                let height = dot + (size.height - dot) * level
                 let rect = CGRect(
-                    x: startX + CGFloat(index) * (barWidth + gap),
+                    x: CGFloat(index) * (dot + gap),
                     y: (size.height - height) / 2,
-                    width: barWidth,
+                    width: dot,
                     height: height
                 )
-                context.fill(Path(roundedRect: rect, cornerRadius: barWidth / 2), with: .foreground)
+                context.fill(Path(roundedRect: rect, cornerRadius: dot / 2), with: .color(.white))
             }
         }
-        .foregroundStyle(.tint)
+        .accessibilityLabel("Listening")
+    }
+}
+
+/// While the transcript is finalized: a soft wave travels across the dots.
+private struct WorkingDots: View {
+    let animated: Bool
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1 / 30, paused: !animated)) { timeline in
+            let time = timeline.date.timeIntervalSinceReferenceDate
+            Canvas { context, size in
+                let count = DotWaveform.dotCount
+                let dot: CGFloat = 2.2
+                let gap = (size.width - CGFloat(count) * dot) / CGFloat(count - 1)
+                for index in 0..<count {
+                    let wave = animated ? max(0, sin(time * 5 - Double(index) * 0.55)) : 0
+                    let height = dot + 4 * CGFloat(wave)
+                    let rect = CGRect(
+                        x: CGFloat(index) * (dot + gap),
+                        y: (size.height - height) / 2,
+                        width: dot,
+                        height: height
+                    )
+                    context.fill(
+                        Path(roundedRect: rect, cornerRadius: dot / 2),
+                        with: .color(.white.opacity(0.45 + 0.55 * wave))
+                    )
+                }
+            }
+        }
+        .accessibilityLabel("Transcribing")
     }
 }

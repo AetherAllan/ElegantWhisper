@@ -30,7 +30,7 @@ ElegantWhisper is a macOS 26+ Dock and menu-bar voice input app with a SwiftUI i
 
 1. Focus a text field in another app.
 2. Tap Right Option to start recording.
-3. Speak naturally while the floating bar shows audio level and partial text.
+3. Speak naturally while the floating bar shows your voice level. Click its ✓ to finish or ✕ to cancel; keyboard focus stays in your app.
 4. Tap Right Option again to stop.
 5. ElegantWhisper finalizes the transcript, applies local corrections, optionally runs polishing, and inserts or copies the result.
 
@@ -52,6 +52,16 @@ When you start dictation, ElegantWhisper may read the **focused editable field**
 - Caps selected/visible snippet reads (2k / 4k characters) only to find those tokens; the snippets themselves are not sent to any API.
 - With **Settings → General → Use words from the front window** (on by default), it also reads text from the window you are dictating into (for example a chat thread or web page) in the background while you speak. Only technical words and capitalized names (up to 200) are kept, and they are used solely to fix the spelling of the transcript on this Mac. Password fields, toolbars, and menus are skipped, and the read is capped at 2,500 elements, 60,000 characters, and 0.3 seconds.
 - After recognition, a local spelling pass fixes near-misses of your Dictionary, on-screen, and Style Pack terms (for example "redisk" → "Redis", or a name split in two such as "Elegan的 Visper" → "ElegantWhisper"). It only changes Latin-script words that are a close match and are not ordinary English words; the one exception is casing for terms you added to your Dictionary ("slack" → "Slack").
+
+### What leaves your Mac with online recognition
+
+**Settings → General → Recognition model → OpenAI gpt-transcribe (online)** is off by default and uses your own API key (stored in the Keychain). Paste either an OpenAI key or an OpenRouter key (`sk-or-…`); the app picks the service from the key. With it selected, each dictation's audio is uploaded once when you stop:
+
+- **OpenAI key:** compressed M4A to OpenAI's `/v1/audio/transcriptions`, with language hints for the selected language plus English (for example `zh-cn` and `en`, so mixed Chinese and English is expected), up to **50 keyword hints**, and a one-line prompt naming the app you are dictating into.
+- **OpenRouter key:** base64 WAV to OpenRouter's `/api/v1/audio/transcriptions` (model `openai/gpt-transcribe`), with one language code (for example `zh`) and the same keyword hints as `keyterms`. OpenRouter has no prompt field. If OpenRouter rejects the hints for a model, the request is retried once without them.
+- Keyword hints are your Dictionary terms first, then technical words from the focused field and the front window, then Style Pack terms. Links, emails, and secret-like strings are never extracted as terms.
+
+Apple's on-device model still runs during recording for the live preview, and its text is inserted if the request fails or takes longer than 15 seconds. Recordings shorter than 0.3 seconds are not uploaded. OpenAI and OpenRouter both list `gpt-transcribe` at about $0.0045 per minute of audio. **Check Key** verifies a key without uploading audio.
 
 ### What leaves your Mac (only when LLM polishing is enabled)
 
@@ -159,7 +169,7 @@ Open Settings from the main window's `Application` sidebar section. The same sec
 
 The Settings page keeps its existing General, AI Provider, and Permissions tabs. Use it to configure:
 
-- Recognition model: Apple Speech (newer `SpeechTranscriber`, default) or Apple Dictation (classic `DictationTranscriber`); both run on device
+- Recognition model: Apple Speech (newer `SpeechTranscriber`, default) or Apple Dictation (classic `DictationTranscriber`), both on device, or OpenAI `gpt-transcribe` online with your own OpenAI or OpenRouter key (see **Privacy**)
 - API Base URL, API Key, Model, and request timeout
 - Whether to keep text on the clipboard when no editable field is available
 - Whether to save local transcription history
