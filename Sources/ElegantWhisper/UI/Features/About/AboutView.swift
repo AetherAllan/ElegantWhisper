@@ -4,6 +4,8 @@ import SwiftUI
 struct AboutView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.appTheme) private var theme
+    @Environment(\.colorScheme) private var colorScheme
 
     private var version: String {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
@@ -13,7 +15,8 @@ struct AboutView: View {
 
     var body: some View {
         VStack(spacing: 18) {
-            Image(nsImage: NSApp.applicationIconImage)
+            // The icon for this look, the same one the Dock shows (AppIconSwitcher).
+            Image(nsImage: AppIconVariant(theme: theme, isDark: colorScheme == .dark).image ?? NSApp.applicationIconImage)
                 .resizable()
                 .frame(width: 96, height: 96)
 

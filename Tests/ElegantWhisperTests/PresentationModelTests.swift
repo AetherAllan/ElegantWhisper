@@ -491,3 +491,26 @@ private final class Fixture {
         try? FileManager.default.removeItem(at: root)
     }
 }
+
+final class AppIconTests: XCTestCase {
+    func testIconFollowsThemeAndAppearance() {
+        XCTAssertEqual(AppIconVariant(theme: .standard, isDark: false), .paper)
+        XCTAssertEqual(AppIconVariant(theme: .standard, isDark: true), .pulse)
+        XCTAssertEqual(AppIconVariant(theme: .prism, isDark: false), .prism)
+        XCTAssertEqual(AppIconVariant(theme: .prism, isDark: true), .prism)
+    }
+
+    func testEveryVariantHasItsOwnResource() {
+        let names = Set(AppIconVariant.allCases.map(\.resourceName))
+        XCTAssertEqual(names.count, AppIconVariant.allCases.count)
+    }
+
+    /// Models are built in tests without a running NSApplication, so a theme change before
+    /// start() must not apply an icon.
+    @MainActor
+    func testThemeChangeBeforeStartAppliesNothing() {
+        let switcher = AppIconSwitcher()
+        switcher.setTheme(.prism)
+        XCTAssertNil(switcher.current)
+    }
+}

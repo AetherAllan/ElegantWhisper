@@ -177,6 +177,7 @@ Open Settings from the main window's `Application` sidebar section. The same sec
 The Settings page has General, Recognition, Polishing, and Permissions tabs. Use it to configure:
 
 - Appearance: **Standard** or **Prism** (black, with light split into a spectrum by a prism, for the main window and the floating bar)
+  - The Dock icon follows it: white in light mode and graphite in dark mode with Standard, spectrum with Prism. Finder and Launchpad always show the Prism icon. `swift scripts/render-logo.swift` redraws every icon.
 - Recognition: provider (This Mac, OpenAI, or OpenRouter), model, per-provider API keys, language, and whether to use words from the front window. On this Mac you can pick Apple Speech (newer `SpeechTranscriber`, default) or Apple Dictation (classic `DictationTranscriber`); see **Privacy** for the online providers
 - API Base URL, API Key, Model, and request timeout
 - Whether to keep text on the clipboard when no editable field is available

@@ -35,6 +35,7 @@ install: build
 	mkdir -p "$(MACOS)" "$(RESOURCES)"
 	cp Resources/Info.plist "$(CONTENTS)/Info.plist"
 	cp Resources/AppIcon.icns "$(RESOURCES)/AppIcon.icns"
+	cp Resources/AppIcon-Paper.png Resources/AppIcon-Pulse.png Resources/AppIcon-Prism.png "$(RESOURCES)/"
 	cp Resources/ElegantWhisperLogo.png "$(RESOURCES)/ElegantWhisperLogo.png"
 	cp Resources/StatusBarIcon.png "$(RESOURCES)/StatusBarIcon.png"
 	cp "$$(swift build -c release --show-bin-path)/$(APP_NAME)" "$(MACOS)/$(APP_NAME)"

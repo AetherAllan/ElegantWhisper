@@ -89,6 +89,7 @@ enum OutputMode: String, CaseIterable, Identifiable {
 @Observable
 final class AppModel {
     private let controller: AppController
+    @ObservationIgnored private let appIcon = AppIconSwitcher()
     private let settingsStore: SettingsStore
     private let stylePackStore: StylePackStore
     private var started = false
@@ -172,6 +173,7 @@ final class AppModel {
         controller.onUserMessage = { [weak self] message in self?.notice = message }
         controller.start()
         reloadSnapshots()
+        appIcon.start(theme: currentTheme)
         if permissionStatus.missingTitles.isEmpty {
             controller.startHotkeyMonitorIfPermitted()
         }
@@ -472,6 +474,7 @@ final class AppModel {
         currentSpeechModel = settingsStore.speechModel
         currentProvider = settingsStore.transcriptionProvider
         currentTheme = settingsStore.appTheme
+        appIcon.setTheme(currentTheme)
         settings.syncImmediateFields()
         llmEnabled = settingsStore.llmEnabled
         llmProvider = settingsStore.llmProvider

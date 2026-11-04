@@ -71,6 +71,10 @@
 		010000000000000000000101 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000101 /* AppIcon.icns */; };
 		010000000000000000000102 /* ElegantWhisperLogo.png in Resources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000102 /* ElegantWhisperLogo.png */; };
 		010000000000000000000106 /* StatusBarIcon.png in Resources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000106 /* StatusBarIcon.png */; };
+		010000000000000000000107 /* AppIcon-Paper.png in Resources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000107 /* AppIcon-Paper.png */; };
+		010000000000000000000108 /* AppIcon-Pulse.png in Resources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000108 /* AppIcon-Pulse.png */; };
+		010000000000000000000109 /* AppIcon-Prism.png in Resources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000109 /* AppIcon-Prism.png */; };
+		0100000000000000000000F5 /* AppIcon.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0200000000000000000000F5 /* AppIcon.swift */; };
 		010000000000000000000201 /* AppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 020000000000000000000201 /* AppKit.framework */; };
 		010000000000000000000202 /* ApplicationServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 020000000000000000000202 /* ApplicationServices.framework */; };
 		010000000000000000000203 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 020000000000000000000203 /* AVFoundation.framework */; };
@@ -147,6 +151,10 @@
 		020000000000000000000101 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
 		020000000000000000000102 /* ElegantWhisperLogo.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ElegantWhisperLogo.png; sourceTree = "<group>"; };
 		020000000000000000000106 /* StatusBarIcon.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = StatusBarIcon.png; sourceTree = "<group>"; };
+		020000000000000000000107 /* AppIcon-Paper.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = AppIcon-Paper.png; sourceTree = "<group>"; };
+		020000000000000000000108 /* AppIcon-Pulse.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = AppIcon-Pulse.png; sourceTree = "<group>"; };
+		020000000000000000000109 /* AppIcon-Prism.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = AppIcon-Prism.png; sourceTree = "<group>"; };
+		0200000000000000000000F5 /* AppIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIcon.swift; sourceTree = "<group>"; };
 		020000000000000000000103 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		020000000000000000000104 /* ElegantWhisper.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ElegantWhisper.entitlements; sourceTree = "<group>"; };
 		020000000000000000000105 /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.xcconfig; sourceTree = "<group>"; };
@@ -213,6 +221,7 @@
 			isa = PBXGroup;
 			children = (
 				020000000000000000000001 /* AppConstants.swift */,
+				0200000000000000000000F5 /* AppIcon.swift */,
 				020000000000000000000037 /* AppCommands.swift */,
 				020000000000000000000002 /* AppController.swift */,
 				020000000000000000000003 /* AppDelegate.swift */,
@@ -385,6 +394,9 @@
 			isa = PBXGroup;
 			children = (
 				020000000000000000000101 /* AppIcon.icns */,
+				020000000000000000000107 /* AppIcon-Paper.png */,
+				020000000000000000000108 /* AppIcon-Pulse.png */,
+				020000000000000000000109 /* AppIcon-Prism.png */,
 				020000000000000000000102 /* ElegantWhisperLogo.png */,
 				020000000000000000000106 /* StatusBarIcon.png */,
 				020000000000000000000103 /* Info.plist */,
@@ -478,6 +490,9 @@
 				010000000000000000000101 /* AppIcon.icns in Resources */,
 				010000000000000000000102 /* ElegantWhisperLogo.png in Resources */,
 				010000000000000000000106 /* StatusBarIcon.png in Resources */,
+				010000000000000000000107 /* AppIcon-Paper.png in Resources */,
+				010000000000000000000108 /* AppIcon-Pulse.png in Resources */,
+				010000000000000000000109 /* AppIcon-Prism.png in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -520,6 +535,7 @@
 				010000000000000000000044 /* MenuBarContentView.swift in Sources */,
 				010000000000000000000045 /* PermissionViews.swift in Sources */,
 				0100000000000000000000F1 /* DesignComponents.swift in Sources */,
+				0100000000000000000000F5 /* AppIcon.swift in Sources */,
 				010000000000000000000009 /* FocusDetector.swift in Sources */,
 				01000000000000000000000A /* HistoryStore.swift in Sources */,
 				01000000000000000000000B /* InputSourceManager.swift in Sources */,
